@@ -35,9 +35,6 @@ export default function Header() {
             <NavLink href="/" active={pathname === '/'}>
               Home
             </NavLink>
-            <NavLink href="/tour" active={pathname.startsWith('/tour')}>
-              Create Tour
-            </NavLink>
             <NavLink href="/profile" active={pathname.startsWith('/profile')}>
               Profile
             </NavLink>
@@ -53,9 +50,6 @@ export default function Header() {
             <nav className="flex flex-col space-y-4">
               <MobileNavLink href="/" active={pathname === '/'}>
                 Home
-              </MobileNavLink>
-              <MobileNavLink href="/tour" active={pathname.startsWith('/tour')}>
-                Create Tour
               </MobileNavLink>
               <MobileNavLink href="/profile" active={pathname.startsWith('/profile')}>
                 Profile
