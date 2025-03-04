@@ -10,8 +10,8 @@ interface TourPreferences {
 
 // Available options
 const INTERESTS_OPTIONS = [
-  'History', 'Architecture', 'Art', 'Food', 'Music', 
-  'Nature', 'Shopping', 'Local Culture', 'Hidden Gems'
+  'History', 'Architecture', 'Art', 'Food', 
+  'Nature', 'Shopping'
 ];
 
 const DURATION_OPTIONS = [30, 60, 90, 120]; // in minutes
