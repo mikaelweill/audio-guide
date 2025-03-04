@@ -40,6 +40,12 @@
   - User's duration preference determines the number of POIs to include
   - Selection prioritizes POIs with highest review counts and ratings > 4.0
   - Ensure total tour time (including travel between POIs) meets user's duration preference
+  - Flexible location options:
+    - Custom starting point (current location or user-specified)
+    - End point options:
+      - Return to starting point (circular tour)
+      - End at a specific location (custom end point)
+      - No specific end point (free-form exploration)
 - ❌ Transportation mode selection (walking, public transit)
 - ❌ Tour routing based on user location and preferences
 - ❌ Saving generated tours to user profile
@@ -63,6 +69,12 @@
 - ❌ Bookmarking favorite locations
 - ❌ Sharing tours with other users
 - ❌ Recommended tours based on popularity/user preferences
+
+### Offline Functionality
+- ❌ Downloading tours for offline use
+- ❌ Offline maps support
+- ❌ Pre-planning tours for future locations
+- ❌ Audio content caching
 
 ## Technical Dependencies
 

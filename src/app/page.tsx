@@ -269,7 +269,7 @@ export default function Home() {
         </div>
         
         {/* Tour Creation Modal */}
-        <TourModal isOpen={modalOpen} onClose={closeModal} />
+        <TourModal isOpen={modalOpen} onClose={closeModal} userLocation={userLocation} />
       </div>
     );
   }
@@ -396,7 +396,7 @@ export default function Home() {
       </div>
       
       {/* Tour Creation Modal */}
-      <TourModal isOpen={modalOpen} onClose={closeModal} />
+      <TourModal isOpen={modalOpen} onClose={closeModal} userLocation={userLocation} />
     </div>
   );
 }
