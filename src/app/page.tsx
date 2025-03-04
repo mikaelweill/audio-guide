@@ -243,10 +243,10 @@ export default function Home() {
               )}
               
               {/* Create Tour Button - positioned at the bottom of the screen */}
-              <div className="absolute bottom-8 left-0 right-0 flex justify-center z-10">
+              <div className="fixed bottom-16 left-0 right-0 flex justify-center z-20">
                 <button
                   onClick={openModal}
-                  className="bg-blue-600 text-white px-8 py-4 rounded-md shadow-xl hover:bg-blue-700 transition duration-200 font-medium cursor-pointer"
+                  className="bg-blue-600 text-white px-8 py-3 rounded-md shadow-xl hover:bg-blue-700 transition duration-200 font-medium text-lg cursor-pointer"
                 >
                   Create Tour
                 </button>
@@ -280,16 +280,16 @@ export default function Home() {
   
   // Contained layout with button below
   return (
-    <div className="h-screen w-full bg-gray-50 overflow-hidden flex flex-col">
-      <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-6 pb-0 flex flex-col h-full">
-        <div className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Audio Travel Guide</h1>
+    <div className="h-screen w-full bg-gray-50 overflow-auto flex flex-col">
+      <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex flex-col min-h-[calc(100%-2rem)]">
+        <div className="mb-2">
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Audio Travel Guide</h1>
           <p className="text-gray-600">Discover personalized audio tours based on your interests</p>
         </div>
         
-        {/* Map Container - Flex grow to take available space */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden flex-grow mb-0">
-          <div className="h-full relative">
+        {/* Map Container - Limit height to ensure button is visible */}
+        <div className="bg-white rounded-lg shadow-md overflow-hidden flex-1 mb-6" style={{ maxHeight: 'calc(100vh - 220px)' }}>
+          <div className="h-full relative overflow-hidden">
             {apiKeyError ? (
               <div className="h-full bg-red-50 flex items-center justify-center p-4">
                 <div className="text-red-600 text-center max-w-lg">
@@ -388,11 +388,11 @@ export default function Home() {
           </div>
         </div>
         
-        {/* Create Tour Button - Fixed at bottom */}
-        <div className="py-6">
+        {/* Create Tour Button - Fixed position with proper spacing */}
+        <div className="py-0 mt-4 mb-4">
           <button
             onClick={openModal}
-            className="w-full bg-blue-600 text-white py-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-200 font-medium text-lg cursor-pointer"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg shadow-md hover:bg-blue-700 transition duration-200 font-medium text-lg cursor-pointer"
           >
             Create Tour
           </button>
