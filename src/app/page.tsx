@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { GoogleMap, useJsApiLoader, MarkerF } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, MarkerF, Libraries } from '@react-google-maps/api';
 import TourModal from '@/components/TourModal';
 
 // Map container style
@@ -17,6 +17,9 @@ const defaultCenter = {
 };
 
 type MapType = google.maps.Map | null;
+
+// Define libraries as a constant to maintain reference stability
+const libraries: Libraries = ['places'];
 
 export default function Home() {
   // State for layout type
@@ -58,7 +61,8 @@ export default function Home() {
   // Load Google Maps API
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: apiKey
+    googleMapsApiKey: apiKey,
+    libraries
   });
 
   // Handle load error
@@ -269,7 +273,7 @@ export default function Home() {
         </div>
         
         {/* Tour Creation Modal */}
-        <TourModal isOpen={modalOpen} onClose={closeModal} userLocation={userLocation} />
+        <TourModal isOpen={modalOpen} onClose={closeModal} userLocation={userLocation} mapsApiLoaded={isLoaded} />
       </div>
     );
   }
@@ -396,7 +400,7 @@ export default function Home() {
       </div>
       
       {/* Tour Creation Modal */}
-      <TourModal isOpen={modalOpen} onClose={closeModal} userLocation={userLocation} />
+      <TourModal isOpen={modalOpen} onClose={closeModal} userLocation={userLocation} mapsApiLoaded={isLoaded} />
     </div>
   );
 }

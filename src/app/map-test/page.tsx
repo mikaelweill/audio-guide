@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 
+// Define this at the top level outside of any component
+// It's important this doesn't change between renders
+const CALLBACK_NAME = 'initMapCallback';
+
+// Remove all global Window declarations and use type assertions throughout the code
+
 export default function MapTest() {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapStatus, setMapStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -10,7 +16,7 @@ export default function MapTest() {
 
   useEffect(() => {
     // Check if the Google Maps script is already loaded
-    if (!window.google || !window.google.maps) {
+    if (!(window as any).google || !(window as any).google.maps) {
       console.log("Loading Google Maps script...");
       const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
       console.log("API Key exists:", !!apiKey);
@@ -21,9 +27,28 @@ export default function MapTest() {
         return;
       }
       
+      // Define the callback function before creating the script
+      (window as any)[CALLBACK_NAME] = function() {
+        try {
+          if (mapRef.current) {
+            console.log("Initializing map...");
+            new (window as any).google.maps.Map(mapRef.current, {
+              center: { lat: 40.7128, lng: -74.0060 }, // New York
+              zoom: 12,
+            });
+            console.log("Map initialized successfully!");
+            setMapStatus('success');
+          }
+        } catch (e) {
+          console.error("Error initializing map:", e);
+          setMapStatus('error');
+          setErrorDetails(e instanceof Error ? e.message : 'Unknown error initializing map');
+        }
+      };
+      
       // Create script element
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=${CALLBACK_NAME}`;
       script.async = true;
       script.defer = true;
       
@@ -34,41 +59,21 @@ export default function MapTest() {
         setErrorDetails('Failed to load Google Maps script - check your API key and network connection');
       };
       
-      // Define the callback function
-      window.initMap = function() {
-        try {
-          if (mapRef.current) {
-            console.log("Initializing map...");
-            new window.google.maps.Map(mapRef.current, {
-              center: { lat: 40.7128, lng: -74.0060 }, // New York
-              zoom: 12,
-            });
-            console.log("Map initialized successfully!");
-            setMapStatus('success');
-          }
-        } catch (e) {
-          console.error("Error initializing map:", e);
-          setMapStatus('error');
-          setErrorDetails(`Error initializing map: ${e instanceof Error ? e.message : String(e)}`);
-        }
-      };
-      
       // Add the script to the document
       document.head.appendChild(script);
       
       // Clean up
       return () => {
-        // Only try to remove if it was actually added
         if (script.parentNode) {
           script.parentNode.removeChild(script);
         }
-        // Use optional chaining to avoid TypeScript error
-        window.initMap = undefined;
+        // Use delete with type assertion
+        delete (window as any)[CALLBACK_NAME];
       };
     } else if (mapRef.current) {
       // Google Maps is already loaded
       try {
-        new window.google.maps.Map(mapRef.current, {
+        new (window as any).google.maps.Map(mapRef.current, {
           center: { lat: 40.7128, lng: -74.0060 }, // New York
           zoom: 12,
         });
@@ -126,12 +131,4 @@ export default function MapTest() {
       </div>
     </div>
   );
-}
-
-// Add the global type for the initMap callback
-declare global {
-  interface Window {
-    initMap?: () => void;
-    google?: any;
-  }
 } 
