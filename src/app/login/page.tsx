@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
+import OTPInput from '@/components/OTPInput';
 
 export default function Login() {
   const router = useRouter();
@@ -62,7 +63,9 @@ export default function Login() {
   };
   
   const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
     setLocalError(null);
     
     if (!otp) {
@@ -157,16 +160,25 @@ export default function Login() {
               <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-1">
                 Verification Code
               </label>
-              <input
-                id="otp"
-                type="text"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter the 6-digit code"
-                required
-                autoFocus
-              />
+              <div className="my-4">
+                <OTPInput 
+                  value={otp}
+                  onChange={setOtp}
+                  length={6}
+                  onComplete={() => {
+                    // Auto-submit the form when 6 digits are entered
+                    if (otp.length === 6) {
+                      // Small delay to allow UI to update
+                      setTimeout(() => {
+                        handleVerifyOtp(new Event('submit') as any);
+                      }, 300);
+                    }
+                  }}
+                />
+              </div>
+              <div className="text-sm text-center text-gray-500 mt-2">
+                Enter the 6-digit code sent to your email
+              </div>
             </div>
             <button
               type="submit"
