@@ -193,7 +193,15 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
             >
               <div 
                 className="p-4 cursor-pointer hover:bg-gray-50"
-                onClick={() => setActiveStep(index)}
+                onClick={() => {
+                  if (activeStep === index) {
+                    // If this step is already active, close it
+                    setActiveStep(-1);
+                  } else {
+                    // Otherwise, open it
+                    setActiveStep(index);
+                  }
+                }}
               >
                 <div className="flex items-center">
                   <div className={`
