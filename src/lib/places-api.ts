@@ -40,6 +40,8 @@ export interface POIDetails {
   opening_hours?: {
     weekday_text: string[];
     open_now?: boolean;
+    periods?: any[];
+    isOpen?: () => boolean;
   };
   website?: string;
   url?: string;
@@ -91,11 +93,36 @@ export async function discoverPOIs(preferences: TourPreferences): Promise<POI[]>
   const effectiveRadius = preferences.returnToStart ? searchRadius / 2 : searchRadius;
   
   // Estimate how many POIs to return
-  const AVG_TIME_PER_POI = 20; // minutes
-  const AVG_WALKING_TIME = 10; // minutes
-  const totalTravelTime = preferences.duration - (preferences.duration * 0.2); // 20% buffer
-  const recommendedPOICount = Math.floor(totalTravelTime / (AVG_TIME_PER_POI + AVG_WALKING_TIME));
-  const presentationPOICount = Math.min(20, recommendedPOICount * 4);
+  const calculateRecommendedCount = (duration: number): number => {
+    // Adaptive timing based on tour duration
+    let timePerPOI: number;
+    let walkingTime: number;
+    let bufferPercentage: number;
+    
+    if (duration <= 60) {
+      // For shorter tours, allocate less time per POI
+      timePerPOI = 12; // minutes
+      walkingTime = 6; // minutes
+      bufferPercentage = 0.1; // 10% buffer
+    } else if (duration <= 90) {
+      // Medium tours
+      timePerPOI = 15; // minutes
+      walkingTime = 8; // minutes
+      bufferPercentage = 0.15; // 15% buffer
+    } else {
+      // Longer tours
+      timePerPOI = 20; // minutes
+      walkingTime = 10; // minutes
+      bufferPercentage = 0.2; // 20% buffer
+    }
+    
+    const totalTravelTime = duration - (duration * bufferPercentage);
+    return Math.max(2, Math.floor(totalTravelTime / (timePerPOI + walkingTime)));
+  };
+
+  // Calculate recommended count using the new function
+  const recommendedPOICount = calculateRecommendedCount(preferences.duration);
+  const presentationPOICount = Math.min(30, recommendedPOICount * 4);
   
   // POIs will be collected here
   let allPOIs: POI[] = [];

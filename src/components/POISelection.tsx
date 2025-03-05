@@ -17,10 +17,34 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
   const [error, setError] = useState<string | null>(null);
   
   // Calculate recommended POI count based on tour preferences
-  const AVG_TIME_PER_POI = 20; // minutes per POI
-  const AVG_WALKING_TIME = 10; // minutes between POIs
-  const totalTravelTime = tourPreferences.duration - (tourPreferences.duration * 0.2); // 20% buffer
-  const recommendedCount = Math.floor(totalTravelTime / (AVG_TIME_PER_POI + AVG_WALKING_TIME));
+  const calculateRecommendedCount = (duration: number): number => {
+    // Adaptive timing based on tour duration
+    let timePerPOI: number;
+    let walkingTime: number;
+    let bufferPercentage: number;
+    
+    if (duration <= 60) {
+      // For shorter tours, allocate less time per POI
+      timePerPOI = 12; // minutes
+      walkingTime = 6; // minutes
+      bufferPercentage = 0.1; // 10% buffer
+    } else if (duration <= 90) {
+      // Medium tours
+      timePerPOI = 15; // minutes
+      walkingTime = 8; // minutes
+      bufferPercentage = 0.15; // 15% buffer
+    } else {
+      // Longer tours
+      timePerPOI = 20; // minutes
+      walkingTime = 10; // minutes
+      bufferPercentage = 0.2; // 20% buffer
+    }
+    
+    const totalTravelTime = duration - (duration * bufferPercentage);
+    return Math.max(2, Math.floor(totalTravelTime / (timePerPOI + walkingTime)));
+  };
+
+  const recommendedCount = calculateRecommendedCount(tourPreferences.duration);
   
   // Toggle POI selection
   const togglePOISelection = (poi: POI) => {

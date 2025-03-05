@@ -238,11 +238,12 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
                       <div className="mb-2">
                         <div className="text-sm font-medium text-gray-700 mb-1">Hours:</div>
                         <div className="text-sm text-gray-600">
-                          {poi.details.opening_hours.open_now ? (
-                            <span className="text-green-600">Open now</span>
-                          ) : (
-                            <span className="text-red-600">Closed now</span>
-                          )}
+                          <span className="text-gray-600">
+                            {poi.details.opening_hours.weekday_text && 
+                             poi.details.opening_hours.weekday_text.length > 0 ? 
+                              poi.details.opening_hours.weekday_text[0] : 
+                              'Hours information available'}
+                          </span>
                         </div>
                       </div>
                     )}
