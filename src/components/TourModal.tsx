@@ -76,6 +76,8 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
   const [endAddress, setEndAddress] = useState<string>('');
   const [isGeocodingStart, setIsGeocodingStart] = useState<boolean>(false);
   const [isGeocodingEnd, setIsGeocodingEnd] = useState<boolean>(false);
+  // Add a geocoding cache to prevent duplicate API calls
+  const [geocodingCache, setGeocodingCache] = useState<Record<string, string>>({});
 
   const [preferences, setPreferences] = useState<TourPreferences>({
     interests: [],
@@ -106,66 +108,129 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
     }
   }, [isOpen]);
 
-  // Initialize geocoder
+  // Initialize geocoder only when the modal is open
   useEffect(() => {
-    if (mapsApiLoaded && !geocoder) {
+    if (isOpen && mapsApiLoaded && !geocoder) {
       setGeocoder(new google.maps.Geocoder());
     }
-  }, [mapsApiLoaded, geocoder]);
+  }, [isOpen, mapsApiLoaded, geocoder]);
 
-  // Reverse geocode user location to get address when using current location
-  useEffect(() => {
-    if (geocoder && userLocation && preferences.startLocation.useCurrentLocation && !isGeocodingStart) {
-      setIsGeocodingStart(true);
-      geocoder.geocode(
-        { location: userLocation },
-        (results, status) => {
-          setIsGeocodingStart(false);
-          if (status === 'OK' && results && results.length > 0) {
-            const address = results[0].formatted_address;
-            setStartAddress(address);
-            setPreferences(prev => ({
-              ...prev,
-              startLocation: {
-                ...prev.startLocation,
-                address: address,
-                position: userLocation
-              }
-            }));
-          } else {
-            setStartAddress('Current Location');
-          }
-        }
-      );
-    }
-  }, [geocoder, userLocation, preferences.startLocation.useCurrentLocation, isGeocodingStart, mapsApiLoaded]);
+  // Helper function to get cached geocoding results
+  const getCachedGeocodingResult = (location: google.maps.LatLng | google.maps.LatLngLiteral): string | null => {
+    // Cast lat/lng to number before using toFixed
+    const lat = typeof location.lat === 'function' ? location.lat() : location.lat;
+    const lng = typeof location.lng === 'function' ? location.lng() : location.lng;
+    const locationKey = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    return geocodingCache[locationKey] || null;
+  };
 
-  // Reverse geocode for end location
+  // Helper function to cache geocoding results
+  const cacheGeocodingResult = (location: google.maps.LatLng | google.maps.LatLngLiteral, address: string): void => {
+    // Cast lat/lng to number before using toFixed
+    const lat = typeof location.lat === 'function' ? location.lat() : location.lat;
+    const lng = typeof location.lng === 'function' ? location.lng() : location.lng;
+    const locationKey = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    setGeocodingCache(prev => ({
+      ...prev,
+      [locationKey]: address
+    }));
+  };
+
+  // Reverse geocode user location to get address when using current location - with cache check
   useEffect(() => {
-    if (geocoder && userLocation && preferences.endLocation.useCurrentLocation && !isGeocodingEnd) {
-      setIsGeocodingEnd(true);
-      geocoder.geocode(
-        { location: userLocation },
-        (results, status) => {
-          setIsGeocodingEnd(false);
-          if (status === 'OK' && results && results.length > 0) {
-            const address = results[0].formatted_address;
-            setEndAddress(address);
-            setPreferences(prev => ({
-              ...prev,
-              endLocation: {
-                ...prev.endLocation,
-                address: address,
-                position: userLocation
-              }
-            }));
-          } else {
-            setEndAddress('Current Location');
-          }
-        }
-      );
+    if (!isOpen || !geocoder || !userLocation || !preferences.startLocation.useCurrentLocation || isGeocodingStart) {
+      return;
     }
-  }, [geocoder, userLocation, preferences.endLocation.useCurrentLocation, isGeocodingEnd, mapsApiLoaded]);
+    
+    // Check cache first
+    const cachedAddress = getCachedGeocodingResult(userLocation);
+    if (cachedAddress) {
+      setStartAddress(cachedAddress);
+      setPreferences(prev => ({
+        ...prev,
+        startLocation: {
+          ...prev.startLocation,
+          address: cachedAddress,
+          position: userLocation
+        }
+      }));
+      return;
+    }
+    
+    // If not in cache, perform geocoding
+    setIsGeocodingStart(true);
+    geocoder.geocode(
+      { location: userLocation },
+      (results, status) => {
+        setIsGeocodingStart(false);
+        if (status === 'OK' && results && results.length > 0) {
+          const address = results[0].formatted_address;
+          // Cache the result
+          cacheGeocodingResult(userLocation, address);
+          
+          setStartAddress(address);
+          setPreferences(prev => ({
+            ...prev,
+            startLocation: {
+              ...prev.startLocation,
+              address: address,
+              position: userLocation
+            }
+          }));
+        } else {
+          setStartAddress('Current Location');
+        }
+      }
+    );
+  }, [geocoder, userLocation, preferences.startLocation.useCurrentLocation, isGeocodingStart, isOpen]);
+
+  // Reverse geocode for end location - with cache check
+  useEffect(() => {
+    if (!isOpen || !geocoder || !userLocation || !preferences.endLocation.useCurrentLocation || isGeocodingEnd) {
+      return;
+    }
+    
+    // Check cache first
+    const cachedAddress = getCachedGeocodingResult(userLocation);
+    if (cachedAddress) {
+      setEndAddress(cachedAddress);
+      setPreferences(prev => ({
+        ...prev,
+        endLocation: {
+          ...prev.endLocation,
+          address: cachedAddress,
+          position: userLocation
+        }
+      }));
+      return;
+    }
+    
+    // If not in cache, perform geocoding
+    setIsGeocodingEnd(true);
+    geocoder.geocode(
+      { location: userLocation },
+      (results, status) => {
+        setIsGeocodingEnd(false);
+        if (status === 'OK' && results && results.length > 0) {
+          const address = results[0].formatted_address;
+          // Cache the result
+          cacheGeocodingResult(userLocation, address);
+          
+          setEndAddress(address);
+          setPreferences(prev => ({
+            ...prev,
+            endLocation: {
+              ...prev.endLocation,
+              address: address,
+              position: userLocation
+            }
+          }));
+        } else {
+          setEndAddress('Current Location');
+        }
+      }
+    );
+  }, [geocoder, userLocation, preferences.endLocation.useCurrentLocation, isGeocodingEnd, isOpen]);
 
   // Update location preferences when user location changes
   useEffect(() => {

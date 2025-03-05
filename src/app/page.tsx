@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { GoogleMap, useJsApiLoader, MarkerF, Libraries } from '@react-google-maps/api';
 import TourModal from '@/components/TourModal';
 import { useAuth } from '@/context/AuthContext';
@@ -27,80 +27,74 @@ export default function Home() {
   const router = useRouter();
   const { user, isLoading } = useAuth();
   
-  // Client-side authentication check
-  useEffect(() => {
-    // Only redirect after we've checked authentication status
-    if (!isLoading && !user) {
-      console.log('Home page: User not authenticated, redirecting to login');
-      router.replace('/login');
-    }
-  }, [user, isLoading, router]);
-  
-  // If still loading auth or not authenticated, show loading
-  if (isLoading || !user) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        <p className="mt-4 text-gray-600">Checking authentication...</p>
-      </div>
-    );
-  }
-  
-  // State for layout type
+  // All state declarations
   const [layoutType, setLayoutType] = useState<'fullscreen' | 'contained'>('contained');
-  
-  // State for user's location
   const [userLocation, setUserLocation] = useState(defaultCenter);
   const [locationLoaded, setLocationLoaded] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [showPermissionHelp, setShowPermissionHelp] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-
-  // Add an effect to prevent scrolling
-  useEffect(() => {
-    // Save original styles
-    const originalStyle = window.getComputedStyle(document.body).overflow;
-    
-    // Prevent scrolling
-    document.body.style.overflow = 'hidden';
-    
-    // Restore original styles when component unmounts
-    return () => {
-      document.body.style.overflow = originalStyle;
-    };
-  }, []);
-
-  // Extract and log API key status
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+  const [map, setMap] = useState<MapType>(null);
+  const [retryCount, setRetryCount] = useState(0);
   
-  useEffect(() => {
-    console.log("API Key status:", apiKey ? "Key exists (length: " + apiKey.length + ")" : "Key missing");
-    
-    if (!apiKey) {
-      setApiKeyError("Google Maps API key is missing in environment variables");
-    }
-  }, [apiKey]);
-
+  // Extract API key - add debugging info
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+  console.log("API Key first/last 4 chars:", apiKey ? `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}` : "No key found");
+  
   // Load Google Maps API
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: apiKey,
     libraries
   });
-
-  // Handle load error
-  useEffect(() => {
-    if (loadError) {
-      console.error("Google Maps load error:", loadError);
-      setApiKeyError("Failed to load Google Maps: " + loadError.message);
+  
+  // ALL callbacks defined at the top level in the same order every render
+  // Callback for map load
+  const onLoad = useCallback((map: google.maps.Map) => {
+    setMap(map);
+  }, []);
+  
+  // Callback for map unmount
+  const onUnmount = useCallback(() => {
+    setMap(null);
+  }, []);
+  
+  // Modal callbacks
+  const openModal = useCallback(() => setModalOpen(true), []);
+  const closeModal = useCallback(() => setModalOpen(false), []);
+  
+  // Layout toggle callback
+  const toggleLayout = useCallback(() => {
+    setLayoutType(prev => prev === 'fullscreen' ? 'contained' : 'fullscreen');
+  }, []);
+  
+  // Function to handle location errors - defined with useCallback for consistency
+  const handleLocationError = useCallback((error: GeolocationPositionError) => {
+    let errorMessage = "Could not determine your location. Using default location instead.";
+    
+    if (error.code === 1) {
+      // Permission denied
+      errorMessage = "Location permission denied. Using default location instead.";
+      setShowPermissionHelp(true);
+    } else if (error.code === 2) {
+      // Position unavailable
+      errorMessage = "Your location is currently unavailable. Using default location instead.";
+    } else if (error.code === 3) {
+      // Timeout
+      errorMessage = "Location request timed out. Using default location instead.";
     }
-  }, [loadError]);
-
-  // Request user's location
-  const requestLocation = useCallback(() => {
+    
+    setLocationError(errorMessage);
+    console.error(`Geolocation error: ${errorMessage} (Code: ${error.code})`);
+  }, []);
+  
+  // Request user location function
+  const requestUserLocation = useCallback(() => {
     setLocationError(null);
     setShowPermissionHelp(false);
+    
+    if (!isLoaded) return; // Only proceed if Maps API is loaded
     
     if (navigator.geolocation) {
       try {
@@ -114,218 +108,241 @@ export default function Home() {
             setLocationError(null);
           },
           (error) => {
-            // More robust error handling
+            // Handle geolocation errors
             console.error('Error getting user location:', error);
-            
-            let errorMessage = "Could not determine your location. Using default location instead.";
-            
-            // Check if error has the expected structure
-            if (error && typeof error === 'object') {
-              if ('code' in error) {
-                if (error.code === 1) { // PERMISSION_DENIED
-                  errorMessage = "Location access was denied. Using default location instead.";
-                  // Also set a flag to show permission help
-                  setShowPermissionHelp(true);
-                } else if (error.code === 2) { // POSITION_UNAVAILABLE
-                  errorMessage = "Your location is currently unavailable. Using default location instead.";
-                } else if (error.code === 3) { // TIMEOUT
-                  errorMessage = "Location request timed out. Using default location instead.";
-                }
-              }
-            }
-            
-            setLocationError(errorMessage);
-            setLocationLoaded(true); // Still set to true so we can show the default location
+            handleLocationError(error);
           },
-          {
-            enableHighAccuracy: false,
-            timeout: 10000,
-            maximumAge: 0
-          }
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       } catch (e) {
         console.error('Exception in geolocation request:', e);
-        setLocationError("Error requesting location. Using default location instead.");
-        setLocationLoaded(true);
+        setLocationError("Error accessing location. Using default location instead.");
       }
     } else {
       console.error('Geolocation is not supported by this browser');
       setLocationError("Your browser doesn't support geolocation. Using default location instead.");
-      setLocationLoaded(true);
     }
-  }, []);
-
-  // Get user's location on first load
+  }, [isLoaded, handleLocationError]);
+  
+  // Function to retry loading Google Maps
+  const retryGoogleMapsLoad = useCallback(() => {
+    // Force reloading of the Google Maps script
+    // We can do this by incrementing the retry count, which will cause 
+    // a remount of the GoogleMap components
+    setRetryCount(prev => prev + 1);
+    
+    // Clear errors to give feedback to user that retry is in progress
+    setApiKeyError(null);
+    
+    console.log("Retrying Google Maps load, attempt:", retryCount + 1);
+  }, [retryCount]);
+  
+  // After the retryGoogleMapsLoad function
+  // Fallback UI when Google Maps can't load
+  const MapFallback = useCallback(() => (
+    <div className="flex flex-col items-center justify-center h-full bg-gray-50 p-4">
+      <div className="text-center max-w-lg">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+        </svg>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">Map Loading Issue</h2>
+        <p className="text-gray-600 mb-4">We're having trouble loading Google Maps. This could be due to API key issues or network connectivity.</p>
+        <div className="flex justify-center space-x-2">
+          <button 
+            onClick={retryGoogleMapsLoad}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+          >
+            Retry Loading Maps
+          </button>
+        </div>
+        {apiKeyError && (
+          <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">
+            <p className="font-medium">Error Details:</p>
+            <p>{apiKeyError}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  ), [apiKeyError, retryGoogleMapsLoad]);
+  
+  // All useEffect hooks
+  // Client-side authentication check 
   useEffect(() => {
-    requestLocation();
-  }, [requestLocation]);
-
-  // Map reference
-  const [map, setMap] = useState<MapType>(null);
-  const onLoad = useCallback((map: google.maps.Map) => {
-    setMap(map);
+    if (!isLoading && !user) {
+      console.log('Home page: User not authenticated, redirecting to login');
+      router.replace('/login');
+    }
+  }, [user, isLoading, router]);
+  
+  // Effect to prevent scrolling
+  useEffect(() => {
+    // Save original styles
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    
+    // Prevent scrolling
+    document.body.style.overflow = 'hidden';
+    
+    // Restore original styles when component unmounts
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
   }, []);
-  const onUnmount = useCallback(() => {
-    setMap(null);
-  }, []);
-
-  // Handle opening and closing the modal
-  const openModal = useCallback(() => {
-    setModalOpen(true);
-  }, []);
-
-  const closeModal = useCallback(() => {
-    setModalOpen(false);
-  }, []);
-
-  // Toggle layout type
-  const toggleLayout = useCallback(() => {
-    setLayoutType(prev => prev === 'fullscreen' ? 'contained' : 'fullscreen');
-  }, []);
-
-  if (layoutType === 'fullscreen') {
-    // Fullscreen layout with floating button
+  
+  // API key check
+  useEffect(() => {
+    console.log("API Key status:", apiKey ? "Key exists (length: " + apiKey.length + ")" : "Key missing");
+    
+    if (!apiKey) {
+      setApiKeyError("Google Maps API key is missing in environment variables");
+    }
+  }, [apiKey]);
+  
+  // Handle load error with more specific messages
+  useEffect(() => {
+    if (loadError) {
+      console.error("Google Maps load error:", loadError);
+      
+      // Check for specific error types
+      if (loadError.message?.includes('ApiTargetBlockedMapError')) {
+        setApiKeyError(
+          "Your Google Maps API key is blocked or restricted. This could be due to billing issues, " +
+          "project suspension, or domain restrictions. Please check your Google Cloud Console."
+        );
+      } else {
+        setApiKeyError("Failed to load Google Maps: " + loadError.message);
+      }
+    }
+  }, [loadError]);
+  
+  // Initialize user location on first load
+  useEffect(() => {
+    if (isLoaded) {
+      requestUserLocation();
+    }
+  }, [isLoaded, requestUserLocation]);
+  
+  // Early return if loading or not authenticated
+  if (isLoading || !user) {
     return (
-      <div className="h-screen w-full relative flex flex-col overflow-hidden">
-        {/* Google Map or Error Message */}
-        <div className="flex-grow">
-          {apiKeyError ? (
-            <div className="h-full bg-red-50 flex items-center justify-center p-4">
-              <div className="text-red-600 text-center max-w-lg">
-                <h2 className="text-xl font-bold mb-2">Google Maps Error</h2>
-                <p>{apiKeyError}</p>
-                <p className="mt-4 text-sm">
-                  Please check your API key in the .env file and make sure the Maps JavaScript API is enabled in Google Cloud Console.
-                </p>
-              </div>
-            </div>
-          ) : isLoaded ? (
-            <div className="h-full relative">
-              <GoogleMap
-                mapContainerStyle={mapContainerStyle}
-                center={userLocation}
-                zoom={15}
-                onLoad={onLoad}
-                onUnmount={onUnmount}
-                options={{
-                  disableDefaultUI: true,
-                  zoomControl: true,
-                  mapTypeControl: false,
-                  streetViewControl: false,
-                  fullscreenControl: false
-                }}
-              >
-                {/* User location marker */}
-                <MarkerF position={userLocation} />
-              </GoogleMap>
+      <div className="flex flex-col items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="mt-4 text-gray-600">Checking authentication...</p>
+      </div>
+    );
+  }
+
+  // Render component
+  return (
+    <div className="h-screen flex flex-col">
+      {layoutType === 'fullscreen' ? (
+        // Fullscreen layout
+        <div className="flex-grow relative">
+          {isLoaded ? (
+            <GoogleMap
+              mapContainerStyle={mapContainerStyle}
+              center={userLocation}
+              zoom={15}
+              onLoad={onLoad}
+              onUnmount={onUnmount}
+              options={{
+                disableDefaultUI: true,
+                zoomControl: true,
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: false,
+              }}
+            >
+              {/* User location marker */}
+              <MarkerF position={userLocation} />
               
-              {/* Location error notification */}
+              {/* Error notifications */}
               {locationError && (
-                <div className="absolute top-3 left-0 right-0 mx-auto w-auto max-w-md px-4 py-3 bg-white bg-opacity-95 rounded-lg shadow-md z-10">
-                  <div className="flex items-start gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0 text-yellow-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    <div>
-                      <span className="text-sm font-medium">{locationError}</span>
-                      
+                <div className="absolute top-0 left-0 right-0 m-2 p-2 bg-white border-l-4 border-orange-500 text-orange-700 z-50 shadow-md rounded">
+                  <div className="flex items-start">
+                    <div className="flex-1">
+                      <p className="text-sm">{locationError}</p>
                       {showPermissionHelp && (
-                        <div className="mt-2 text-xs">
+                        <div className="mt-2">
                           <button 
-                            onClick={() => setShowPermissionHelp(prev => !prev)}
-                            className="text-blue-600 hover:underline focus:outline-none"
+                            onClick={requestUserLocation}
+                            className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors cursor-pointer"
                           >
-                            How to enable location access
+                            Try Again
                           </button>
-                          
-                          {showPermissionHelp && (
-                            <div className="mt-2 p-2 bg-gray-50 rounded text-gray-700">
-                              <p className="font-medium mb-1">Enable location in your browser:</p>
-                              <ul className="list-disc pl-5 space-y-1">
-                                <li><span className="font-medium">Chrome:</span> Click the lock/info icon in the address bar → Site settings → Location → Allow</li>
-                                <li><span className="font-medium">Safari:</span> Click Safari menu → Preferences → Websites → Location → Allow for this website</li>
-                                <li><span className="font-medium">Firefox:</span> Click the shield icon in the address bar → Site Permissions → Location → Allow</li>
-                                <li><span className="font-medium">Edge:</span> Click the lock icon → Site permissions → Location → Allow</li>
-                              </ul>
-                              <p className="mt-2 text-gray-500 italic">After changing this setting, refresh the page or click the Retry button.</p>
-                            </div>
-                          )}
+                          <p className="text-xs mt-1">Tip: You may need to enable location access in your browser settings</p>
                         </div>
                       )}
-                      
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {apiKeyError && (
+                <div className="absolute top-0 left-0 right-0 m-2 p-2 bg-white border-l-4 border-red-500 text-red-700 z-50 shadow-md rounded">
+                  <div className="flex items-start">
+                    <div className="flex-1">
+                      <p className="text-sm">{apiKeyError}</p>
                       <div className="mt-2">
                         <button 
-                          onClick={requestLocation}
+                          onClick={retryGoogleMapsLoad}
+                          className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors cursor-pointer mr-2"
+                        >
+                          Retry Loading Maps
+                        </button>
+                        <button 
+                          onClick={requestUserLocation}
                           className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors cursor-pointer"
                         >
-                          Retry
+                          Try Again with Location
                         </button>
                       </div>
+                      {retryCount > 0 && (
+                        <p className="text-xs mt-1">Retry attempts: {retryCount}</p>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
               
               {/* Create Tour Button - positioned at the bottom of the screen */}
-              <div className="fixed bottom-16 left-0 right-0 flex justify-center z-20">
+              <div className="absolute bottom-10 left-0 right-0 flex justify-center">
                 <button
                   onClick={openModal}
-                  className="bg-blue-600 text-white px-8 py-3 rounded-md shadow-xl hover:bg-blue-700 transition duration-200 font-medium text-lg cursor-pointer"
+                  className="px-6 py-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-colors"
                 >
-                  Create Tour
+                  Create Audio Guide
                 </button>
               </div>
               
               {/* Layout Toggle */}
-              <button 
-                onClick={toggleLayout}
-                className="absolute top-3 right-3 z-10 bg-white p-2 rounded-full shadow-lg cursor-pointer"
-                title="Switch to contained layout"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm2 0v12h12V4H5z" clipRule="evenodd" />
-                </svg>
-              </button>
-            </div>
+              <div className="absolute top-4 right-4">
+                <button
+                  onClick={toggleLayout}
+                  className="p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+                  </svg>
+                </button>
+              </div>
+            </GoogleMap>
+          ) : loadError ? (
+            <MapFallback />
           ) : (
-            <div className="h-full bg-gray-100 flex items-center justify-center">
-              <div className="text-gray-400 text-center">
-                <p>Loading map...</p>
+            <div className="flex items-center justify-center h-full bg-gray-50">
+              <div className="text-center p-6">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+                <p className="mt-4 text-gray-600">Loading maps...</p>
               </div>
             </div>
           )}
         </div>
-        
-        {/* Tour Creation Modal */}
-        <TourModal isOpen={modalOpen} onClose={closeModal} userLocation={userLocation} mapsApiLoaded={isLoaded} />
-      </div>
-    );
-  }
-  
-  // Contained layout with button below
-  return (
-    <div className="h-screen w-full bg-gray-50 overflow-auto flex flex-col">
-      <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-6 pb-8 flex flex-col min-h-[calc(100%-2rem)]">
-        <div className="mb-2">
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Audio Travel Guide</h1>
-          <p className="text-gray-600">Discover personalized audio tours based on your interests</p>
-        </div>
-        
-        {/* Map Container - Limit height to ensure button is visible */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden flex-1 mb-6" style={{ maxHeight: 'calc(100vh - 220px)' }}>
-          <div className="h-full relative overflow-hidden">
-            {apiKeyError ? (
-              <div className="h-full bg-red-50 flex items-center justify-center p-4">
-                <div className="text-red-600 text-center max-w-lg">
-                  <h2 className="text-xl font-bold mb-2">Google Maps Error</h2>
-                  <p>{apiKeyError}</p>
-                  <p className="mt-4 text-sm">
-                    Please check your API key in the .env file and make sure the Maps JavaScript API is enabled in Google Cloud Console.
-                  </p>
-                </div>
-              </div>
-            ) : isLoaded ? (
-              <div className="h-full relative">
+      ) : (
+        // Contained layout
+        <div className="flex-grow p-4 md:p-8 relative">
+          <div className="bg-white rounded-lg shadow-lg overflow-hidden h-full">
+            <div className="h-full relative">
+              {isLoaded ? (
                 <GoogleMap
                   mapContainerStyle={mapContainerStyle}
                   center={userLocation}
@@ -337,94 +354,106 @@ export default function Home() {
                     zoomControl: true,
                     mapTypeControl: false,
                     streetViewControl: false,
-                    fullscreenControl: false
+                    fullscreenControl: false,
                   }}
                 >
                   {/* User location marker */}
                   <MarkerF position={userLocation} />
-                </GoogleMap>
-                
-                {/* Location error notification */}
-                {locationError && (
-                  <div className="absolute top-3 left-0 right-0 mx-auto w-auto max-w-md px-4 py-3 bg-white bg-opacity-95 rounded-lg shadow-md z-10">
-                    <div className="flex items-start gap-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0 text-yellow-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                      <div>
-                        <span className="text-sm font-medium">{locationError}</span>
-                        
-                        {showPermissionHelp && (
-                          <div className="mt-2 text-xs">
-                            <button 
-                              onClick={() => setShowPermissionHelp(prev => !prev)}
-                              className="text-blue-600 hover:underline focus:outline-none cursor-pointer"
-                            >
-                              How to enable location access
-                            </button>
-                            
-                            {showPermissionHelp && (
-                              <div className="mt-2 p-2 bg-gray-50 rounded text-gray-700">
-                                <p className="font-medium mb-1">Enable location in your browser:</p>
-                                <ul className="list-disc pl-5 space-y-1">
-                                  <li><span className="font-medium">Chrome:</span> Click the lock/info icon in the address bar → Site settings → Location → Allow</li>
-                                  <li><span className="font-medium">Safari:</span> Click Safari menu → Preferences → Websites → Location → Allow for this website</li>
-                                  <li><span className="font-medium">Firefox:</span> Click the shield icon in the address bar → Site Permissions → Location → Allow</li>
-                                  <li><span className="font-medium">Edge:</span> Click the lock icon → Site permissions → Location → Allow</li>
-                                </ul>
-                                <p className="mt-2 text-gray-500 italic">After changing this setting, refresh the page or click the Retry button.</p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        
-                        <div className="mt-2">
-                          <button 
-                            onClick={requestLocation}
-                            className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors cursor-pointer"
-                          >
-                            Retry
-                          </button>
+                  
+                  {/* Location error notification */}
+                  {locationError && (
+                    <div className="absolute top-0 left-0 right-0 m-2 p-2 bg-white border-l-4 border-orange-500 text-orange-700 z-50 shadow-md rounded">
+                      <div className="flex items-start">
+                        <div className="flex-1">
+                          <p className="text-sm">{locationError}</p>
+                          {showPermissionHelp && (
+                            <div className="mt-2">
+                              <button 
+                                onClick={requestUserLocation}
+                                className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors cursor-pointer"
+                              >
+                                Try Again
+                              </button>
+                              <p className="text-xs mt-1">Tip: You may need to enable location access in your browser settings</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
+                  )}
+                  
+                  {apiKeyError && (
+                    <div className="absolute top-0 left-0 right-0 m-2 p-2 bg-white border-l-4 border-red-500 text-red-700 z-50 shadow-md rounded">
+                      <div className="flex items-start">
+                        <div className="flex-1">
+                          <p className="text-sm">{apiKeyError}</p>
+                          <div className="mt-2">
+                            <button 
+                              onClick={retryGoogleMapsLoad}
+                              className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors cursor-pointer mr-2"
+                            >
+                              Retry Loading Maps
+                            </button>
+                            <button 
+                              onClick={requestUserLocation}
+                              className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors cursor-pointer"
+                            >
+                              Try Again with Location
+                            </button>
+                          </div>
+                          {retryCount > 0 && (
+                            <p className="text-xs mt-1">Retry attempts: {retryCount}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Layout Toggle */}
+                  <div className="absolute top-4 right-4">
+                    <button
+                      onClick={toggleLayout}
+                      className="p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+                      </svg>
+                    </button>
                   </div>
-                )}
-                
-                {/* Layout Toggle */}
-                <button 
-                  onClick={toggleLayout}
-                  className="absolute top-3 right-3 z-10 bg-white p-2 rounded-full shadow-lg cursor-pointer"
-                  title="Switch to fullscreen layout"
+                </GoogleMap>
+              ) : loadError ? (
+                <MapFallback />
+              ) : (
+                <div className="flex items-center justify-center h-full bg-gray-50">
+                  <div className="text-center p-6">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+                    <p className="mt-4 text-gray-600">Loading maps...</p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Create Tour Button - positioned at the bottom of the screen */}
+              <div className="absolute bottom-10 left-0 right-0 flex justify-center">
+                <button
+                  onClick={openModal}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-colors"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3 4a1 1 0 011-1h4a1 1 0 010 2H6.414l2.293 2.293a1 1 0 01-1.414 1.414L5 6.414V8a1 1 0 01-2 0V4zm9 1a1 1 0 110-2h4a1 1 0 011 1v4a1 1 0 11-2 0V6.414l-2.293 2.293a1 1 0 11-1.414-1.414L13.586 5H12zm-9 7a1 1 0 112 0v1.586l2.293-2.293a1 1 0 011.414 1.414L6.414 15H8a1 1 0 110 2H4a1 1 0 01-1-1v-4zm13-1a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 110-2h1.586l-2.293-2.293a1 1 0 011.414-1.414L15 13.586V12a1 1 0 011-1z" clipRule="evenodd" />
-                  </svg>
+                  Create Audio Guide
                 </button>
               </div>
-            ) : (
-              <div className="h-full bg-gray-100 flex items-center justify-center">
-                <div className="text-gray-400 text-center">
-                  <p>Loading map...</p>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         </div>
-        
-        {/* Create Tour Button - Fixed position with proper spacing */}
-        <div className="py-0 mt-4 mb-4">
-          <button
-            onClick={openModal}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg shadow-md hover:bg-blue-700 transition duration-200 font-medium text-lg cursor-pointer"
-          >
-            Create Tour
-          </button>
-        </div>
-      </div>
+      )}
       
       {/* Tour Creation Modal */}
-      <TourModal isOpen={modalOpen} onClose={closeModal} userLocation={userLocation} mapsApiLoaded={isLoaded} />
+      {modalOpen && <TourModal 
+        isOpen={modalOpen} 
+        onClose={closeModal} 
+        userLocation={userLocation}
+        mapsApiLoaded={isLoaded} 
+      />}
     </div>
   );
 }
+
