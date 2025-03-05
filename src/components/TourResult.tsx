@@ -116,7 +116,8 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
   
   return (
     <div className="bg-white rounded-lg shadow-md p-6 mx-auto max-w-6xl">
-      <h2 className="text-2xl font-bold text-gray-900 mb-4">Your Personalized Tour</h2>
+      {/* Remove duplicate heading - we already have one in the modal header */}
+      {/* <h2 className="text-2xl font-bold text-gray-900 mb-4">Your Personalized Tour</h2> */}
       
       {error && (
         <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
@@ -138,7 +139,7 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
           }}
         >
           {/* Only show markers if directions aren't loaded yet */}
-          {!directions && route.map((poi, index) => (
+          {/* {!directions && route.map((poi, index) => (
             <MarkerF
               key={poi.place_id}
               position={poi.geometry.location}
@@ -146,15 +147,31 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
                 text: `${index + 1}`,
                 color: 'white',
               }}
-              onClick={() => setActiveStep(index)}
+              icon={{
+                path: "M-1.547 12l6.563-6.609-1.406-1.406-5.156 5.203-2.063-2.109-1.406 1.406zM0 0q2.906 0 4.945 2.039t2.039 4.945q0 1.453-0.727 3.328t-1.758 3.516-2.039 3.070-1.711 2.273l-0.75 0.797q-0.281-0.328-0.75-0.867t-1.688-2.156-2.133-3.141-1.664-3.445-0.75-3.375q0-2.906 2.039-4.945t4.945-2.039z",
+                fillColor: index === 0 ? '#22c55e' : (index === route.length - 1 ? '#ef4444' : '#3b82f6'),
+                fillOpacity: 1,
+                strokeWeight: 0,
+                rotation: 0,
+                scale: 2,
+                anchor: new google.maps.Point(0, 20),
+                labelOrigin: new google.maps.Point(0, 7),
+              }}
+              onClick={() => {
+                if (activeStep === index) {
+                  setActiveStep(-1);
+                } else {
+                  setActiveStep(index);
+                }
+              }}
             />
-          ))}
+          ))} */}
           
           {directions && (
             <DirectionsRenderer
               directions={directions}
               options={{
-                suppressMarkers: false,
+                suppressMarkers: true,
                 polylineOptions: {
                   strokeColor: '#3B82F6',
                   strokeWeight: 4,
@@ -163,6 +180,36 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
               }}
             />
           )}
+          
+          {/* Always show our numbered markers */}
+          {route.map((poi, index) => (
+            <MarkerF
+              key={poi.place_id}
+              position={poi.geometry.location}
+              label={{
+                text: `${index + 1}`,
+                color: 'white',
+                fontWeight: 'bold',
+                fontSize: '14px',
+              }}
+              icon={{
+                // Use a simpler marker path - just a circle
+                path: google.maps.SymbolPath.CIRCLE,
+                fillColor: index === 0 ? '#22c55e' : (index === route.length - 1 ? '#ef4444' : '#3b82f6'),
+                fillOpacity: 1,
+                strokeWeight: 2,
+                strokeColor: 'white',
+                scale: 12,
+              }}
+              onClick={() => {
+                if (activeStep === index) {
+                  setActiveStep(-1);
+                } else {
+                  setActiveStep(index);
+                }
+              }}
+            />
+          ))}
         </GoogleMap>
       </div>
       
