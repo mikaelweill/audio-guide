@@ -25,9 +25,16 @@ export default function Header() {
     <header className="bg-white shadow-md">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center py-4">
-          <Link href="/" className="text-xl font-bold text-blue-600">
-            Audio Guide
-          </Link>
+          <div className="flex items-center">
+            <Link href="/" className="text-xl font-bold text-blue-600">
+              Audio Guide
+            </Link>
+            {user && (
+              <span className="ml-4 text-sm text-gray-600">
+                Welcome, {user.email?.split('@')[0]}
+              </span>
+            )}
+          </div>
           
           {/* Mobile menu button */}
           <button 
