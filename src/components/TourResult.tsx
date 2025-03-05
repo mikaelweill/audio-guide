@@ -23,20 +23,24 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
     height: '400px',
   };
   
-  // Calculate center of the map
-  const mapCenter = route.length > 0 && route[0].geometry.location
-    ? route[0].geometry.location
-    : { lat: 40.7128, lng: -74.0060 }; // Default to NYC
-  
-  // Colors for markers
-  const markerColors = {
-    start: 'green',
-    end: 'red',
-    poi: 'blue'
-  };
-  
-  // Load directions when component mounts
+  // Auto-fit map when it loads
   const onMapLoad = (map: google.maps.Map) => {
+    // Create bounds object to contain all points
+    const bounds = new google.maps.LatLngBounds();
+    
+    // Add all POI locations to the bounds
+    route.forEach(poi => {
+      bounds.extend(poi.geometry.location);
+    });
+    
+    // Fit the map to the bounds
+    map.fitBounds(bounds);
+    
+    // Add a small padding for better visibility
+    const padding = { top: 50, right: 50, bottom: 50, left: 50 };
+    map.fitBounds(bounds, padding);
+    
+    // Load directions
     if (route.length <= 1) return;
     
     const directionsService = new google.maps.DirectionsService();
@@ -109,9 +113,9 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
   
   // Get marker color based on POI type
   const getMarkerColor = (poi: POI, index: number) => {
-    if (index === 0) return markerColors.start;
-    if (index === route.length - 1) return markerColors.end;
-    return markerColors.poi;
+    if (index === 0) return 'green';
+    if (index === route.length - 1) return 'red';
+    return 'blue';
   };
   
   return (
@@ -128,7 +132,7 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
       <div className="rounded-lg overflow-hidden mb-6">
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
-          center={mapCenter}
+          center={route.length > 0 ? route[0].geometry.location : { lat: 40.7128, lng: -74.0060 }}
           zoom={14}
           onLoad={onMapLoad}
           options={{
