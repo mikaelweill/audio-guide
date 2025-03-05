@@ -114,29 +114,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [router]);
   
-  // Request OTP for signin or signup (always use signInWithOtp for both cases)
+  // Send OTP for email verification
   const sendOtp = async (email: string, isSignUp: boolean = false) => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // For both signup and signin, use signInWithOtp
+      // For both sign in and sign up, use signInWithOtp
+      // This works for both new and existing users
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          // Allow user creation if this is signup
-          shouldCreateUser: isSignUp,
-          // Disable magic link redirect to force numeric OTP
-          emailRedirectTo: undefined
+          shouldCreateUser: true, // Allow creating users automatically
+          emailRedirectTo: undefined // Disable magic links
         }
       });
       
       if (error) throw error;
       
-      return;
+      console.log('OTP sent successfully for:', email);
     } catch (error: any) {
-      console.error(`Error sending OTP for ${isSignUp ? 'signup' : 'signin'}:`, error);
-      setError(error.message || `Failed to send verification code for ${isSignUp ? 'signup' : 'signin'}.`);
+      console.error('Error sending OTP:', error);
+      setError(error.message || 'Failed to send verification code.');
       throw error;
     } finally {
       setIsLoading(false);

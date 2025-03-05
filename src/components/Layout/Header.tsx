@@ -9,6 +9,8 @@ export default function Header() {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { user, signOut, isLoading } = useAuth();
+  
+  const isLoginPage = pathname === '/login';
 
   // Handle sign out
   const handleSignOut = async (e: React.MouseEvent) => {
@@ -21,6 +23,43 @@ export default function Header() {
     }
   };
 
+  // For login page or loading state, show minimal header
+  if (isLoginPage || (isLoading && !user)) {
+    return (
+      <header className="bg-white shadow-md">
+        <div className="container mx-auto px-4">
+          <div className="flex justify-between items-center py-4">
+            <Link href="/" className="text-xl font-bold text-blue-600">
+              Audio Guide
+            </Link>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  // For logged out users (not on login page), show simplified header with login link
+  if (!user && !isLoading) {
+    return (
+      <header className="bg-white shadow-md">
+        <div className="container mx-auto px-4">
+          <div className="flex justify-between items-center py-4">
+            <Link href="/" className="text-xl font-bold text-blue-600">
+              Audio Guide
+            </Link>
+            <Link 
+              href="/login"
+              className="transition duration-150 ease-in-out text-gray-600 hover:text-blue-500"
+            >
+              Sign In
+            </Link>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  // For authenticated users, show full header
   return (
     <header className="bg-white shadow-md">
       <div className="container mx-auto px-4">
@@ -58,18 +97,12 @@ export default function Header() {
             <NavLink href="/profile" active={pathname.startsWith('/profile')}>
               Profile
             </NavLink>
-            {user ? (
-              <button
-                onClick={handleSignOut}
-                className="transition duration-150 ease-in-out text-gray-600 hover:text-blue-500"
-              >
-                Sign Out
-              </button>
-            ) : (
-              <NavLink href="/login" active={pathname.startsWith('/login')}>
-                Login
-              </NavLink>
-            )}
+            <button
+              onClick={handleSignOut}
+              className="transition duration-150 ease-in-out text-gray-600 hover:text-blue-500"
+            >
+              Sign Out
+            </button>
           </nav>
         </div>
         
@@ -83,18 +116,12 @@ export default function Header() {
               <MobileNavLink href="/profile" active={pathname.startsWith('/profile')}>
                 Profile
               </MobileNavLink>
-              {user ? (
-                <button
-                  onClick={handleSignOut}
-                  className="block px-4 py-2 rounded-md text-gray-600 hover:bg-gray-50 hover:text-blue-500 text-left"
-                >
-                  Sign Out
-                </button>
-              ) : (
-                <MobileNavLink href="/login" active={pathname.startsWith('/login')}>
-                  Login
-                </MobileNavLink>
-              )}
+              <button
+                onClick={handleSignOut}
+                className="block px-4 py-2 rounded-md text-gray-600 hover:bg-gray-50 hover:text-blue-500 text-left"
+              >
+                Sign Out
+              </button>
             </nav>
           </div>
         )}

@@ -12,7 +12,6 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
   const [redirectAttempts, setRedirectAttempts] = useState(0);
@@ -50,7 +49,8 @@ export default function Login() {
     }
     
     try {
-      await sendOtp(email, isSignUp);
+      // Always pass true for isSignUp to ensure new users can be created automatically
+      await sendOtp(email, true);
       setOtpSent(true);
     } catch (err) {
       if (err instanceof Error) {
@@ -132,79 +132,79 @@ export default function Login() {
   }
   
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4">
-      <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold mb-6 text-center">
-          {otpSent ? 'Enter OTP Code' : (isSignUp ? 'Sign Up' : 'Sign In')}
-        </h1>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
+      <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-lg">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">
+            {otpSent ? 'Enter Verification Code' : 'Welcome to Audio Guide'}
+          </h1>
+          {otpSent && (
+            <p className="mt-2 text-gray-600">
+              We've sent a code to {email}
+            </p>
+          )}
+        </div>
         
         {(error || localError) && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+          <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-md">
             {error || localError}
           </div>
         )}
         
         {otpSent ? (
-          <form onSubmit={handleVerifyOtp} className="space-y-4">
+          <form onSubmit={handleVerifyOtp} className="space-y-6">
             <div>
               <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-1">
-                OTP Code
+                Verification Code
               </label>
               <input
                 id="otp"
                 type="text"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter the 6-digit code"
                 required
+                autoFocus
               />
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 font-medium"
             >
-              Verify OTP
+              Verify & Continue
             </button>
             <button
               type="button"
               onClick={() => setOtpSent(false)}
-              className="w-full text-blue-600 py-2 px-4 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="w-full text-blue-600 py-2 px-4 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-sm"
             >
               Back to Email
             </button>
           </form>
         ) : (
-          <form onSubmit={handleSendOtp} className="space-y-4">
+          <form onSubmit={handleSendOtp} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email
+                Email Address
               </label>
               <input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="your.email@example.com"
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="you@example.com"
                 required
+                autoFocus
               />
-            </div>
-            <div className="flex items-center">
-              <input
-                id="isSignUp"
-                type="checkbox"
-                checked={isSignUp}
-                onChange={(e) => setIsSignUp(e.target.checked)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <label htmlFor="isSignUp" className="ml-2 block text-sm text-gray-700">
-                I'm a new user (Sign Up)
-              </label>
+              <p className="mt-2 text-sm text-gray-500">
+                We'll send you a verification code to sign in or create an account
+              </p>
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 font-medium"
             >
               Send OTP
             </button>
@@ -213,7 +213,7 @@ export default function Login() {
         
         {/* Add a manual link back to home if already logged in */}
         {user && (
-          <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="mt-6 pt-4 border-t border-gray-200">
             <p className="text-center text-sm text-gray-600">
               Already signed in as {user.email}.{' '}
               <Link href="/" className="text-blue-600 hover:underline">
