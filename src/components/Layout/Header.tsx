@@ -3,10 +3,23 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Header() {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { user, signOut, isLoading } = useAuth();
+
+  // Handle sign out
+  const handleSignOut = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      await signOut();
+      // No need to redirect, the auth context will handle it
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
   return (
     <header className="bg-white shadow-md">
@@ -38,9 +51,18 @@ export default function Header() {
             <NavLink href="/profile" active={pathname.startsWith('/profile')}>
               Profile
             </NavLink>
-            <NavLink href="/auth/login" active={pathname.startsWith('/auth')}>
-              Login
-            </NavLink>
+            {user ? (
+              <button
+                onClick={handleSignOut}
+                className="transition duration-150 ease-in-out text-gray-600 hover:text-blue-500"
+              >
+                Sign Out
+              </button>
+            ) : (
+              <NavLink href="/login" active={pathname.startsWith('/login')}>
+                Login
+              </NavLink>
+            )}
           </nav>
         </div>
         
@@ -54,9 +76,18 @@ export default function Header() {
               <MobileNavLink href="/profile" active={pathname.startsWith('/profile')}>
                 Profile
               </MobileNavLink>
-              <MobileNavLink href="/auth/login" active={pathname.startsWith('/auth')}>
-                Login
-              </MobileNavLink>
+              {user ? (
+                <button
+                  onClick={handleSignOut}
+                  className="block px-4 py-2 rounded-md text-gray-600 hover:bg-gray-50 hover:text-blue-500 text-left"
+                >
+                  Sign Out
+                </button>
+              ) : (
+                <MobileNavLink href="/login" active={pathname.startsWith('/login')}>
+                  Login
+                </MobileNavLink>
+              )}
             </nav>
           </div>
         )}

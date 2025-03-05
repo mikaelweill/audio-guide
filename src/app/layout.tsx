@@ -3,7 +3,6 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Layout/Header";
 import { AuthProvider } from "@/context/AuthContext";
-import AuthStatusBar from "@/components/Layout/AuthStatusBar";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,7 +21,6 @@ export default function RootLayout({
       <body className={`${inter.className} flex flex-col min-h-screen`}>
         <AuthProvider>
           <Header />
-          <AuthStatusBar />
           <main className="flex-grow">
             {children}
           </main>
