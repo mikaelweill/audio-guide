@@ -140,16 +140,26 @@ export async function discoverPOIs(preferences: TourPreferences): Promise<POI[]>
       // Filter and remove duplicates
       const uniquePOIs = removeDuplicates(allPOIs);
       
-      // Filter by rating
-      const qualityPOIs = uniquePOIs.filter(poi => poi.rating && poi.rating >= 4.0);
+      // Filter by rating - lower the threshold from 4.0 to 3.5 to get more results
+      const qualityPOIs = uniquePOIs.filter(poi => poi.rating && poi.rating >= 3.5);
       
       // Sort by number of reviews
       const rankedPOIs = qualityPOIs.sort((a, b) => 
         (b.user_ratings_total || 0) - (a.user_ratings_total || 0)
       );
       
-      // Take top N for presentation
-      let presentationPOIs = rankedPOIs.slice(0, presentationPOICount);
+      // Take top N for presentation - ensure we're taking enough
+      let presentationPOIs = rankedPOIs.slice(0, Math.min(rankedPOIs.length, presentationPOICount));
+      
+      // If we still don't have enough POIs, include some regardless of rating
+      if (presentationPOIs.length < 8 && uniquePOIs.length > presentationPOIs.length) {
+        const additionalPOIs = uniquePOIs
+          .filter(poi => !presentationPOIs.some(p => p.place_id === poi.place_id))
+          .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+          .slice(0, 8 - presentationPOIs.length);
+        
+        presentationPOIs = [...presentationPOIs, ...additionalPOIs];
+      }
       
       // Fetch additional details for these POIs
       const enhancedPOIs = await Promise.all(
