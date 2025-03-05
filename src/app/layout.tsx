@@ -9,6 +9,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Audio Travel Guide",
   description: "Personalized location-based audio guided tours",
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

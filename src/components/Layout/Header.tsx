@@ -2,13 +2,22 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function Header() {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { user, signOut, isLoading } = useAuth();
+  
+  // Add debugging to check auth state
+  useEffect(() => {
+    console.log('Header auth state:', { 
+      user: user?.email || null, 
+      isLoading,
+      isAuthenticated: !!user
+    });
+  }, [user, isLoading]);
   
   const isLoginPage = pathname === '/login';
 
@@ -24,7 +33,7 @@ export default function Header() {
   };
 
   // For login page or loading state, show minimal header
-  if (isLoginPage || (isLoading && !user)) {
+  if (isLoginPage) {
     return (
       <header className="bg-white shadow-md">
         <div className="container mx-auto px-4">
@@ -38,8 +47,24 @@ export default function Header() {
     );
   }
 
-  // For logged out users (not on login page), show simplified header with login link
-  if (!user && !isLoading) {
+  // Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <header className="bg-white shadow-md">
+        <div className="container mx-auto px-4">
+          <div className="flex justify-between items-center py-4">
+            <Link href="/" className="text-xl font-bold text-blue-600">
+              Audio Guide
+            </Link>
+            <span className="text-sm text-gray-500">Loading...</span>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  // For logged out users, show simplified header with login link
+  if (!user) {
     return (
       <header className="bg-white shadow-md">
         <div className="container mx-auto px-4">

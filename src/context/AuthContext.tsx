@@ -48,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       try {
         // Get current session
+        console.log('Fetching initial session...');
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -56,11 +57,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         if (session) {
-          console.log('Found existing session:', session.user.email);
+          const logInfo = {
+            user: session.user.email,
+          };
+          
+          // Add expiry information if available
+          if (session.expires_at) {
+            const expiryDate = new Date(session.expires_at * 1000);
+            const remainingMinutes = Math.floor((session.expires_at * 1000 - Date.now()) / 1000 / 60);
+            
+            Object.assign(logInfo, {
+              expires_at: expiryDate.toLocaleString(),
+              remaining: remainingMinutes + ' minutes'
+            });
+          }
+          
+          console.log('Found existing session:', logInfo);
           setSession(session);
           setUser(session.user);
         } else {
-          console.log('No session found');
+          console.log('No session found, user is not authenticated');
           setSession(null);
           setUser(null);
         }
@@ -71,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       } finally {
         setIsLoading(false);
+        console.log('Auth initialization complete, loading set to false');
       }
     };
     

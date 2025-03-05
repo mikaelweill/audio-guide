@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { GoogleMap, useJsApiLoader, MarkerF, Libraries } from '@react-google-maps/api';
 import TourModal from '@/components/TourModal';
+import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
 
 // Map container style
 const mapContainerStyle = {
@@ -22,6 +24,28 @@ type MapType = google.maps.Map | null;
 const libraries: Libraries = ['places'];
 
 export default function Home() {
+  const router = useRouter();
+  const { user, isLoading } = useAuth();
+  
+  // Client-side authentication check
+  useEffect(() => {
+    // Only redirect after we've checked authentication status
+    if (!isLoading && !user) {
+      console.log('Home page: User not authenticated, redirecting to login');
+      router.replace('/login');
+    }
+  }, [user, isLoading, router]);
+  
+  // If still loading auth or not authenticated, show loading
+  if (isLoading || !user) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="mt-4 text-gray-600">Checking authentication...</p>
+      </div>
+    );
+  }
+  
   // State for layout type
   const [layoutType, setLayoutType] = useState<'fullscreen' | 'contained'>('contained');
   
