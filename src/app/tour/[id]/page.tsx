@@ -171,6 +171,34 @@ export default function TourPage() {
     }
   };
   
+  // Audio playback function with debugging
+  const playAudio = (url: string, label: string) => {
+    console.log(`Attempting to play audio: ${label} from URL: ${url}`);
+    
+    try {
+      const audio = new Audio(url);
+      
+      // Add event listeners for debugging
+      audio.addEventListener('playing', () => {
+        console.log(`Audio started playing: ${label}`);
+      });
+      
+      audio.addEventListener('error', (e) => {
+        console.error(`Audio error for ${label}:`, e);
+        alert(`Failed to play audio: ${e.message || 'Unknown error'}`);
+      });
+      
+      // Start playing
+      audio.play().catch(error => {
+        console.error(`Failed to play audio ${label}:`, error);
+        alert(`Could not play audio: ${error.message}`);
+      });
+    } catch (error) {
+      console.error(`Error creating Audio object for ${label}:`, error);
+      alert(`Error setting up audio playback: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+  
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen py-12 bg-gray-50">
@@ -354,8 +382,9 @@ export default function TourPage() {
                     <button 
                       className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center"
                       onClick={() => {
-                        const audio = new Audio(audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.coreAudioUrl);
-                        audio.play();
+                        const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.coreAudioUrl;
+                        console.log("Core audio URL:", audioUrl);
+                        playAudio(audioUrl, "Brief Overview");
                       }}
                     >
                       <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
@@ -367,8 +396,9 @@ export default function TourPage() {
                     <button 
                       className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center"
                       onClick={() => {
-                        const audio = new Audio(audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.secondaryAudioUrl);
-                        audio.play();
+                        const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.secondaryAudioUrl;
+                        console.log("Secondary audio URL:", audioUrl);
+                        playAudio(audioUrl, "Detailed Guide");
                       }}
                     >
                       <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
@@ -380,8 +410,9 @@ export default function TourPage() {
                     <button 
                       className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center"
                       onClick={() => {
-                        const audio = new Audio(audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.tertiaryAudioUrl);
-                        audio.play();
+                        const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.tertiaryAudioUrl;
+                        console.log("Tertiary audio URL:", audioUrl);
+                        playAudio(audioUrl, "In-Depth Exploration");
                       }}
                     >
                       <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">

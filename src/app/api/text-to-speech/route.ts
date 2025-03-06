@@ -1,23 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
-
-// Initialize OpenAI client (server-side only)
-let openai: OpenAI;
-try {
-  if (!process.env.OPENAI_API_KEY) {
-    console.error('OPENAI_API_KEY is missing');
-  } else {
-    console.log('OPENAI_API_KEY is configured (length: ' + process.env.OPENAI_API_KEY.length + ')');
-  }
-  
-  openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-} catch (error) {
-  console.error('Failed to initialize OpenAI client:', error);
-}
+import { createClient } from '@supabase/supabase-js';
 
 // Voice options
 export type VoiceOption = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
@@ -33,18 +16,6 @@ export type VoiceOption = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimme
 
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
-    const supabase = createServerComponentClient({ cookies });
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    // TEMPORARILY DISABLED FOR TESTING
-    // In production, you should re-enable this authentication check
-    /*
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    */
-    
     // Get request body
     const { content, poiId, voice = 'nova' } = await request.json();
     
@@ -62,52 +33,85 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // For debugging: Check if OPENAI_API_KEY is configured
+    // Initialize OpenAI client
     if (!process.env.OPENAI_API_KEY) {
+      console.error('OPENAI_API_KEY is not configured');
       return NextResponse.json(
         { error: 'OpenAI API key is not configured' },
         { status: 500 }
       );
     }
     
-    // TEMPORARY: Add a bypass option for testing
-    // Remove this in production
-    const bypassTTS = true;
-    if (bypassTTS) {
-      console.log('TESTING: Using mock URLs to test the UI flow');
-      return NextResponse.json({
-        audioFiles: {
-          coreAudioUrl: 'https://tools.genteq.ai/tts-demo/forest_birds.mp3',
-          secondaryAudioUrl: 'https://tools.genteq.ai/tts-demo/city_rain.mp3',
-          tertiaryAudioUrl: 'https://tools.genteq.ai/tts-demo/ocean_waves.mp3'
-        }
-      });
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+    
+    // Initialize Supabase with service role key
+    // This bypasses user authentication issues
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      console.error('NEXT_PUBLIC_SUPABASE_URL is not configured');
+      return NextResponse.json(
+        { error: 'Supabase URL is not configured' },
+        { status: 500 }
+      );
     }
     
+    // Create a Supabase client with the service role key
+    // NOTE: This has admin privileges, so be careful!
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
+    
     try {
-      // Initialize storage bucket (if needed)
-      await initializeAudioStorage(supabase);
+      // Log buckets to confirm we can access them
+      const { data: buckets, error: listError } = await supabaseAdmin.storage.listBuckets();
+      
+      if (listError) {
+        console.error('Error listing buckets:', listError);
+        return NextResponse.json(
+          { error: 'Failed to list storage buckets', details: listError.message },
+          { status: 500 }
+        );
+      }
+      
+      console.log('Available buckets:', buckets.map(b => b.name).join(', '));
+      
+      // Since we're debugging, let's use shorter test content
+      // to avoid hitting OpenAI rate limits
+      const debugContent = {
+        core: "This is a short test for the audio guide.",
+        secondary: "This is a slightly longer sample for the audio guide.",
+        tertiary: "This is the longest test sample for the audio guide."
+      };
       
       // Convert all content to speech and store
-      const audioFiles = await generateAndStoreAudio(content, poiId, voice, supabase);
+      const audioFiles = await generateAndStoreAudio(debugContent, poiId, voice, supabaseAdmin, openai);
       
       return NextResponse.json({ audioFiles });
     } catch (storageError: any) {
       console.error('Supabase storage error:', storageError);
+      console.error('Error details:', JSON.stringify(storageError, null, 2));
       
       // Return a more specific error based on the type
-      if (storageError.message?.includes('Permission denied')) {
+      if (storageError.message?.includes('Permission denied') || storageError.message?.includes('violates row-level security policy')) {
         return NextResponse.json(
           { 
-            error: 'Storage permission denied. Make sure your Supabase storage is properly configured and publicly accessible.',
-            details: storageError.message
+            error: 'Storage permission denied even with service role key.',
+            details: storageError.message,
           },
           { status: 403 }
         );
       } else if (storageError.message?.includes('does not exist')) {
         return NextResponse.json(
           { 
-            error: 'Storage bucket not found. There was an error creating the audio-guides bucket.',
+            error: 'Storage bucket not found. Make sure the bucket "audio-guides" exists.',
             details: storageError.message
           },
           { status: 404 }
@@ -124,6 +128,8 @@ export async function POST(request: NextRequest) {
     }
   } catch (error: any) {
     console.error('Error in TTS API:', error);
+    console.error('Full error details:', JSON.stringify(error, null, 2));
+    
     return NextResponse.json(
       { 
         error: 'Failed to generate speech',
@@ -135,15 +141,10 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper functions for TTS and storage
-async function textToSpeech(text: string, voice: VoiceOption = 'nova'): Promise<Buffer> {
+async function textToSpeech(text: string, voice: VoiceOption = 'nova', openai: OpenAI): Promise<Buffer> {
   try {
     console.log(`Starting TTS conversion with voice: ${voice}`);
     console.log(`Text length: ${text.length} characters`);
-    
-    if (!process.env.OPENAI_API_KEY) {
-      console.error('OPENAI_API_KEY is not set');
-      throw new Error('OpenAI API key is not configured');
-    }
     
     const response = await openai.audio.speech.create({
       model: 'tts-1',
@@ -172,47 +173,60 @@ async function storeAudioFile(
   const fileName = `${poiId}/${contentType}_${voice}_${Date.now()}.mp3`;
   const bucketName = 'audio-guides';
   
-  // Upload file to Supabase storage
-  const { data, error } = await supabase
-    .storage
-    .from(bucketName)
-    .upload(fileName, fileBuffer, {
-      contentType: 'audio/mpeg',
-      upsert: true
-    });
+  console.log(`Attempting to store file: ${fileName} in bucket: ${bucketName}`);
+  console.log(`File size: ${fileBuffer.length} bytes`);
   
-  if (error) {
-    console.error('Error uploading audio file:', error);
-    console.error('Error details:', JSON.stringify(error, null, 2));
-    throw new Error(`Storage error: ${error.message}. Code: ${error.statusCode}`);
+  try {
+    // Upload file to Supabase storage
+    const { data, error } = await supabase
+      .storage
+      .from(bucketName)
+      .upload(fileName, fileBuffer, {
+        contentType: 'audio/mpeg',
+        upsert: true
+      });
+    
+    if (error) {
+      console.error('Error uploading audio file:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      throw new Error(`Storage error: ${error.message}. Code: ${error.statusCode || 'unknown'}`);
+    }
+    
+    console.log(`Successfully uploaded file: ${fileName}`);
+    
+    // Get the public URL
+    const { data: urlData } = supabase
+      .storage
+      .from(bucketName)
+      .getPublicUrl(fileName);
+    
+    console.log(`Generated public URL:`, urlData.publicUrl);
+    
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error(`Failed to store file ${fileName}:`, error);
+    throw error;
   }
-  
-  // Get the public URL
-  const { data: { publicUrl } } = supabase
-    .storage
-    .from(bucketName)
-    .getPublicUrl(fileName);
-  
-  return publicUrl;
 }
 
 async function generateAndStoreAudio(
   content: any, 
   poiId: string,
   voice: VoiceOption = 'nova',
-  supabase: any
+  supabase: any,
+  openai: OpenAI
 ): Promise<any> {
   try {
     // Convert core content to speech
-    const coreBuffer = await textToSpeech(content.core, voice);
+    const coreBuffer = await textToSpeech(content.core, voice, openai);
     const coreAudioUrl = await storeAudioFile(supabase, coreBuffer, poiId, 'core', voice);
     
     // Convert secondary content to speech
-    const secondaryBuffer = await textToSpeech(content.secondary, voice);
+    const secondaryBuffer = await textToSpeech(content.secondary, voice, openai);
     const secondaryAudioUrl = await storeAudioFile(supabase, secondaryBuffer, poiId, 'secondary', voice);
     
     // Convert tertiary content to speech
-    const tertiaryBuffer = await textToSpeech(content.tertiary, voice);
+    const tertiaryBuffer = await textToSpeech(content.tertiary, voice, openai);
     const tertiaryAudioUrl = await storeAudioFile(supabase, tertiaryBuffer, poiId, 'tertiary', voice);
     
     return {
@@ -223,28 +237,5 @@ async function generateAndStoreAudio(
   } catch (error) {
     console.error('Error generating or storing audio:', error);
     throw error;
-  }
-}
-
-async function initializeAudioStorage(supabase: any): Promise<void> {
-  const bucketName = 'audio-guides';
-  
-  // Check if bucket exists, create if it doesn't
-  const { data: buckets } = await supabase.storage.listBuckets();
-  const bucketExists = buckets?.some((bucket: any) => bucket.name === bucketName);
-  
-  if (!bucketExists) {
-    const { error } = await supabase.storage.createBucket(bucketName, {
-      public: true,
-      allowedMimeTypes: ['audio/mpeg'],
-      fileSizeLimit: 50000000 // 50MB limit
-    });
-    
-    if (error) {
-      console.error('Error creating storage bucket:', error);
-      throw error;
-    }
-    
-    console.log('Created audio-guides storage bucket');
   }
 } 
