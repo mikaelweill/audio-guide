@@ -119,6 +119,9 @@ export default function TourPage() {
           console.log('Tour data fetched successfully');
           setTour(data.tour);
           
+          // Once the tour is loaded, fetch any existing audio guides
+          fetchExistingAudioGuides(data.tour.tourPois);
+          
           // Handle warning about ownership if present
           if (data.warning) {
             console.warn(data.warning);
@@ -138,6 +141,49 @@ export default function TourPage() {
       fetchTour();
     }
   }, [tourId, router]);
+  
+  // Add this new function to fetch existing audio guides
+  const fetchExistingAudioGuides = async (tourPois: any[]) => {
+    console.log('Checking for existing audio guides...');
+    
+    try {
+      // Check if pois exist in the tour
+      if (!tourPois || tourPois.length === 0) {
+        console.log('No POIs found in the tour, cannot fetch audio guides');
+        return;
+      }
+      
+      // Map POIs to their IDs for the API call
+      const poiIds = tourPois.map(tourPoi => tourPoi.poi.id || `poi-${tourPoi.sequence_number}`);
+      console.log('POI IDs to check for audio:', poiIds);
+      
+      // Call an API endpoint to get existing audio guides
+      const response = await fetch('/api/audio-guide/fetch-existing', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ poiIds }),
+      });
+      
+      if (!response.ok) {
+        console.error(`Failed to fetch existing audio guides: ${response.status}`);
+        return;
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.audioGuides) {
+        console.log('Found existing audio guides:', data.audioGuides);
+        // Update the audio data state with existing guides
+        setAudioData(data.audioGuides);
+      } else {
+        console.log('No existing audio guides found or error:', data.error || 'Unknown error');
+      }
+    } catch (error) {
+      console.error('Error fetching existing audio guides:', error);
+    }
+  };
   
   // Navigate to the next or previous stop
   const goToStop = (index: number) => {
