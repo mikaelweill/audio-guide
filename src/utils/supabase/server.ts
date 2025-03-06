@@ -10,9 +10,8 @@ export function createClient() {
       cookies: {
         async get(name) {
           try {
-            // Access cookies synchronously for now (supported in Next.js 14/15)
-            // Will need to be updated to await cookies() in future versions
-            const cookieStore = cookies()
+            // Properly await cookies() in Next.js 15
+            const cookieStore = await cookies()
             return cookieStore.get(name)?.value
           } catch (error) {
             console.error('Cookie get error:', error)
@@ -21,9 +20,8 @@ export function createClient() {
         },
         async set(name, value, options) {
           try {
-            // Access cookies synchronously for now (supported in Next.js 14/15)
-            // Will need to be updated to await cookies() in future versions
-            const cookieStore = cookies()
+            // Properly await cookies() in Next.js 15
+            const cookieStore = await cookies()
             cookieStore.set(name, value, options)
           } catch (error) {
             console.error('Cookie set error:', error)
@@ -31,9 +29,8 @@ export function createClient() {
         },
         async remove(name, options) {
           try {
-            // Access cookies synchronously for now (supported in Next.js 14/15)
-            // Will need to be updated to await cookies() in future versions
-            const cookieStore = cookies()
+            // Properly await cookies() in Next.js 15
+            const cookieStore = await cookies()
             cookieStore.set(name, '', { ...options, maxAge: 0 })
           } catch (error) {
             console.error('Cookie remove error:', error)

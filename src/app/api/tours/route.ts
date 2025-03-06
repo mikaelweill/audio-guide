@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createClient as createServerClient } from '@/utils/supabase/server';
 
 // API endpoint for saving tours
 export async function POST(request: NextRequest) {
@@ -22,10 +22,9 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    // Get the user session using the Route Handler Client
-    const cookieStore = cookies();
-    const authClient = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { session } } = await authClient.auth.getSession();
+    // Get the user session using our server client
+    const supabase = createServerClient();
+    const { data: { session } } = await supabase.auth.getSession();
     
     if (!session?.user?.id) {
       console.error('Tour API: No user authenticated');
@@ -44,11 +43,7 @@ export async function POST(request: NextRequest) {
     // Destructure preferences and routes from the request body
     const { name, description, preferences, route, stats } = body;
     
-    // Initialize Supabase client for database operations
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
+    // Use the same supabase client for database operations
     // 1. First create the main Tour record
     const tourId = uuidv4();
     const { error: tourError } = await supabase
