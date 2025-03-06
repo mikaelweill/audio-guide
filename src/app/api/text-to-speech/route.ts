@@ -4,9 +4,20 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 
 // Initialize OpenAI client (server-side only)
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let openai: OpenAI;
+try {
+  if (!process.env.OPENAI_API_KEY) {
+    console.error('OPENAI_API_KEY is missing');
+  } else {
+    console.log('OPENAI_API_KEY is configured (length: ' + process.env.OPENAI_API_KEY.length + ')');
+  }
+  
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+} catch (error) {
+  console.error('Failed to initialize OpenAI client:', error);
+}
 
 // Voice options
 export type VoiceOption = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
@@ -51,19 +62,27 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Remove the testing bypass - use real storage
-    // const bypassStorage = true;
-    // if (bypassStorage) {
-    //   console.log('TESTING: Bypassing storage for TTS audio');
-    //   // Return mock URLs for testing
-    //   return NextResponse.json({
-    //     audioFiles: {
-    //       coreAudioUrl: `https://example.com/mock-audio/core_${Date.now()}.mp3`,
-    //       secondaryAudioUrl: `https://example.com/mock-audio/secondary_${Date.now()}.mp3`,
-    //       tertiaryAudioUrl: `https://example.com/mock-audio/tertiary_${Date.now()}.mp3`
-    //     }
-    //   });
-    // }
+    // For debugging: Check if OPENAI_API_KEY is configured
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: 'OpenAI API key is not configured' },
+        { status: 500 }
+      );
+    }
+    
+    // TEMPORARY: Add a bypass option for testing
+    // Remove this in production
+    const bypassTTS = true;
+    if (bypassTTS) {
+      console.log('TESTING: Using mock URLs to test the UI flow');
+      return NextResponse.json({
+        audioFiles: {
+          coreAudioUrl: 'https://tools.genteq.ai/tts-demo/forest_birds.mp3',
+          secondaryAudioUrl: 'https://tools.genteq.ai/tts-demo/city_rain.mp3',
+          tertiaryAudioUrl: 'https://tools.genteq.ai/tts-demo/ocean_waves.mp3'
+        }
+      });
+    }
     
     try {
       // Initialize storage bucket (if needed)
@@ -117,15 +136,30 @@ export async function POST(request: NextRequest) {
 
 // Helper functions for TTS and storage
 async function textToSpeech(text: string, voice: VoiceOption = 'nova'): Promise<Buffer> {
-  const response = await openai.audio.speech.create({
-    model: 'tts-1',
-    voice: voice,
-    input: text,
-  });
-  
-  // Convert the response to a buffer
-  const buffer = Buffer.from(await response.arrayBuffer());
-  return buffer;
+  try {
+    console.log(`Starting TTS conversion with voice: ${voice}`);
+    console.log(`Text length: ${text.length} characters`);
+    
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('OPENAI_API_KEY is not set');
+      throw new Error('OpenAI API key is not configured');
+    }
+    
+    const response = await openai.audio.speech.create({
+      model: 'tts-1',
+      voice: voice,
+      input: text,
+    });
+    
+    // Convert the response to a buffer
+    const buffer = Buffer.from(await response.arrayBuffer());
+    console.log(`Successfully converted text to speech, buffer size: ${buffer.length} bytes`);
+    return buffer;
+  } catch (error: any) {
+    console.error('OpenAI TTS API error:', error);
+    console.error('Error details:', JSON.stringify(error, null, 2));
+    throw new Error(`TTS conversion failed: ${error.message}`);
+  }
 }
 
 async function storeAudioFile(
