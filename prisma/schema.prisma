@@ -12,3 +12,73 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  created_at DateTime @default(now())
+  tours      Tour[]
+}
+
+model Tour {
+  id                  String    @id @default(uuid())
+  user_id             String
+  name                String
+  description         String?
+  created_at          DateTime  @default(now())
+  last_updated_at     DateTime  @updatedAt
+  start_location      Json      // {lat: number, lng: number, address: string}
+  end_location        Json      // {lat: number, lng: number, address: string}
+  return_to_start     Boolean   @default(false)
+  transportation_mode String  
+  total_distance      Float     // in km
+  total_duration      Int       // in minutes
+  google_maps_url     String?
+  preferences         Json      // {interests: string[], etc.}
+  
+  // Relations
+  user                User      @relation(fields: [user_id], references: [id])
+  tourPois            TourPoi[]
+}
+
+model Poi {
+  id                String    @id @default(uuid())
+  place_id          String    @unique    // Google place_id  
+  name              String
+  vicinity          String?
+  formatted_address String
+  location          Json      // {lat: number, lng: number}
+  types             Json      // string[]
+  rating            Float?
+  user_ratings_total Int?
+  website           String?
+  phone_number      String?
+  price_level       Int?
+  opening_hours     Json?
+  google_maps_url   String?
+  thumbnail_url     String?
+  photo_references  Json?     // string[]
+  last_updated_at   DateTime  @updatedAt
+  
+  // Relations
+  tourPois          TourPoi[]
+}
+
+model TourPoi {
+  id               String    @id @default(uuid())
+  tour_id          String
+  poi_id           String
+  sequence_number  Int
+  distance_to_next Float?    // in km
+  time_to_next     Int?      // in seconds
+  custom_notes     String?
+  
+  // Relations
+  tour             Tour      @relation(fields: [tour_id], references: [id], onDelete: Cascade)
+  poi              Poi       @relation(fields: [poi_id], references: [id])
+  
+  // Unique constraint to ensure no duplicate POIs in the same tour
+  @@unique([tour_id, poi_id])
+  // Index for faster queries by tour
+  @@index([tour_id])
+}

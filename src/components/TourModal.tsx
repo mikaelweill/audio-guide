@@ -5,6 +5,7 @@ import { Autocomplete } from '@react-google-maps/api';
 import POISelection from './POISelection';
 import TourResult from './TourResult';
 import { POI, TourPreferences as ApiTourPreferences, discoverPOIs } from '@/lib/places-api';
+import { supabase } from '@/lib/supabase';
 
 interface Location {
   address: string;
@@ -95,6 +96,15 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
     },
     returnToStart: false,
     transportationMode: 'walking'
+  });
+
+  // Saving state
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  
+  // Form data for tour details
+  const [formData, setFormData] = useState({
+    tourName: '',
+    tourDescription: ''
   });
 
   // Reset state when modal is opened
@@ -505,12 +515,65 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
     setCurrentPhase('poi-selection');
   };
   
-  // Handle saving tour (placeholder for future implementation)
-  const handleSaveTour = () => {
-    console.log('Saving tour:', { route: tourRoute, stats: tourStats });
-    // Here you would implement the save functionality
-    alert('Tour saved! (placeholder)');
-    onClose();
+  // Handle saving tour
+  const handleSaveTour = async () => {
+    try {
+      setIsSaving(true);
+
+      // Import the tour service
+      const { createTour } = await import('@/services/tourService');
+      
+      // Get the current user
+      const session = await supabase.auth.getSession();
+      const userId = session.data.session?.user?.id;
+      
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+      
+      // Generate a name if not provided
+      const tourName = formData.tourName || `Tour near ${preferences.startLocation.address}`;
+      
+      // Convert component preferences to API preferences format
+      const apiPreferences: ApiTourPreferences = {
+        interests: preferences.interests,
+        duration: preferences.duration,
+        distance: preferences.distance,
+        startLocation: {
+          position: preferences.startLocation.position || userLocation,
+          address: preferences.startLocation.address,
+          useCurrentLocation: preferences.startLocation.useCurrentLocation
+        },
+        endLocation: {
+          position: preferences.endLocation.position || userLocation,
+          address: preferences.endLocation.address,
+          useCurrentLocation: preferences.endLocation.useCurrentLocation
+        },
+        returnToStart: preferences.returnToStart,
+        transportationMode: preferences.transportationMode
+      };
+      
+      // Save the tour
+      const tourId = await createTour({
+        userId,
+        name: tourName,
+        description: formData.tourDescription,
+        route: tourRoute,
+        preferences: apiPreferences,
+        stats: tourStats
+      });
+      
+      console.log('Tour saved with ID:', tourId);
+      
+      // Show success message
+      alert('Tour saved successfully!');
+      onClose();
+    } catch (error) {
+      console.error('Error saving tour:', error);
+      alert(`Failed to save tour: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
   
   if (!isOpen) return null;
