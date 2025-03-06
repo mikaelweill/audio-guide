@@ -149,7 +149,8 @@ async function storeAudioFile(
   
   if (error) {
     console.error('Error uploading audio file:', error);
-    throw error;
+    console.error('Error details:', JSON.stringify(error, null, 2));
+    throw new Error(`Storage error: ${error.message}. Code: ${error.statusCode}`);
   }
   
   // Get the public URL
