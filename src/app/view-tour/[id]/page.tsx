@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Button, Container, Divider, Flex, Heading, HStack, List, ListIcon, ListItem, Stack, Text, VStack } from '@chakra-ui/react';
 import { FaMapMarkerAlt, FaWalking, FaRoute, FaClock, FaArrowLeft, FaMapMarked, FaTag } from 'react-icons/fa';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import AudioGuideControls from '@/components/AudioGuideControls';
 
 // Dynamically import the map component to avoid server-side rendering issues
 const TourMap = dynamic(() => import('@/components/TourMap'), { ssr: false });
@@ -48,25 +48,26 @@ export default function ViewTourPage({ params }: ViewTourPageProps) {
 
   if (isLoading) {
     return (
-      <Container maxW="container.xl" py={8}>
-        <Text>Loading tour details...</Text>
-      </Container>
+      <div className="container mx-auto max-w-7xl py-8 px-4">
+        <p>Loading tour details...</p>
+      </div>
     );
   }
 
   if (error || !tour) {
     return (
-      <Container maxW="container.xl" py={8}>
-        <VStack spacing={4} align="start">
-          <Heading as="h1">Error</Heading>
-          <Text>{error || 'Tour not found'}</Text>
-          <Link href="/saved-tours" passHref>
-            <Button leftIcon={<FaArrowLeft />} colorScheme="teal">
+      <div className="container mx-auto max-w-7xl py-8 px-4">
+        <div className="flex flex-col space-y-4 items-start">
+          <h1 className="text-2xl font-bold">Error</h1>
+          <p>{error || 'Tour not found'}</p>
+          <Link href="/saved-tours">
+            <button className="flex items-center bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded">
+              <FaArrowLeft className="mr-2" />
               Back to Saved Tours
-            </Button>
+            </button>
           </Link>
-        </VStack>
-      </Container>
+        </div>
+      </div>
     );
   }
 
@@ -86,110 +87,114 @@ export default function ViewTourPage({ params }: ViewTourPageProps) {
   });
 
   return (
-    <Container maxW="container.xl" py={8}>
-      <VStack spacing={8} align="stretch">
-        <Flex justifyContent="space-between" alignItems="center">
-          <Link href="/saved-tours" passHref>
-            <Button leftIcon={<FaArrowLeft />} variant="outline">
+    <div className="container mx-auto max-w-7xl py-8 px-4">
+      <div className="flex flex-col space-y-8">
+        <div className="flex justify-between items-center">
+          <Link href="/saved-tours">
+            <button className="flex items-center border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded">
+              <FaArrowLeft className="mr-2" />
               Back to Saved Tours
-            </Button>
+            </button>
           </Link>
-        </Flex>
+        </div>
         
-        <Heading as="h1" size="xl">{tour.name}</Heading>
+        <h1 className="text-3xl font-bold">{tour.name}</h1>
         
         {tour.description && (
-          <Text fontSize="lg">{tour.description}</Text>
+          <p className="text-lg">{tour.description}</p>
         )}
         
-        <Flex wrap="wrap" gap={6}>
-          <Box flex="1" minW="300px">
-            <VStack align="stretch" spacing={6}>
-              <Box>
-                <Heading as="h2" size="md" mb={4}>Tour Details</Heading>
-                <List spacing={3}>
-                  <ListItem>
-                    <HStack>
-                      <ListIcon as={FaMapMarkerAlt} color="teal.500" />
-                      <Text fontWeight="bold">Start:</Text>
-                      <Text>{tour.preferences.startLocation.address}</Text>
-                    </HStack>
-                  </ListItem>
+        <div className="flex flex-wrap gap-6">
+          <div className="flex-1 min-w-[300px]">
+            <div className="flex flex-col space-y-6">
+              <div>
+                <h2 className="text-xl font-bold mb-4">Tour Details</h2>
+                <ul className="space-y-3">
+                  <li>
+                    <div className="flex items-center">
+                      <FaMapMarkerAlt className="text-teal-500 mr-2" />
+                      <span className="font-bold mr-2">Start:</span>
+                      <span>{tour.preferences.startLocation.address}</span>
+                    </div>
+                  </li>
                   
                   {!tour.preferences.returnToStart && (
-                    <ListItem>
-                      <HStack>
-                        <ListIcon as={FaMapMarkerAlt} color="teal.500" />
-                        <Text fontWeight="bold">End:</Text>
-                        <Text>{tour.preferences.endLocation.address}</Text>
-                      </HStack>
-                    </ListItem>
+                    <li>
+                      <div className="flex items-center">
+                        <FaMapMarkerAlt className="text-teal-500 mr-2" />
+                        <span className="font-bold mr-2">End:</span>
+                        <span>{tour.preferences.endLocation.address}</span>
+                      </div>
+                    </li>
                   )}
                   
-                  <ListItem>
-                    <HStack>
-                      <ListIcon as={FaRoute} color="teal.500" />
-                      <Text fontWeight="bold">Distance:</Text>
-                      <Text>{formattedDistance}</Text>
-                    </HStack>
-                  </ListItem>
+                  <li>
+                    <div className="flex items-center">
+                      <FaRoute className="text-teal-500 mr-2" />
+                      <span className="font-bold mr-2">Distance:</span>
+                      <span>{formattedDistance}</span>
+                    </div>
+                  </li>
                   
-                  <ListItem>
-                    <HStack>
-                      <ListIcon as={FaClock} color="teal.500" />
-                      <Text fontWeight="bold">Duration:</Text>
-                      <Text>{formattedDuration}</Text>
-                    </HStack>
-                  </ListItem>
+                  <li>
+                    <div className="flex items-center">
+                      <FaClock className="text-teal-500 mr-2" />
+                      <span className="font-bold mr-2">Duration:</span>
+                      <span>{formattedDuration}</span>
+                    </div>
+                  </li>
                   
-                  <ListItem>
-                    <HStack>
-                      <ListIcon as={FaWalking} color="teal.500" />
-                      <Text fontWeight="bold">Stops:</Text>
-                      <Text>{tour.stats?.poiCount || tour.route.length}</Text>
-                    </HStack>
-                  </ListItem>
+                  <li>
+                    <div className="flex items-center">
+                      <FaWalking className="text-teal-500 mr-2" />
+                      <span className="font-bold mr-2">Stops:</span>
+                      <span>{tour.stats?.poiCount || tour.route.length}</span>
+                    </div>
+                  </li>
                   
-                  <ListItem>
-                    <HStack alignItems="flex-start">
-                      <ListIcon as={FaTag} color="teal.500" mt={1} />
-                      <Text fontWeight="bold">Interests:</Text>
-                      <Text>{tour.preferences.interests.join(', ')}</Text>
-                    </HStack>
-                  </ListItem>
+                  <li>
+                    <div className="flex items-start">
+                      <FaTag className="text-teal-500 mr-2 mt-1" />
+                      <span className="font-bold mr-2">Interests:</span>
+                      <span>{tour.preferences.interests.join(', ')}</span>
+                    </div>
+                  </li>
                   
-                  <ListItem>
-                    <HStack>
-                      <ListIcon as={FaMapMarked} color="teal.500" />
-                      <Text fontWeight="bold">Created:</Text>
-                      <Text>{formattedDate}</Text>
-                    </HStack>
-                  </ListItem>
-                </List>
-              </Box>
+                  <li>
+                    <div className="flex items-center">
+                      <FaMapMarked className="text-teal-500 mr-2" />
+                      <span className="font-bold mr-2">Created:</span>
+                      <span>{formattedDate}</span>
+                    </div>
+                  </li>
+                </ul>
+              </div>
               
-              <Box>
-                <Heading as="h2" size="md" mb={4}>Points of Interest</Heading>
-                <List spacing={3}>
+              <div>
+                <h2 className="text-xl font-bold mb-4">Points of Interest</h2>
+                <ul className="space-y-3">
                   {tour.route.map((poi: any, index: number) => (
-                    <ListItem key={poi.place_id || index}>
-                      <HStack alignItems="flex-start">
-                        <ListIcon as={FaMapMarkerAlt} color="teal.500" mt={1} />
-                        <Box>
-                          <Text fontWeight="bold">{poi.name}</Text>
-                          <Text fontSize="sm" color="gray.600">
+                    <li key={poi.place_id || index}>
+                      <div className="flex items-start">
+                        <FaMapMarkerAlt className="text-teal-500 mr-2 mt-1" />
+                        <div>
+                          <p className="font-bold">{poi.name}</p>
+                          <p className="text-sm text-gray-600">
                             {poi.types?.filter((t: string) => !t.includes('_')).join(', ')}
-                          </Text>
-                        </Box>
-                      </HStack>
-                    </ListItem>
+                          </p>
+                        </div>
+                      </div>
+                    </li>
                   ))}
-                </List>
-              </Box>
-            </VStack>
-          </Box>
+                </ul>
+              </div>
+              
+              {/* Add Audio Guide Controls */}
+              <AudioGuideControls tour={tour} />
+            </div>
+          </div>
           
-          <Box flex="2" minW="300px" h="60vh" borderRadius="md" overflow="hidden">
+          <div className="flex-2 min-w-[300px] h-[60vh] rounded-md overflow-hidden">
             {/* Map will be rendered here */}
             {tour && (
               <TourMap
@@ -201,9 +206,9 @@ export default function ViewTourPage({ params }: ViewTourPageProps) {
                 readOnly={true}
               />
             )}
-          </Box>
-        </Flex>
-      </VStack>
-    </Container>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 } 
