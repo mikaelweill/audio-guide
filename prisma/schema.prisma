@@ -39,7 +39,7 @@ model Poi {
   // Generation info (new field)
   audio_generated_at   DateTime?
   
-  TourPoi            TourPoi[]
+  tourPois             TourPoi[]
 }
 
 model Tour {
@@ -57,8 +57,8 @@ model Tour {
   total_duration      Int
   google_maps_url     String?
   preferences         Json
-  User                User      @relation(fields: [user_id], references: [id])
-  TourPoi             TourPoi[]
+  user                User      @relation(fields: [user_id], references: [id])
+  tourPois            TourPoi[]
 }
 
 model TourPoi {
@@ -69,8 +69,8 @@ model TourPoi {
   distance_to_next Float?
   time_to_next     Int?
   custom_notes     String?
-  Poi              Poi     @relation(fields: [poi_id], references: [id])
-  Tour             Tour    @relation(fields: [tour_id], references: [id], onDelete: Cascade)
+  poi              Poi     @relation(fields: [poi_id], references: [id])
+  tour             Tour    @relation(fields: [tour_id], references: [id], onDelete: Cascade)
 
   @@unique([tour_id, poi_id])
   @@index([tour_id])
@@ -80,5 +80,5 @@ model User {
   id         String   @id
   email      String   @unique
   created_at DateTime @default(now())
-  Tour       Tour[]
+  tours      Tour[]
 }

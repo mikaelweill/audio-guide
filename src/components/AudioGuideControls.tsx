@@ -23,82 +23,133 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
     }
 
     setIsGenerating(true);
-    setCurrentStep('Starting audio guide generation...');
+    setCurrentStep('Starting parallel audio guide generation...');
     setProgress(0);
 
     try {
       const audioResults: Record<string, any> = {};
       const totalPois = tour.route.length;
+      
+      // Update UI to show we're processing all POIs at once
+      setCurrentStep(`Processing all ${totalPois} POIs simultaneously...`);
+      
+      // Create an array of processing functions for all POIs
+      const poiProcessingPromises = tour.route.map(async (poi: any, index: number) => {
+        try {
+          // Update UI to show which POI is being processed - but don't setCurrentStep here
+          // as it would cause UI flicker with parallel processing
+          console.log(`Processing POI ${index + 1}/${totalPois}: ${poi.name}`);
+          
+          // 1. Collect data from sources
+          const poiData = await dataCollectionService.collectPoiData({
+            name: poi.name,
+            formatted_address: poi.vicinity || poi.formatted_address || '',
+            location: poi.geometry?.location || null,
+            types: poi.types || [],
+            rating: poi.rating,
+            photo_references: poi.photos?.map((p: any) => p.photo_reference) || []
+          });
+          
+          // 2. Generate content using the server-side API
+          const contentResponse = await fetch('/api/content-generation', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ poiData }),
+          });
 
-      // Process each POI in the tour
-      for (let i = 0; i < totalPois; i++) {
-        const poi = tour.route[i];
-        const progressPercent = Math.round((i / totalPois) * 100);
+          if (!contentResponse.ok) {
+            throw new Error(`Failed to generate content for ${poi.name}`);
+          }
+
+          const contentData = await contentResponse.json();
+          
+          // 3. Convert to speech using the server-side API
+          const ttsResponse = await fetch('/api/text-to-speech', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              content: contentData.content,
+              poiId: poi.place_id || `poi-${tour.route.indexOf(poi)}`,
+              voice: 'nova', // Default voice
+            }),
+          });
+
+          if (!ttsResponse.ok) {
+            throw new Error(`Failed to convert text to speech for ${poi.name}`);
+          }
+
+          const audioFiles = await ttsResponse.json();
+          
+          // Return the results for this POI
+          return {
+            poiId: poi.place_id || `poi-${tour.route.indexOf(poi)}`,
+            name: poi.name,
+            content: contentData.content,
+            audioFiles: audioFiles.audioFiles,
+            success: true
+          };
+        } catch (error) {
+          console.error(`Error processing POI ${poi.name}:`, error);
+          // Even if one POI fails, we continue with the others
+          return {
+            poiId: poi.place_id || `poi-${tour.route.indexOf(poi)}`,
+            name: poi.name,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            success: false
+          };
+        }
+      });
+      
+      // Show that we're running in parallel mode
+      setCurrentStep(`Processing ${totalPois} locations in parallel - this may take a few minutes...`);
+      
+      // Track completed POIs
+      let completedCount = 0;
+      
+      // Process all POIs in parallel and update progress
+      const results = await Promise.allSettled(poiProcessingPromises);
+      
+      // Process results as they complete
+      const completedPois: string[] = [];
+      const failedPois: string[] = [];
+      
+      results.forEach((result, index) => {
+        completedCount++;
+        const progressPercent = Math.round((completedCount / totalPois) * 100);
         setProgress(progressPercent);
         
-        setCurrentStep(`Collecting data for ${poi.name} (${i + 1}/${totalPois})...`);
-        
-        // 1. Collect data from sources
-        const poiData = await dataCollectionService.collectPoiData({
-          name: poi.name,
-          formatted_address: poi.vicinity || poi.formatted_address || '',
-          location: poi.geometry?.location || null,
-          types: poi.types || [],
-          rating: poi.rating,
-          photo_references: poi.photos?.map((p: any) => p.photo_reference) || []
-        });
-
-        setCurrentStep(`Generating content for ${poi.name} (${i + 1}/${totalPois})...`);
-        
-        // 2. Generate content using the server-side API
-        const contentResponse = await fetch('/api/content-generation', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ poiData }),
-        });
-
-        if (!contentResponse.ok) {
-          throw new Error(`Failed to generate content for ${poi.name}`);
+        if (result.status === 'fulfilled') {
+          const poiResult = result.value;
+          
+          if (poiResult.success) {
+            completedPois.push(poiResult.name);
+            // Store successful results
+            audioResults[poiResult.poiId] = {
+              name: poiResult.name,
+              content: poiResult.content,
+              audioFiles: poiResult.audioFiles,
+            };
+          } else {
+            failedPois.push(poiResult.name);
+          }
         }
-
-        const contentData = await contentResponse.json();
-        
-        setCurrentStep(`Converting to speech for ${poi.name} (${i + 1}/${totalPois})...`);
-        
-        // 3. Convert to speech using the server-side API
-        const ttsResponse = await fetch('/api/text-to-speech', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            content: contentData.content,
-            poiId: poi.place_id || `poi-${tour.route.indexOf(poi)}`,
-            voice: 'nova', // Default voice
-          }),
-        });
-
-        if (!ttsResponse.ok) {
-          throw new Error(`Failed to convert text to speech for ${poi.name}`);
-        }
-
-        const audioFiles = await ttsResponse.json();
-        
-        // Store the results
-        audioResults[poi.place_id || `poi-${tour.route.indexOf(poi)}`] = {
-          name: poi.name,
-          content: contentData.content,
-          audioFiles: audioFiles.audioFiles,
-        };
+      });
+      
+      // Update UI with summary of what happened
+      if (failedPois.length > 0) {
+        setCurrentStep(`Completed ${completedPois.length}/${totalPois} POIs. Failed: ${failedPois.join(', ')}`);
+      } else {
+        setCurrentStep(`Successfully processed all ${totalPois} POIs!`);
       }
 
       setAudioData(audioResults);
-      setCurrentStep('');
       setProgress(100);
       
-      alert(`Generated audio guides for ${tour.route.length} POIs`);
+      alert(`Generated audio guides for ${Object.keys(audioResults).length} of ${totalPois} POIs`);
     } catch (error) {
       console.error('Error generating audio guides:', error);
       alert(error instanceof Error ? error.message : 'Failed to generate audio guides');
