@@ -83,16 +83,8 @@ export async function POST(request: NextRequest) {
       
       console.log('Available buckets:', buckets.map(b => b.name).join(', '));
       
-      // Since we're debugging, let's use shorter test content
-      // to avoid hitting OpenAI rate limits
-      const debugContent = {
-        core: "This is a short test for the audio guide.",
-        secondary: "This is a slightly longer sample for the audio guide.",
-        tertiary: "This is the longest test sample for the audio guide."
-      };
-      
       // Convert all content to speech and store
-      const audioFiles = await generateAndStoreAudio(debugContent, poiId, voice, supabaseAdmin, openai);
+      const audioFiles = await generateAndStoreAudio(content, poiId, voice, supabaseAdmin, openai);
       
       return NextResponse.json({ audioFiles });
     } catch (storageError: any) {
