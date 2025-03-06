@@ -2,7 +2,8 @@ import prisma from '@/lib/prisma';
 import { supabase } from '@/lib/supabase';
 import { POI, TourPreferences } from '@/lib/places-api';
 import axios from 'axios';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaClientKnownRequestError, PrismaClientValidationError } from '@prisma/client/runtime/library';
 
 // Type for tour creation
 interface CreateTourInput {
@@ -183,6 +184,19 @@ export async function createTour({
   stats
 }: CreateTourInput): Promise<string> {
   try {
+    // Validate that we have POIs in the route
+    if (!route || route.length === 0) {
+      throw new Error('Cannot create tour with empty route');
+    }
+    
+    // Confirm we have valid start and end locations
+    const startLocation = route[0].geometry.location;
+    const endLocation = route[route.length - 1].geometry.location;
+    
+    if (!startLocation || !endLocation) {
+      throw new Error('Missing start or end location in route');
+    }
+    
     // Generate Google Maps deep link for the full route
     const googleMapsUrl = generateGoogleMapsLink(route, preferences.transportationMode);
     
@@ -194,12 +208,12 @@ export async function createTour({
           user_id: userId,
           name,
           description,
-          start_location: route[0].geometry.location,
-          end_location: route[route.length - 1].geometry.location,
+          start_location: startLocation,
+          end_location: endLocation,
           return_to_start: preferences.returnToStart,
           transportation_mode: preferences.transportationMode,
-          total_distance: stats.totalWalkingDistance,
-          total_duration: stats.totalTourDuration,
+          total_distance: stats.totalWalkingDistance || 0,
+          total_duration: stats.totalTourDuration || 0,
           google_maps_url: googleMapsUrl,
           preferences: preferences
         }
@@ -246,8 +260,22 @@ export async function createTour({
       
       return tour.id;
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error creating tour:', error);
-    throw error;
+    
+    // Provide more specific error messages
+    if (error instanceof PrismaClientKnownRequestError) {
+      // Handle known Prisma errors
+      const errorMessage = `Database error (${error.code}): ${error.message}`;
+      console.error(errorMessage);
+      throw new Error(errorMessage);
+    } else if (error instanceof PrismaClientValidationError) {
+      // Handle validation errors (often schema mismatches)
+      console.error('Data validation error:', error.message);
+      throw new Error(`Invalid data format: ${error.message}`);
+    } else {
+      // Handle other errors
+      throw new Error(`Failed to save tour: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 } 

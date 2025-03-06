@@ -1,7 +1,7 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { createClient } from '@/utils/supabase/server'
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
 /*
  * NOTE: This callback route is no longer actively used in the application.
@@ -15,17 +15,30 @@ import type { NextRequest } from 'next/server';
  */
 
 export async function GET(request: NextRequest) {
-  const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get('code');
+  const requestUrl = new URL(request.url)
+  const code = requestUrl.searchParams.get('code')
+  
+  // Log for debugging
+  console.log('🔄 Auth callback route accessed, code present:', !!code)
   
   if (code) {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    const supabase = createClient()
     
     // Exchange the code for a session
-    await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    
+    if (error) {
+      console.error('❌ Error exchanging code for session:', error.message)
+      
+      // Return to login with error
+      return NextResponse.redirect(
+        new URL(`/login?error=${encodeURIComponent(error.message)}`, request.url)
+      )
+    }
+    
+    console.log('✅ Successfully exchanged code for session')
   }
   
-  // URL to redirect to after sign in
-  return NextResponse.redirect(new URL('/', request.url));
+  // Always redirect to root after successful sign in or if no code
+  return NextResponse.redirect(new URL('/', request.url))
 } 

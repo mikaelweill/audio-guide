@@ -8,7 +8,8 @@ import { useAuth } from '@/context/AuthContext';
 export default function Header() {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { user, signOut, isLoading } = useAuth();
+  const { user, signOut, isLoading, isAuthenticated } = useAuth();
+  const showDebug = process.env.NODE_ENV === 'development';
   
   // Add debugging to check auth state
   useEffect(() => {
@@ -41,6 +42,21 @@ export default function Header() {
             <Link href="/" className="text-xl font-bold text-blue-600">
               Audio Guide
             </Link>
+            
+            {/* Auth Debug Info - only shown in development */}
+            {showDebug && (
+              <div className="flex items-center text-xs bg-gray-100 p-2 rounded">
+                <div className="mr-2 font-mono">
+                  {isLoading ? (
+                    <span className="text-yellow-600">⏳ Loading...</span>
+                  ) : isAuthenticated ? (
+                    <span className="text-green-600">✓ Logged in as: {user?.email}</span>
+                  ) : (
+                    <span className="text-red-600">✗ Not logged in</span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -99,6 +115,21 @@ export default function Header() {
               </span>
             )}
           </div>
+          
+          {/* Auth Debug Info - only shown in development */}
+          {showDebug && (
+            <div className="flex items-center text-xs bg-gray-100 p-2 rounded">
+              <div className="mr-2 font-mono">
+                {isLoading ? (
+                  <span className="text-yellow-600">⏳ Loading...</span>
+                ) : isAuthenticated ? (
+                  <span className="text-green-600">✓ Logged in as: {user?.email}</span>
+                ) : (
+                  <span className="text-red-600">✗ Not logged in</span>
+                )}
+              </div>
+            </div>
+          )}
           
           {/* Mobile menu button */}
           <button 

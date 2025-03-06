@@ -519,23 +519,37 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
   const handleSaveTour = async () => {
     try {
       setIsSaving(true);
-
-      // Import the tour service
-      const { createTour } = await import('@/services/tourService');
-      
-      // Get the current user
-      const session = await supabase.auth.getSession();
-      const userId = session.data.session?.user?.id;
-      
-      if (!userId) {
-        throw new Error('User not authenticated');
-      }
       
       // Generate a name if not provided
       const tourName = formData.tourName || `Tour near ${preferences.startLocation.address}`;
       
-      // Convert component preferences to API preferences format
-      const apiPreferences: ApiTourPreferences = {
+      // Debug tourRoute structure
+      console.log('Tour route length:', tourRoute.length);
+      if (tourRoute.length > 0) {
+        console.log('First POI sample:', {
+          place_id: tourRoute[0].place_id,
+          name: tourRoute[0].name,
+          types: tourRoute[0].types
+        });
+      }
+      
+      // Filter out special markers and simplify the route data
+      const simplifiedRoute = tourRoute
+        .filter(poi => !poi.types.includes('starting_point') && !poi.types.includes('end_point'))
+        .map(poi => ({
+          place_id: poi.place_id,
+          name: poi.name,
+          types: poi.types,
+          geometry: poi.geometry,
+          vicinity: poi.vicinity,
+          rating: poi.rating,
+          photos: poi.photos
+        }));
+      
+      console.log(`Filtered route: ${simplifiedRoute.length} POIs (removed special markers)`);
+      
+      // Prepare the preferences in the expected format
+      const apiPreferences = {
         interests: preferences.interests,
         duration: preferences.duration,
         distance: preferences.distance,
@@ -553,20 +567,62 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
         transportationMode: preferences.transportationMode
       };
       
-      // Save the tour
-      const tourId = await createTour({
-        userId,
+      // Prepare API request payload
+      const payload = {
         name: tourName,
-        description: formData.tourDescription,
-        route: tourRoute,
+        description: formData.tourDescription || '',
+        route: simplifiedRoute,
         preferences: apiPreferences,
         stats: tourStats
+      };
+      
+      console.log('Saving tour to database...');
+      console.log('API payload:', JSON.stringify(payload, null, 2));
+      
+      // Call the API to save the tour
+      const response = await fetch('/api/tours', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        credentials: 'include' // Important: send cookies with the request
       });
       
-      console.log('Tour saved with ID:', tourId);
+      console.log(`API response status: ${response.status}`);
       
-      // Show success message
-      alert('Tour saved successfully!');
+      if (!response.ok) {
+        // Try to get error details from response
+        try {
+          const errorText = await response.text();
+          console.error('Failed to save tour:', errorText);
+          throw new Error(`Server error: ${response.status} - ${errorText}`);
+        } catch (e) {
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
+      }
+      
+      // Get the response text
+      const responseText = await response.text();
+      console.log('API raw response:', responseText);
+      
+      // Parse the response if possible
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('API response data:', data);
+      } catch (parseError) {
+        console.error('Failed to parse API response:', responseText);
+        throw new Error(`Invalid response from server: ${response.status} ${response.statusText}`);
+      }
+      
+      // Check for errors
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to save tour');
+      }
+      
+      console.log('Tour saved successfully with ID:', data.tourId);
+      alert('Tour saved successfully to the database!');
       onClose();
     } catch (error) {
       console.error('Error saving tour:', error);

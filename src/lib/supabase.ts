@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr'
 
 // Environment variables will need to be set in .env.local
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -9,22 +9,34 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing Supabase environment variables. Please check your .env.local file.');
 }
 
-// Create a single supabase client for interacting with your database
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    flowType: 'pkce',
-    // Force OTP instead of magic links
-    detectSessionInUrl: false,
-    // Customize auth settings
-    autoRefreshToken: true,
-    persistSession: true,
-  }
-});
+// Create a single supabase client for browser client-side
+export const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+// For debugging cookie issues
+if (typeof window !== 'undefined') {
+  console.log('🔧 Supabase cookie config:', {
+    domain: window.location.hostname,
+    secure: window.location.protocol === 'https:',
+    sameSite: 'lax'
+  });
+}
 
 // Log auth state changes for debugging
 if (typeof window !== 'undefined') {
   supabase.auth.onAuthStateChange((event, session) => {
     console.log('Supabase auth event:', event, session?.user?.email);
+    
+    // If we get a SIGNED_IN event, check if cookies were set
+    if (event === 'SIGNED_IN') {
+      setTimeout(() => {
+        // Log all cookies (just names for security)
+        const cookies = document.cookie.split(';').map(c => c.trim().split('=')[0]);
+        console.log('🍪 Cookies after SIGNED_IN:', cookies.length ? cookies.join(', ') : 'none');
+      }, 500);
+    }
   });
 }
 

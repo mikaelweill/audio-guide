@@ -12,7 +12,7 @@ type AuthContextType = {
   isLoading: boolean;
   isAuthenticated: boolean;
   sendOtp: (email: string, isSignUp?: boolean) => Promise<void>;
-  verifyOtp: (email: string, token: string) => Promise<void>;
+  verifyOtp: (email: string, token: string) => Promise<{ user: User | null; session: Session | null } | void>;
   signOut: () => Promise<void>;
   error: string | null;
 };
@@ -59,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session) {
           const logInfo = {
             user: session.user.email,
+            id: session.user.id,
           };
           
           // Add expiry information if available
@@ -99,85 +100,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('Auth state changed:', event, session?.user?.email);
         setUser(session?.user || null);
         setSession(session);
-        
-        // Clear any previous errors when auth state changes
-        setError(null);
-        
-        if (event === 'SIGNED_IN') {
-          console.log('User signed in, refreshing page');
-          // Don't push to home if we're already there
-          if (window.location.pathname !== '/') {
-            router.push('/');
-          } else {
-            router.refresh();
-          }
-        }
-        
-        if (event === 'SIGNED_OUT') {
-          console.log('User signed out, redirecting to login');
-          // Only refresh if we're not already redirecting
-          if (window.location.pathname !== '/login') {
-            router.push('/login');
-          } else {
-            router.refresh();
-          }
-        }
+        setIsLoading(false);
       }
     );
     
-    // Clean up subscription on unmount
     return () => {
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, []);
   
   // Send OTP for email verification
-  const sendOtp = async (email: string, isSignUp: boolean = false) => {
-    setIsLoading(true);
-    setError(null);
-    
+  const sendOtp = async (email: string, isSignUp = true) => {
     try {
-      // For both sign in and sign up, use signInWithOtp
-      // This works for both new and existing users
+      setIsLoading(true);
+      
+      // Use OTP (magic link fallback)
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          shouldCreateUser: true, // Allow creating users automatically
-          emailRedirectTo: undefined // Disable magic links
-        }
+          shouldCreateUser: isSignUp,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
       });
       
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
       
-      console.log('OTP sent successfully for:', email);
+      return;
     } catch (error: any) {
-      console.error('Error sending OTP:', error);
-      setError(error.message || 'Failed to send verification code.');
+      console.error('Error sending OTP:', error.message);
       throw error;
     } finally {
       setIsLoading(false);
     }
   };
   
-  // Verify OTP token
+  // Verify OTP
   const verifyOtp = async (email: string, token: string) => {
-    setIsLoading(true);
-    setError(null);
-    
     try {
-      // For OTP via email, we need to use 'email' type
-      const { error } = await supabase.auth.verifyOtp({
+      setIsLoading(true);
+      
+      // Verify the OTP
+      const { data, error } = await supabase.auth.verifyOtp({
         email,
         token,
         type: 'email',
       });
       
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
       
-      router.push('/');
+      setUser(data.user);
+      setSession(data.session);
+      
+      return data;
     } catch (error: any) {
-      console.error('Error verifying code:', error);
-      setError(error.message || 'Invalid or expired verification code.');
+      console.error('Error verifying OTP:', error.message);
       throw error;
     } finally {
       setIsLoading(false);
@@ -186,26 +166,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   
   // Sign out
   const signOut = async () => {
-    setIsLoading(true);
-    
     try {
+      setIsLoading(true);
+      
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      
+      if (error) {
+        throw error;
+      }
       
       setUser(null);
       setSession(null);
+      
+      // Redirect to home after signout
+      router.push('/');
     } catch (error: any) {
-      console.error('Error signing out:', error);
-      setError(error.message || 'Failed to sign out.');
+      console.error('Error signing out:', error.message);
+      setError(error.message);
     } finally {
       setIsLoading(false);
     }
   };
   
-  // Derived authentication state
-  const isAuthenticated = !!user;
+  // Compute isAuthenticated
+  const isAuthenticated = !!user && !!session;
   
-  const value = {
+  // Provider value
+  const value: AuthContextType = {
     user,
     session,
     isLoading,
@@ -215,15 +202,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut,
     error,
   };
-  
-  // Debug auth state
-  useEffect(() => {
-    console.log('Auth state updated:', {
-      user: user?.email,
-      isAuthenticated,
-      isLoading
-    });
-  }, [user, isAuthenticated, isLoading]);
   
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 } 

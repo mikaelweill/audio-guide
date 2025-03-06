@@ -1,64 +1,82 @@
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { updateSession } from '@/utils/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-  // Create a Supabase client configured to use cookies
-  const response = NextResponse.next();
-  const supabase = createMiddlewareClient({ req: request, res: response });
+  // Log middleware execution
+  console.log('🔍 MIDDLEWARE EXECUTING for path:', request.nextUrl.pathname);
   
-  // Get the pathname from the URL
-  const { pathname } = request.nextUrl;
-  console.log(`Middleware processing route: ${pathname}`);
+  // Log cookie names (without values for security)
+  const cookieNames = request.cookies.getAll().map(cookie => cookie.name);
+  console.log('📦 Cookie count:', request.cookies.getAll().length);
+  console.log('🍪 Cookies present:', cookieNames.join(', '));
   
-  // Routes that don't require authentication
-  const publicRoutes = ['/login', '/auth/callback'];
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+  // Update the user session with new cookies
+  const response = await updateSession(request)
   
-  // Special handling for the root path
-  const isRootPath = pathname === '/';
+  // These paths don't require authentication or special handling
+  const publicPaths = ['/', '/login', '/auth/callback', '/auth/confirm']
+  const isPublicPath = publicPaths.includes(request.nextUrl.pathname)
+  
+  // Skip all auth checking for API routes, public paths, and static assets
+  if (
+    request.nextUrl.pathname.startsWith('/api/') ||
+    isPublicPath ||
+    request.nextUrl.pathname.match(/\.(svg|png|jpg|jpeg|gif|webp|css|js)$/)
+  ) {
+    console.log('📌 Skipping auth check for path:', request.nextUrl.pathname);
+    return response
+  }
+  
+  // Check for Supabase auth cookies
+  const hasSbAuthCookie = request.cookies.getAll().some(cookie => 
+    cookie.name.startsWith('sb-') || cookie.name.includes('auth')
+  );
+  
+  // If there's any auth cookie, just allow the request through
+  // The frontend will handle proper authentication
+  if (hasSbAuthCookie) {
+    console.log('🔑 Auth cookie found, allowing access');
+    return response;
+  }
+  
+  // Only if there's no auth cookie, use server-side validation
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value
+        },
+        set() {}, // No-op for read-only check
+        remove() {}, // No-op for read-only check
+      },
+    }
+  )
   
   try {
-    // Refresh session if expired - required for SSR
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession();
+    // Get user data
+    const { data: { user } } = await supabase.auth.getUser()
+    console.log('👤 User in middleware:', user ? `ID: ${user.id}` : 'Not authenticated');
     
-    if (error) {
-      console.error('Middleware auth error:', error);
+    // Only redirect unauthenticated users away from protected routes
+    if (!user) {
+      console.log('🔄 No user found, redirecting to login');
+      return NextResponse.redirect(new URL('/login', request.url))
     }
     
-    // Check if the user is authenticated
-    const isAuthenticated = !!session?.user;
-    console.log(`Middleware auth check: ${isAuthenticated ? 'Authenticated' : 'Not authenticated'}, User: ${session?.user?.email || 'none'}`);
-    
-    // If the route requires authentication and the user is not authenticated, redirect to login
-    if (!isPublicRoute && !isRootPath && !isAuthenticated) {
-      console.log(`Middleware: Redirecting unauthenticated user from ${pathname} to /login`);
-      const redirectUrl = new URL('/login', request.url);
-      return NextResponse.redirect(redirectUrl);
-    }
-    
-    // If the user is already authenticated and tries to access login page, redirect to home
-    if (pathname === '/login' && isAuthenticated) {
-      console.log(`Middleware: Redirecting authenticated user from /login to /`);
-      const redirectUrl = new URL('/', request.url);
-      return NextResponse.redirect(redirectUrl);
-    }
-    
-    // For all other cases, continue with the request
-    return response;
-  } catch (e) {
-    console.error('Middleware error:', e);
-    return response;
+    return response
+  } catch (error) {
+    console.error('❌ ERROR in middleware:', error);
+    return response
   }
 }
 
-// Specify which routes this middleware should run on
 export const config = {
   matcher: [
-    // Match all routes except static files, api routes, and auth callback
-    '/((?!_next/static|_next/image|favicon.ico|images).*)',
+    // Match all paths except static files, API routes, and assets
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|js|css)$).*)',
   ],
 }; 
