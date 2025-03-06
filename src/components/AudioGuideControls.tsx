@@ -15,6 +15,21 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [progress, setProgress] = useState(0);
 
+  // Function to fetch audio data for a POI from the database
+  const fetchPoiAudioData = async (poiId: string) => {
+    try {
+      const response = await fetch(`/api/poi-audio/${poiId}`);
+      if (!response.ok) {
+        console.error(`Failed to fetch audio data for POI ${poiId}: ${response.statusText}`);
+        return null;
+      }
+      return await response.json();
+    } catch (error) {
+      console.error(`Error fetching audio data for POI ${poiId}:`, error);
+      return null;
+    }
+  };
+
   // Function to generate audio guides for all POIs in the tour
   const handleGenerateAudioGuides = async () => {
     if (!tour || !tour.route || tour.route.length === 0) {
@@ -82,14 +97,12 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
             throw new Error(`Failed to convert text to speech for ${poi.name}`);
           }
 
-          const audioFiles = await ttsResponse.json();
+          await ttsResponse.json();
           
-          // Return the results for this POI
+          // Return the POI ID for success tracking
           return {
             poiId: poi.place_id || `poi-${tour.route.indexOf(poi)}`,
             name: poi.name,
-            content: contentData.content,
-            audioFiles: audioFiles.audioFiles,
             success: true
           };
         } catch (error) {
@@ -116,8 +129,9 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
       // Process results as they complete
       const completedPois: string[] = [];
       const failedPois: string[] = [];
+      const successfulPoiIds: string[] = [];
       
-      results.forEach((result, index) => {
+      results.forEach((result) => {
         completedCount++;
         const progressPercent = Math.round((completedCount / totalPois) * 100);
         setProgress(progressPercent);
@@ -127,12 +141,7 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
           
           if (poiResult.success) {
             completedPois.push(poiResult.name);
-            // Store successful results
-            audioResults[poiResult.poiId] = {
-              name: poiResult.name,
-              content: poiResult.content,
-              audioFiles: poiResult.audioFiles,
-            };
+            successfulPoiIds.push(poiResult.poiId);
           } else {
             failedPois.push(poiResult.name);
           }
@@ -145,9 +154,29 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
       } else {
         setCurrentStep(`Successfully processed all ${totalPois} POIs!`);
       }
+      
+      // Fetch audio data from database for successful POIs
+      setCurrentStep('Fetching audio data from database...');
+      
+      const audioDataPromises = successfulPoiIds.map(poiId => fetchPoiAudioData(poiId));
+      const audioDataResults = await Promise.allSettled(audioDataPromises);
+      
+      // Process fetched audio data
+      audioDataResults.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value) {
+          const poiId = successfulPoiIds[index];
+          audioResults[poiId] = result.value;
+        }
+      });
 
+      console.log("Successful POI IDs:", successfulPoiIds);
+      console.log("Audio data fetched from DB:", audioDataResults);
+      console.log("Final audioResults:", audioResults);
+      console.log("Setting audioData state with:", audioResults);
+      
       setAudioData(audioResults);
       setProgress(100);
+      setCurrentStep('');
       
       alert(`Generated audio guides for ${Object.keys(audioResults).length} of ${totalPois} POIs`);
     } catch (error) {

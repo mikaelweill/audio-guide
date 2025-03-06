@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
@@ -40,73 +40,104 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   
   const router = useRouter();
+  // Add a ref to track initialization and prevent loops
+  const isInitialized = useRef(false);
+  // Add a ref to track auth events 
+  const processingAuthChange = useRef(false);
   
   // Check for session on initial load
   useEffect(() => {
+    // Only run once
+    if (isInitialized.current) return;
+    
     const initializeAuth = async () => {
       setIsLoading(true);
+      // Mark as initialized to prevent loops
+      isInitialized.current = true;
       
       try {
         // Get current session
-        console.log('Fetching initial session...');
+        console.log('AuthContext: Initializing auth state');
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
-          console.error('Error getting session:', error);
-          throw error;
+          console.error('AuthContext: Error checking session:', error.message);
+          setError(error.message);
+          setIsLoading(false);
+          return;
         }
         
         if (session) {
-          const logInfo = {
-            user: session.user.email,
-            id: session.user.id,
-          };
-          
-          // Add expiry information if available
-          if (session.expires_at) {
-            const expiryDate = new Date(session.expires_at * 1000);
-            const remainingMinutes = Math.floor((session.expires_at * 1000 - Date.now()) / 1000 / 60);
-            
-            Object.assign(logInfo, {
-              expires_at: expiryDate.toLocaleString(),
-              remaining: remainingMinutes + ' minutes'
-            });
-          }
-          
-          console.log('Found existing session:', logInfo);
-          setSession(session);
+          console.log('AuthContext: Session found:', session.user.email);
           setUser(session.user);
+          setSession(session);
+          
+          // Avoid the redundant session verification that might trigger multiple auth events
+          console.log('AuthContext: Session verification not needed - using existing session');
+          
+          // Debug cookie state after session is found
+          if (typeof document !== 'undefined') {
+            const cookies = document.cookie.split(';').map(c => c.trim().split('=')[0]);
+            console.log('🍪 AuthContext cookies:', cookies.join(', ') || 'none');
+          }
         } else {
-          console.log('No session found, user is not authenticated');
-          setSession(null);
+          console.log('AuthContext: No session found');
           setUser(null);
+          setSession(null);
         }
-      } catch (error) {
-        console.error('Error loading auth:', error);
-        setError('Failed to load authentication.');
-        setSession(null);
-        setUser(null);
+        
+        // Subscribe to auth changes
+        const { data: authListener } = supabase.auth.onAuthStateChange(
+          async (event, newSession) => {
+            console.log(`Auth state change: ${event}`, newSession?.user?.email);
+            
+            // Prevent reentrant auth processing that can cause loops
+            if (processingAuthChange.current) {
+              console.log('Already processing an auth change, skipping to prevent loops');
+              return;
+            }
+            
+            processingAuthChange.current = true;
+            
+            try {
+              if (event === 'SIGNED_IN' && newSession) {
+                setUser(newSession.user);
+                setSession(newSession);
+                
+                // Debug cookie state after sign in
+                if (typeof document !== 'undefined') {
+                  setTimeout(() => {
+                    const cookies = document.cookie.split(';').map(c => c.trim().split('=')[0]);
+                    console.log('🍪 Cookies after SIGNED_IN:', cookies.join(', ') || 'none');
+                  }, 500);
+                }
+              } else if (event === 'SIGNED_OUT') {
+                setUser(null);
+                setSession(null);
+              } else if (event === 'TOKEN_REFRESHED' && newSession) {
+                setUser(newSession.user);
+                setSession(newSession);
+              }
+            } finally {
+              // Clear the processing flag when done
+              processingAuthChange.current = false;
+            }
+          }
+        );
+        
+        // Return the unsubscribe function
+        return () => {
+          authListener.subscription.unsubscribe();
+        };
+      } catch (err) {
+        console.error('Error in auth initialization:', err);
+        setError(err instanceof Error ? err.message : 'Authentication error');
       } finally {
         setIsLoading(false);
-        console.log('Auth initialization complete, loading set to false');
       }
     };
     
     initializeAuth();
-    
-    // Set up auth state change listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
-        setUser(session?.user || null);
-        setSession(session);
-        setIsLoading(false);
-      }
-    );
-    
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
   
   // Send OTP for email verification

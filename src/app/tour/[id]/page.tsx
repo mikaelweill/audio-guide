@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Tour } from '@/components/TourList';
@@ -24,24 +24,105 @@ export default function TourPage() {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [currentGenerationStep, setCurrentGenerationStep] = useState('');
   
+  // Audio playback states
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const [currentAudioId, setCurrentAudioId] = useState<'brief' | 'detailed' | 'in-depth' | null>(null);
+  
+  // Add this helper function near the top of your component
+  const getGoogleMapsUrl = (poi: any) => {
+    console.log("Creating Google Maps URL for:", poi);
+    
+    // Try using place_id first (most reliable)
+    if (poi.id && poi.id.startsWith('ChI')) {
+      console.log("Using place_id for Google Maps URL:", poi.id);
+      return `https://www.google.com/maps/place/?q=place_id:${poi.id}`;
+    }
+    
+    // Try using formatted address if available
+    if (poi.formatted_address) {
+      console.log("Using formatted address for Google Maps URL:", poi.formatted_address);
+      const encodedAddress = encodeURIComponent(poi.formatted_address);
+      return `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
+    }
+    
+    // If we have coordinates, use those as fallback
+    if (poi.location && typeof poi.location === 'object' && poi.location.lat && poi.location.lng) {
+      console.log("Using coordinates for Google Maps URL:", poi.location);
+      return `https://www.google.com/maps/search/?api=1&query=${poi.location.lat},${poi.location.lng}`;
+    }
+    
+    // Fallback to using the name if we have it
+    if (poi.name) {
+      console.log("Using name for Google Maps URL:", poi.name);
+      const encodedName = encodeURIComponent(poi.name);
+      return `https://www.google.com/maps/search/?api=1&query=${encodedName}`;
+    }
+    
+    // Final fallback - generic Google Maps link
+    console.log("No valid data for Google Maps URL, using generic link");
+    return "https://www.google.com/maps";
+  };
+  
   // Fetch tour data
   useEffect(() => {
     const fetchTour = async () => {
       try {
         setLoading(true);
         
+        console.log(`Fetching tour data for ID: ${tourId}`);
         const response = await fetch(`/api/tours/${tourId}`, {
-          credentials: 'include'
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache'
+          }
         });
         
         if (!response.ok) {
+          console.error(`Tour fetch failed with status: ${response.status}`);
+          
+          // Handle authentication errors specially
+          if (response.status === 401) {
+            console.error('Authentication error - not logged in or session expired');
+            setError('Authentication error: You need to log in again');
+            
+            // You could redirect to login page here
+            // router.push('/login');
+            
+            setLoading(false);
+            return;
+          }
+          
+          try {
+            const errorText = await response.text();
+            console.error('Error response:', errorText);
+            
+            // Try to parse the error as JSON if possible
+            try {
+              const errorJson = JSON.parse(errorText);
+              setError(errorJson.error || `Error ${response.status}: Failed to load tour`);
+            } catch (e) {
+              // If not JSON, use the raw text
+              setError(`Error ${response.status}: ${errorText}`);
+            }
+          } catch (textError) {
+            setError(`Error ${response.status}: Failed to load tour data`);
+          }
+          
           throw new Error(`Error fetching tour: ${response.status}`);
         }
         
         const data = await response.json();
         
         if (data.success && data.tour) {
+          console.log('Tour data fetched successfully');
           setTour(data.tour);
+          
+          // Handle warning about ownership if present
+          if (data.warning) {
+            console.warn(data.warning);
+          }
         } else {
           setError(data.error || 'Failed to load tour data');
         }
@@ -56,7 +137,7 @@ export default function TourPage() {
     if (tourId) {
       fetchTour();
     }
-  }, [tourId]);
+  }, [tourId, router]);
   
   // Navigate to the next or previous stop
   const goToStop = (index: number) => {
@@ -171,33 +252,136 @@ export default function TourPage() {
     }
   };
   
-  // Audio playback function with debugging
+  // Audio playback function with debugging and CORS handling
   const playAudio = (url: string, label: string) => {
     console.log(`Attempting to play audio: ${label} from URL: ${url}`);
     
+    if (!url) {
+      console.error(`No URL provided for ${label} audio`);
+      alert(`Error: No audio URL available for ${label}`);
+      setIsAudioLoading(false);
+      return;
+    }
+    
     try {
-      const audio = new Audio(url);
+      // Display spinner or loading state
+      setIsAudioLoading(true);
+      setCurrentAudioId(label === "Brief Overview" ? 'brief' : label === "Detailed Guide" ? 'detailed' : 'in-depth');
       
-      // Add event listeners for debugging
+      // Create a new audio element
+      const audio = new Audio();
+      
+      // Debug the URL
+      console.log(`Full audio URL: ${url}`);
+      if (url.includes('?')) {
+        console.log('URL has query parameters, checking for token expiry...');
+        const expiryMatch = url.match(/expires=(\d+)/i);
+        if (expiryMatch && expiryMatch[1]) {
+          const expiryTimestamp = parseInt(expiryMatch[1]);
+          const currentTime = Math.floor(Date.now() / 1000);
+          const timeLeft = expiryTimestamp - currentTime;
+          console.log(`Token expires in ${timeLeft} seconds (${new Date(expiryTimestamp * 1000).toLocaleString()})`);
+          
+          if (timeLeft <= 0) {
+            console.error('Presigned URL has expired. Please generate a new one.');
+            alert('The audio link has expired. Please regenerate the audio guides.');
+            setIsAudioLoading(false);
+            return;
+          }
+        }
+      }
+      
+      // Set up event handlers before setting src
+      audio.addEventListener('canplaythrough', () => {
+        console.log(`Audio can play through: ${label}`);
+        setIsAudioLoading(false);
+        audio.play().catch(error => {
+          console.error(`Failed to play audio ${label} after canplaythrough:`, error);
+          setIsAudioLoading(false);
+          alert(`Could not play audio: ${error.message}`);
+        });
+      });
+      
       audio.addEventListener('playing', () => {
         console.log(`Audio started playing: ${label}`);
+        setIsAudioLoading(false);
       });
       
       audio.addEventListener('error', (e) => {
         console.error(`Audio error for ${label}:`, e);
-        alert(`Failed to play audio: ${e.message || 'Unknown error'}`);
+        console.error('Audio error details:', audio.error);
+        setIsAudioLoading(false);
+        
+        // Try to provide a helpful message based on the error code
+        let errorMessage = "Unknown error";
+        switch(audio.error?.code) {
+          case MediaError.MEDIA_ERR_ABORTED:
+            errorMessage = "Playback aborted by the user";
+            break;
+          case MediaError.MEDIA_ERR_NETWORK:
+            errorMessage = "Network error while loading the audio";
+            break;
+          case MediaError.MEDIA_ERR_DECODE:
+            errorMessage = "Error decoding the audio file";
+            break;
+          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            errorMessage = "Audio format not supported or CORS error";
+            break;
+        }
+        
+        alert(`Failed to play audio: ${errorMessage}. Please try downloading the file instead.`);
       });
       
-      // Start playing
-      audio.play().catch(error => {
-        console.error(`Failed to play audio ${label}:`, error);
-        alert(`Could not play audio: ${error.message}`);
-      });
+      // Now set the source and load
+      audio.src = url;
+      audio.crossOrigin = "anonymous"; // Add CORS handling
+      audio.preload = 'auto';
+      
+      console.log("Loading audio file...");
+      audio.load();
     } catch (error) {
       console.error(`Error creating Audio object for ${label}:`, error);
+      setIsAudioLoading(false);
       alert(`Error setting up audio playback: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
+  
+  // Fix currentStop declaration position
+  // This will ensure currentStop is defined before it's used in useEffect
+  const currentStop = tour && tour.tourPois ? 
+    [...tour.tourPois].sort((a, b) => a.sequence_number - b.sequence_number)[currentStopIndex] : 
+    null;
+
+  // Audio check - must come after currentStop is defined
+  useEffect(() => {
+    // Check if currentStop and audioData exist
+    if (tour && currentStopIndex >= 0 && currentStopIndex < tour.tourPois.length && Object.keys(audioData).length > 0) {
+      const poiId = tour.tourPois[currentStopIndex].poi.id || `poi-${currentStopIndex}`;
+      const audioForCurrentStop = audioData[poiId];
+      
+      console.log("Current stop:", tour.tourPois[currentStopIndex]);
+      console.log("Audio data available:", Object.keys(audioData));
+      console.log("Audio for current POI:", audioForCurrentStop);
+      
+      // Check if we need to fetch audio data for this POI
+      if (!audioForCurrentStop) {
+        console.log("No audio data for current POI, fetching from database...");
+        // We could fetch audio data here if necessary
+      }
+    }
+  }, [tour, currentStopIndex, audioData]);
+  
+  useEffect(() => {
+    if (currentStop && audioData) {
+      const poiId = currentStop.poi.id || `poi-${currentStopIndex}`;
+      console.log("Current POI ID:", poiId);
+      console.log("Available audio data keys:", Object.keys(audioData));
+      console.log("Has audio for current POI:", !!audioData[poiId]);
+      if (audioData[poiId]) {
+        console.log("Audio URLs:", audioData[poiId].audioFiles);
+      }
+    }
+  }, [currentStop, currentStopIndex, audioData]);
   
   if (loading) {
     return (
@@ -227,7 +411,6 @@ export default function TourPage() {
   
   // Sort tour POIs by sequence number
   const sortedPois = [...tour.tourPois].sort((a, b) => a.sequence_number - b.sequence_number);
-  const currentStop = sortedPois[currentStopIndex];
   
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -376,52 +559,126 @@ export default function TourPage() {
               </p>
               
               {/* Audio Player Section */}
-              {Object.keys(audioData).length > 0 && audioData[currentStop.poi.id || `poi-${currentStopIndex}`] ? (
-                <div className="bg-gray-100 p-4 rounded-lg mb-4">
-                  <div className="flex flex-col space-y-2">
-                    <button 
-                      className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center"
-                      onClick={() => {
-                        const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.coreAudioUrl;
-                        console.log("Core audio URL:", audioUrl);
-                        playAudio(audioUrl, "Brief Overview");
-                      }}
-                    >
-                      <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                      </svg>
-                      Play Brief Overview (30-60s)
-                    </button>
-                    
-                    <button 
-                      className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center"
-                      onClick={() => {
-                        const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.secondaryAudioUrl;
-                        console.log("Secondary audio URL:", audioUrl);
-                        playAudio(audioUrl, "Detailed Guide");
-                      }}
-                    >
-                      <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                      </svg>
-                      Play Detailed Guide (1-2 min)
-                    </button>
-                    
-                    <button 
-                      className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center"
-                      onClick={() => {
-                        const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.tertiaryAudioUrl;
-                        console.log("Tertiary audio URL:", audioUrl);
-                        playAudio(audioUrl, "In-Depth Exploration");
-                      }}
-                    >
-                      <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                      </svg>
-                      Play In-Depth Exploration (3+ min)
-                    </button>
-                  </div>
-                </div>
+              {Object.keys(audioData).length > 0 ? (
+                <>
+                  {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`] ? (
+                    <div className="bg-gray-100 p-4 rounded-lg mb-4">
+                      <div className="flex flex-col space-y-2">
+                        <button 
+                          className={`bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'brief' ? 'opacity-75 cursor-wait' : ''}`}
+                          onClick={() => {
+                            setCurrentAudioId('brief');
+                            const audioUrl = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.audioFiles?.coreAudioUrl;
+                            console.log("Brief audio URL:", audioUrl);
+                            if (!audioUrl) {
+                              alert("No brief audio available. Try regenerating the audio guides.");
+                              return;
+                            }
+                            playAudio(audioUrl, "Brief Overview");
+                          }}
+                          disabled={isAudioLoading}
+                        >
+                          {isAudioLoading && currentAudioId === 'brief' ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Loading...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                              </svg>
+                              Play Brief Overview (30-60s)
+                            </>
+                          )}
+                        </button>
+                        
+                        <button 
+                          className={`bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'detailed' ? 'opacity-75 cursor-wait' : ''}`}
+                          onClick={() => {
+                            setCurrentAudioId('detailed');
+                            const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.secondaryAudioUrl;
+                            console.log("Detailed audio URL:", audioUrl);
+                            if (!audioUrl) {
+                              alert("No detailed audio available. Try regenerating the audio guides.");
+                              return;
+                            }
+                            playAudio(audioUrl, "Detailed Guide");
+                          }}
+                          disabled={isAudioLoading}
+                        >
+                          {isAudioLoading && currentAudioId === 'detailed' ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Loading...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                              </svg>
+                              Play Detailed Guide (1-2 min)
+                            </>
+                          )}
+                        </button>
+                        
+                        <button 
+                          className={`bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'in-depth' ? 'opacity-75 cursor-wait' : ''}`}
+                          onClick={() => {
+                            setCurrentAudioId('in-depth');
+                            const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.tertiaryAudioUrl;
+                            console.log("In-depth audio URL:", audioUrl);
+                            if (!audioUrl) {
+                              alert("No in-depth audio available. Try regenerating the audio guides.");
+                              return;
+                            }
+                            playAudio(audioUrl, "In-Depth Exploration");
+                          }}
+                          disabled={isAudioLoading}
+                        >
+                          {isAudioLoading && currentAudioId === 'in-depth' ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Loading...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                              </svg>
+                              Play In-Depth Exploration (3+ min)
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-100 p-4 rounded-lg flex items-center justify-between mb-4">
+                      <div className="flex items-center">
+                        <button className="bg-blue-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <div>
+                          <p className="font-medium text-gray-800">Audio Guide</p>
+                          <p className="text-sm text-gray-500">Generate audio guides using the button at the top</p>
+                        </div>
+                      </div>
+                      <div className="text-gray-500">--:--</div>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="bg-gray-100 p-4 rounded-lg flex items-center justify-between mb-4">
                   <div className="flex items-center">
@@ -442,7 +699,7 @@ export default function TourPage() {
               
               {/* Google Maps Link */}
               <a 
-                href={`https://www.google.com/maps/place/?q=place_id:${currentStop.poi.id}`}
+                href={getGoogleMapsUrl(currentStop.poi)}
                 target="_blank"
                 rel="noreferrer"
                 className="text-blue-600 hover:text-blue-800 inline-flex items-center mb-4"

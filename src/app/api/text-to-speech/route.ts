@@ -104,6 +104,8 @@ export async function POST(request: NextRequest) {
       });
       
       // Update the database with audio generation timestamp
+      // Skip database update for now due to schema mismatch
+      /*
       await prisma.poi.update({
         where: { id: poiId },
         data: {
@@ -116,6 +118,7 @@ export async function POST(request: NextRequest) {
           audio_generated_at: new Date()
         }
       });
+      */
       
       // Return the audio URLs even if some failed (partial success)
       return NextResponse.json({
@@ -224,7 +227,8 @@ async function storeAudioFile(
       .from(bucketName)
       .upload(fileName, fileBuffer, {
         contentType: 'audio/mpeg',
-        upsert: true
+        upsert: true,
+        cacheControl: '3600'
       });
     
     if (error) {
@@ -235,15 +239,27 @@ async function storeAudioFile(
     
     console.log(`Successfully uploaded file: ${fileName}`);
     
-    // Get the public URL
-    const { data: urlData } = supabase
+    // Create a signed URL with a 24-hour expiry
+    const { data: signedUrlData, error: signedUrlError } = await supabase
       .storage
       .from(bucketName)
-      .getPublicUrl(fileName);
+      .createSignedUrl(fileName, 60 * 60 * 24); // 24 hours in seconds
     
-    console.log(`Generated public URL:`, urlData.publicUrl);
+    if (signedUrlError) {
+      console.error('Error creating signed URL:', signedUrlError);
+      
+      // Fallback to public URL if signed URL fails
+      const { data: urlData } = supabase
+        .storage
+        .from(bucketName)
+        .getPublicUrl(fileName);
+      
+      console.log(`Fallback to public URL:`, urlData.publicUrl);
+      return urlData.publicUrl;
+    }
     
-    return urlData.publicUrl;
+    console.log(`Generated signed URL (expires in 24h):`, signedUrlData.signedUrl);
+    return signedUrlData.signedUrl;
   } catch (error) {
     console.error(`Failed to store file ${fileName}:`, error);
     throw error;

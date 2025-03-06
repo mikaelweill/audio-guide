@@ -9,38 +9,62 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing Supabase environment variables. Please check your .env.local file.');
 }
 
-// Create a single supabase client for browser client-side
+// Determine if we're in a localhost environment
+const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+
+// Define what cookie name to use for auth
+const AUTH_COOKIE_NAME = 'sb-auth-token';
+
+// Create a single supabase client for browser client-side with minimal options
 export const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      flowType: 'pkce',
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+    },
+    cookieOptions: {
+      name: AUTH_COOKIE_NAME,
+      path: '/',
+      sameSite: 'lax',
+      secure: !isLocalhost
+    }
+  }
 )
 
-// For debugging cookie issues
-if (typeof window !== 'undefined') {
-  console.log('🔧 Supabase cookie config:', {
+// For debugging cookie issues - but only log once to prevent loops
+let hasLoggedCookieInfo = false;
+if (typeof window !== 'undefined' && !hasLoggedCookieInfo) {
+  hasLoggedCookieInfo = true;
+  console.log('🔧 Supabase client initialized with cookie config:', {
     domain: window.location.hostname,
-    secure: window.location.protocol === 'https:',
-    sameSite: 'lax'
+    secure: !isLocalhost,
+    sameSite: 'lax',
+    path: '/'
   });
-}
-
-// Log auth state changes for debugging
-if (typeof window !== 'undefined') {
+  
+  // Log first auth state change only
+  let firstAuthEventLogged = false;
   supabase.auth.onAuthStateChange((event, session) => {
-    console.log('Supabase auth event:', event, session?.user?.email);
-    
-    // If we get a SIGNED_IN event, check if cookies were set
-    if (event === 'SIGNED_IN') {
-      setTimeout(() => {
-        // Log all cookies (just names for security)
-        const cookies = document.cookie.split(';').map(c => c.trim().split('=')[0]);
-        console.log('🍪 Cookies after SIGNED_IN:', cookies.length ? cookies.join(', ') : 'none');
-      }, 500);
+    if (!firstAuthEventLogged) {
+      console.log('⚡ Initial Supabase auth event:', event, session?.user?.email || 'no user');
+      firstAuthEventLogged = true;
+      
+      // Only log cookies once after sign in
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        setTimeout(() => {
+          const cookies = document.cookie.split(';').map(c => c.trim().split('=')[0]);
+          console.log(`🍪 Initial cookies after ${event}:`, cookies.length ? cookies.join(', ') : 'none');
+        }, 500);
+      }
     }
   });
 }
 
-// For server components
+// For server components - use minimal version
 export const createServerSupabaseClient = async () => {
   const { createServerComponentClient } = await import('@supabase/auth-helpers-nextjs');
   const { cookies } = await import('next/headers');
