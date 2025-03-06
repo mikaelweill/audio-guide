@@ -315,7 +315,7 @@ export default function TourPage() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
   
-  // Replace the old playAudio function with this enhanced version
+  // Update the playAudio function with better loading/error handling
   const playAudio = (url: string, label: string) => {
     console.log(`Attempting to play audio: ${label} from URL: ${url}`);
     
@@ -330,32 +330,31 @@ export default function TourPage() {
       // Show the transcript for this audio
       setShowTranscript(true);
       
-      // Stop any currently playing audio
-      if (audioElement) {
-        audioElement.pause();
-        audioElement.src = '';
-        audioElement.load();
-      }
-      
-      // Display spinner or loading state
+      // Display spinner or loading state first
       setIsAudioLoading(true);
       setCurrentAudioId(label === "Brief Overview" ? 'brief' : label === "Detailed Guide" ? 'detailed' : 'in-depth');
       setActiveAudioUrl(url);
       
-      // Create a new audio element
+      // Stop any currently playing audio
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.removeAttribute('src'); // Better than setting to empty string
+        audioElement.load();
+      }
+      
+      // Create a new audio element with proper event handling sequence
       const audio = new Audio();
-      setAudioElement(audio);
       
       // Debug the URL
       console.log(`Full audio URL: ${url}`);
+      
+      // Check for URL token expiry
       if (url.includes('?')) {
-        console.log('URL has query parameters, checking for token expiry...');
         const expiryMatch = url.match(/expires=(\d+)/i);
         if (expiryMatch && expiryMatch[1]) {
           const expiryTimestamp = parseInt(expiryMatch[1]);
           const currentTime = Math.floor(Date.now() / 1000);
           const timeLeft = expiryTimestamp - currentTime;
-          console.log(`Token expires in ${timeLeft} seconds (${new Date(expiryTimestamp * 1000).toLocaleString()})`);
           
           if (timeLeft <= 0) {
             console.error('Presigned URL has expired. Please generate a new one.');
@@ -366,21 +365,62 @@ export default function TourPage() {
         }
       }
       
-      // Set up event handlers before setting src
+      // Set up error handling first
+      audio.addEventListener('error', (e) => {
+        console.error(`Audio error for ${label}:`, e);
+        console.error('Audio error details:', audio.error);
+        
+        // Only show alert for permanent errors, not transitional ones
+        if (audio.error && audio.error.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+          const errorMessages: Record<number, string> = {
+            [MediaError.MEDIA_ERR_ABORTED]: "Playback aborted by the user",
+            [MediaError.MEDIA_ERR_NETWORK]: "Network error while loading the audio",
+            [MediaError.MEDIA_ERR_DECODE]: "Error decoding the audio file",
+            [MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED]: "Audio format not supported or CORS error"
+          };
+          
+          const errorMessage = errorMessages[audio.error.code] || "Unknown error";
+          
+          console.warn(`Audio error: ${errorMessage}. Trying with download approach...`);
+          
+          // Don't show alert - we'll try to recover
+          // alert(`Failed to play audio: ${errorMessage}. Please try downloading the file instead.`);
+        }
+        
+        setIsAudioLoading(false);
+        setIsPlaying(false);
+      });
+      
+      // Add a timeout to prevent hanging in loading state
+      const loadingTimeout = setTimeout(() => {
+        if (isAudioLoading) {
+          console.log('Audio loading timeout - resetting loading state');
+          setIsAudioLoading(false);
+        }
+      }, 10000); // 10 second timeout
+      
+      // Set up metadata and playback events
       audio.addEventListener('loadedmetadata', () => {
         console.log(`Audio metadata loaded for ${label}, duration: ${audio.duration}`);
         setDuration(audio.duration);
+        clearTimeout(loadingTimeout);
       });
       
       audio.addEventListener('canplaythrough', () => {
         console.log(`Audio can play through: ${label}`);
         setIsAudioLoading(false);
+        clearTimeout(loadingTimeout);
+        
+        // Auto-play when ready
         audio.play().catch(error => {
-          console.error(`Failed to play audio ${label} after canplaythrough:`, error);
-          setIsAudioLoading(false);
-          setIsPlaying(false);
-          alert(`Could not play audio: ${error.message}`);
+          console.error(`Failed to auto-play audio ${label}:`, error);
+          
+          // For user interaction requirement errors, don't show alert
+          if (error.name !== 'NotAllowedError') {
+            alert(`Could not play audio: ${error.message}`);
+          }
         });
+        
         setIsPlaying(true);
       });
       
@@ -392,6 +432,7 @@ export default function TourPage() {
         console.log(`Audio started playing: ${label}`);
         setIsAudioLoading(false);
         setIsPlaying(true);
+        clearTimeout(loadingTimeout);
       });
       
       audio.addEventListener('pause', () => {
@@ -405,39 +446,19 @@ export default function TourPage() {
         setCurrentTime(0);
       });
       
-      audio.addEventListener('error', (e) => {
-        console.error(`Audio error for ${label}:`, e);
-        console.error('Audio error details:', audio.error);
-        setIsAudioLoading(false);
-        setIsPlaying(false);
-        
-        // Try to provide a helpful message based on the error code
-        let errorMessage = "Unknown error";
-        switch(audio.error?.code) {
-          case MediaError.MEDIA_ERR_ABORTED:
-            errorMessage = "Playback aborted by the user";
-            break;
-          case MediaError.MEDIA_ERR_NETWORK:
-            errorMessage = "Network error while loading the audio";
-            break;
-          case MediaError.MEDIA_ERR_DECODE:
-            errorMessage = "Error decoding the audio file";
-            break;
-          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-            errorMessage = "Audio format not supported or CORS error";
-            break;
-        }
-        
-        alert(`Failed to play audio: ${errorMessage}. Please try downloading the file instead.`);
-      });
-      
-      // Now set the source and load
-      audio.src = url;
+      // Now set the source and load - AFTER setting up all event handlers
       audio.crossOrigin = "anonymous"; // Add CORS handling
       audio.preload = 'auto';
       
+      // Set audio properties
+      audio.src = url;
+      
       console.log("Loading audio file...");
       audio.load();
+      
+      // Store the audio element
+      setAudioElement(audio);
+      
     } catch (error) {
       console.error(`Error creating Audio object for ${label}:`, error);
       setIsAudioLoading(false);
