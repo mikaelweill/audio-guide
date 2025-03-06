@@ -5,17 +5,7 @@ import { useJsApiLoader, Libraries } from '@react-google-maps/api';
 import TourModal from '@/components/TourModal';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-
-// Define a Tour type (we'll extend this based on your actual data model)
-interface Tour {
-  id: string;
-  name: string;
-  location: string;
-  date: string;
-  duration: number;
-  description?: string;
-}
+import TourList, { Tour } from '@/components/TourList';
 
 // Default center (will be replaced with user's location)
 const defaultCenter = {
@@ -32,7 +22,7 @@ export default function Home() {
   
   // State for tours
   const [tours, setTours] = useState<Tour[]>([]);
-  const [isLoadingTours, setIsLoadingTours] = useState(false);
+  const [isLoadingTours, setIsLoadingTours] = useState(true);
   
   // State needed for modal functionality
   const [userLocation, setUserLocation] = useState(defaultCenter);
@@ -116,26 +106,40 @@ export default function Home() {
     }
   }, [user, isLoading, router]);
 
-  // Load tours - currently empty implementation
-  // In the future, you'll fetch actual tour data here
+  // Load tours from the API
   useEffect(() => {
     if (user) {
-      // For now, we're not loading any fake data
-      // When you're ready to implement real tours, you'll add the API call here:
-      // const fetchTours = async () => {
-      //   try {
-      //     const response = await fetch('/api/tours');
-      //     const data = await response.json();
-      //     setTours(data);
-      //     setIsLoadingTours(false);
-      //   } catch (error) {
-      //     console.error('Error fetching tours:', error);
-      //     setIsLoadingTours(false);
-      //   }
-      // };
-      // fetchTours();
+      const fetchTours = async () => {
+        try {
+          setIsLoadingTours(true);
+          console.log('Fetching tours...');
+          
+          const response = await fetch('/api/tours', {
+            credentials: 'include' // Important: send cookies with the request
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Error fetching tours: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          
+          if (data.success && Array.isArray(data.tours)) {
+            console.log(`Fetched ${data.tours.length} tours`);
+            setTours(data.tours);
+          } else {
+            console.error('Invalid data format:', data);
+            setTours([]);
+          }
+        } catch (error) {
+          console.error('Error fetching tours:', error);
+          setTours([]);
+        } finally {
+          setIsLoadingTours(false);
+        }
+      };
       
-      setIsLoadingTours(false);
+      fetchTours();
     }
   }, [user]);
   
@@ -174,56 +178,8 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Tours list */}
-        <div className="bg-white shadow rounded-lg overflow-hidden">
-          {isLoadingTours ? (
-            <div className="flex justify-center items-center p-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-              <p className="ml-3 text-gray-600">Loading your tours...</p>
-            </div>
-          ) : tours.length > 0 ? (
-            <ul className="divide-y divide-gray-200">
-              {tours.map((tour) => (
-                <li key={tour.id} className="hover:bg-gray-50">
-                  <Link href={`/tour/${tour.id}`} className="block">
-                    <div className="px-6 py-5">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-lg font-medium text-gray-900">{tour.name}</h3>
-                          <div className="mt-1 flex items-center text-sm text-gray-500">
-                            <svg className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                            </svg>
-                            {tour.location}
-                          </div>
-                        </div>
-                        <div className="flex-shrink-0 flex items-center">
-                          <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
-                            {tour.duration} min
-                          </span>
-                          <svg className="ml-2 h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      </div>
-                      {tour.description && (
-                        <p className="mt-2 text-sm text-gray-500 line-clamp-2">{tour.description}</p>
-                      )}
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="py-12 px-6 text-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No tours found</h3>
-              <p className="text-gray-500 mb-6">You haven't created any audio guides yet.</p>
-            </div>
-          )}
-        </div>
+        {/* Display tours using the TourList component */}
+        <TourList tours={tours} loading={isLoadingTours} />
       </div>
 
       {/* Only render TourModal when it's open to prevent unnecessary API calls */}
