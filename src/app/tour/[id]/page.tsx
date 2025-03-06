@@ -28,6 +28,13 @@ export default function TourPage() {
   const [isAudioLoading, setIsAudioLoading] = useState(false);
   const [currentAudioId, setCurrentAudioId] = useState<'brief' | 'detailed' | 'in-depth' | null>(null);
   
+  // Add these state variables to your component
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [activeAudioUrl, setActiveAudioUrl] = useState<string | null>(null);
+  
   // Add this helper function near the top of your component
   const getGoogleMapsUrl = (poi: any) => {
     console.log("Creating Google Maps URL for:", poi);
@@ -298,7 +305,14 @@ export default function TourPage() {
     }
   };
   
-  // Audio playback function with debugging and CORS handling
+  // Add this function to format time in MM:SS format
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+  
+  // Replace the old playAudio function with this enhanced version
   const playAudio = (url: string, label: string) => {
     console.log(`Attempting to play audio: ${label} from URL: ${url}`);
     
@@ -310,12 +324,21 @@ export default function TourPage() {
     }
     
     try {
+      // Stop any currently playing audio
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.src = '';
+        audioElement.load();
+      }
+      
       // Display spinner or loading state
       setIsAudioLoading(true);
       setCurrentAudioId(label === "Brief Overview" ? 'brief' : label === "Detailed Guide" ? 'detailed' : 'in-depth');
+      setActiveAudioUrl(url);
       
       // Create a new audio element
       const audio = new Audio();
+      setAudioElement(audio);
       
       // Debug the URL
       console.log(`Full audio URL: ${url}`);
@@ -338,25 +361,49 @@ export default function TourPage() {
       }
       
       // Set up event handlers before setting src
+      audio.addEventListener('loadedmetadata', () => {
+        console.log(`Audio metadata loaded for ${label}, duration: ${audio.duration}`);
+        setDuration(audio.duration);
+      });
+      
       audio.addEventListener('canplaythrough', () => {
         console.log(`Audio can play through: ${label}`);
         setIsAudioLoading(false);
         audio.play().catch(error => {
           console.error(`Failed to play audio ${label} after canplaythrough:`, error);
           setIsAudioLoading(false);
+          setIsPlaying(false);
           alert(`Could not play audio: ${error.message}`);
         });
+        setIsPlaying(true);
+      });
+      
+      audio.addEventListener('timeupdate', () => {
+        setCurrentTime(audio.currentTime);
       });
       
       audio.addEventListener('playing', () => {
         console.log(`Audio started playing: ${label}`);
         setIsAudioLoading(false);
+        setIsPlaying(true);
+      });
+      
+      audio.addEventListener('pause', () => {
+        console.log(`Audio paused: ${label}`);
+        setIsPlaying(false);
+      });
+      
+      audio.addEventListener('ended', () => {
+        console.log(`Audio ended: ${label}`);
+        setIsPlaying(false);
+        setCurrentTime(0);
       });
       
       audio.addEventListener('error', (e) => {
         console.error(`Audio error for ${label}:`, e);
         console.error('Audio error details:', audio.error);
         setIsAudioLoading(false);
+        setIsPlaying(false);
         
         // Try to provide a helpful message based on the error code
         let errorMessage = "Unknown error";
@@ -388,7 +435,30 @@ export default function TourPage() {
     } catch (error) {
       console.error(`Error creating Audio object for ${label}:`, error);
       setIsAudioLoading(false);
+      setIsPlaying(false);
       alert(`Error setting up audio playback: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+  
+  // Add these control functions
+  const togglePlayPause = () => {
+    if (!audioElement) return;
+    
+    if (isPlaying) {
+      audioElement.pause();
+    } else {
+      audioElement.play().catch(error => {
+        console.error('Error playing audio:', error);
+        alert(`Could not play audio: ${error.message}`);
+      });
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTime = parseFloat(e.target.value);
+    if (audioElement) {
+      audioElement.currentTime = newTime;
+      setCurrentTime(newTime);
     }
   };
   
@@ -604,107 +674,155 @@ export default function TourPage() {
                   "Audio guide content for this location will be generated and displayed here."}
               </p>
               
-              {/* Audio Player Section */}
+              {/* Enhanced Audio Player Section */}
               {Object.keys(audioData).length > 0 ? (
                 <>
                   {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`] ? (
                     <div className="bg-gray-100 p-4 rounded-lg mb-4">
-                      <div className="flex flex-col space-y-2">
-                        <button 
-                          className={`bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'brief' ? 'opacity-75 cursor-wait' : ''}`}
-                          onClick={() => {
-                            setCurrentAudioId('brief');
-                            const audioUrl = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.audioFiles?.coreAudioUrl;
-                            console.log("Brief audio URL:", audioUrl);
-                            if (!audioUrl) {
-                              alert("No brief audio available. Try regenerating the audio guides.");
-                              return;
-                            }
-                            playAudio(audioUrl, "Brief Overview");
-                          }}
-                          disabled={isAudioLoading}
-                        >
-                          {isAudioLoading && currentAudioId === 'brief' ? (
-                            <>
-                              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Loading...
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                              </svg>
-                              Play Brief Overview (30-60s)
-                            </>
-                          )}
-                        </button>
+                      <div className="flex flex-col space-y-4">
+                        {/* Audio selection buttons */}
+                        <div className="flex flex-wrap gap-2">
+                          <button 
+                            className={`${currentAudioId === 'brief' ? 'bg-blue-600' : 'bg-blue-500 hover:bg-blue-600'} text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'brief' ? 'opacity-75 cursor-wait' : ''}`}
+                            onClick={() => {
+                              setCurrentAudioId('brief');
+                              const audioUrl = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.audioFiles?.coreAudioUrl;
+                              console.log("Brief audio URL:", audioUrl);
+                              if (!audioUrl) {
+                                alert("No brief audio available. Try regenerating the audio guides.");
+                                return;
+                              }
+                              playAudio(audioUrl, "Brief Overview");
+                            }}
+                            disabled={isAudioLoading}
+                          >
+                            {isAudioLoading && currentAudioId === 'brief' ? (
+                              <>
+                                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Loading...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                                </svg>
+                                Brief Overview (30-60s)
+                              </>
+                            )}
+                          </button>
+                          
+                          <button 
+                            className={`${currentAudioId === 'detailed' ? 'bg-blue-600' : 'bg-blue-500 hover:bg-blue-600'} text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'detailed' ? 'opacity-75 cursor-wait' : ''}`}
+                            onClick={() => {
+                              setCurrentAudioId('detailed');
+                              const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.secondaryAudioUrl;
+                              console.log("Detailed audio URL:", audioUrl);
+                              if (!audioUrl) {
+                                alert("No detailed audio available. Try regenerating the audio guides.");
+                                return;
+                              }
+                              playAudio(audioUrl, "Detailed Guide");
+                            }}
+                            disabled={isAudioLoading}
+                          >
+                            {isAudioLoading && currentAudioId === 'detailed' ? (
+                              <>
+                                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Loading...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                                </svg>
+                                Detailed Guide (1-2 min)
+                              </>
+                            )}
+                          </button>
+                          
+                          <button 
+                            className={`${currentAudioId === 'in-depth' ? 'bg-blue-600' : 'bg-blue-500 hover:bg-blue-600'} text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'in-depth' ? 'opacity-75 cursor-wait' : ''}`}
+                            onClick={() => {
+                              setCurrentAudioId('in-depth');
+                              const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.tertiaryAudioUrl;
+                              console.log("In-depth audio URL:", audioUrl);
+                              if (!audioUrl) {
+                                alert("No in-depth audio available. Try regenerating the audio guides.");
+                                return;
+                              }
+                              playAudio(audioUrl, "In-Depth Exploration");
+                            }}
+                            disabled={isAudioLoading}
+                          >
+                            {isAudioLoading && currentAudioId === 'in-depth' ? (
+                              <>
+                                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Loading...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                                </svg>
+                                In-Depth Exploration (3+ min)
+                              </>
+                            )}
+                          </button>
+                        </div>
                         
-                        <button 
-                          className={`bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'detailed' ? 'opacity-75 cursor-wait' : ''}`}
-                          onClick={() => {
-                            setCurrentAudioId('detailed');
-                            const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.secondaryAudioUrl;
-                            console.log("Detailed audio URL:", audioUrl);
-                            if (!audioUrl) {
-                              alert("No detailed audio available. Try regenerating the audio guides.");
-                              return;
-                            }
-                            playAudio(audioUrl, "Detailed Guide");
-                          }}
-                          disabled={isAudioLoading}
-                        >
-                          {isAudioLoading && currentAudioId === 'detailed' ? (
-                            <>
-                              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Loading...
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                              </svg>
-                              Play Detailed Guide (1-2 min)
-                            </>
-                          )}
-                        </button>
-                        
-                        <button 
-                          className={`bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'in-depth' ? 'opacity-75 cursor-wait' : ''}`}
-                          onClick={() => {
-                            setCurrentAudioId('in-depth');
-                            const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.tertiaryAudioUrl;
-                            console.log("In-depth audio URL:", audioUrl);
-                            if (!audioUrl) {
-                              alert("No in-depth audio available. Try regenerating the audio guides.");
-                              return;
-                            }
-                            playAudio(audioUrl, "In-Depth Exploration");
-                          }}
-                          disabled={isAudioLoading}
-                        >
-                          {isAudioLoading && currentAudioId === 'in-depth' ? (
-                            <>
-                              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Loading...
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                              </svg>
-                              Play In-Depth Exploration (3+ min)
-                            </>
-                          )}
-                        </button>
+                        {/* Audio player controls */}
+                        {activeAudioUrl && (
+                          <div className="mt-4 bg-white p-3 rounded-lg shadow-sm">
+                            {/* Play/Pause button and time indicator */}
+                            <div className="flex items-center justify-between mb-2">
+                              <button 
+                                onClick={togglePlayPause} 
+                                className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full"
+                                disabled={isAudioLoading}
+                              >
+                                {isAudioLoading ? (
+                                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                ) : isPlaying ? (
+                                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                  </svg>
+                                ) : (
+                                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                              </button>
+                              <div className="text-sm font-medium text-gray-700">
+                                {formatTime(currentTime)} / {formatTime(duration)}
+                              </div>
+                            </div>
+                            
+                            {/* Scrubber (progress bar) */}
+                            <div className="w-full">
+                              <input
+                                type="range"
+                                min="0"
+                                max={duration || 0}
+                                value={currentTime}
+                                onChange={handleSeek}
+                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                disabled={!duration || isAudioLoading}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : (
