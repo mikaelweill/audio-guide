@@ -175,16 +175,15 @@ export async function discoverPOIs(preferences: TourPreferences): Promise<POI[]>
         (b.user_ratings_total || 0) - (a.user_ratings_total || 0)
       );
       
-      // TEMPORARY: Limit to only 3 POIs to reduce API usage
-      // Take top N for presentation - ensure we're taking enough
-      let presentationPOIs = rankedPOIs.slice(0, Math.min(rankedPOIs.length, 3)); // Limit to 3 instead of presentationPOICount
+      // Use the full recommended count - no longer limiting to just 3 POIs
+      let presentationPOIs = rankedPOIs.slice(0, Math.min(rankedPOIs.length, presentationPOICount));
       
       // If we still don't have enough POIs, include some regardless of rating
-      if (presentationPOIs.length < 3 && uniquePOIs.length > presentationPOIs.length) {
+      if (presentationPOIs.length < presentationPOICount && uniquePOIs.length > presentationPOIs.length) {
         const additionalPOIs = uniquePOIs
           .filter(poi => !presentationPOIs.some(p => p.place_id === poi.place_id))
           .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-          .slice(0, 3 - presentationPOIs.length);
+          .slice(0, presentationPOICount - presentationPOIs.length);
         
         presentationPOIs = [...presentationPOIs, ...additionalPOIs];
       }
