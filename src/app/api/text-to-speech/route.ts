@@ -104,8 +104,6 @@ export async function POST(request: NextRequest) {
       });
       
       // Update the database with audio generation timestamp
-      // Skip database update for now due to schema mismatch
-      /*
       await prisma.poi.update({
         where: { id: poiId },
         data: {
@@ -118,7 +116,6 @@ export async function POST(request: NextRequest) {
           audio_generated_at: new Date()
         }
       });
-      */
       
       // Return the audio URLs even if some failed (partial success)
       return NextResponse.json({
