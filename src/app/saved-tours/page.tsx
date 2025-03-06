@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Button, Card, CardBody, CardHeader, Container, Grid, Heading, Image, SimpleGrid, Text, Badge, Box, Flex, HStack, Stack, VStack } from '@chakra-ui/react';
 import { FaCalendar, FaMapMarkerAlt, FaWalking, FaRoute, FaClock } from 'react-icons/fa';
 import Link from 'next/link';
 
@@ -82,114 +81,114 @@ export default function SavedToursPage() {
   };
 
   return (
-    <Container maxW="container.xl" py={8}>
-      <Heading as="h1" mb={6}>Saved Tours</Heading>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">Saved Tours</h1>
       
       {isLoading ? (
-        <Text>Loading saved tours...</Text>
+        <p>Loading saved tours...</p>
       ) : savedTours.length === 0 ? (
-        <Box textAlign="center" py={10}>
-          <Heading as="h3" size="md" mb={4}>No saved tours found</Heading>
-          <Text mb={6}>You haven't saved any tours yet.</Text>
+        <div className="text-center py-10">
+          <h3 className="text-lg font-medium mb-4">No saved tours found</h3>
+          <p className="mb-6">You haven't saved any tours yet.</p>
           <Link href="/" passHref>
-            <Button colorScheme="teal">Create a tour</Button>
+            <button className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded">
+              Create a tour
+            </button>
           </Link>
-        </Box>
+        </div>
       ) : (
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {savedTours.map((tour) => (
-            <Card key={tour.id} overflow="hidden" variant="outline">
-              <CardHeader bg="teal.500" color="white" py={3}>
-                <Heading size="md">{tour.name}</Heading>
-              </CardHeader>
+            <div key={tour.id} className="overflow-hidden border rounded-lg shadow">
+              <div className="bg-teal-500 text-white py-3 px-4">
+                <h2 className="text-md font-bold">{tour.name}</h2>
+              </div>
               
-              <CardBody>
-                <VStack align="stretch" spacing={4}>
+              <div className="p-4">
+                <div className="flex flex-col space-y-4">
                   {tour.description && (
-                    <Text noOfLines={2}>{tour.description}</Text>
+                    <p className="line-clamp-2">{tour.description}</p>
                   )}
                   
-                  <HStack>
-                    <FaCalendar />
-                    <Text>{formatDate(tour.createdAt)}</Text>
-                  </HStack>
+                  <div className="flex items-center">
+                    <FaCalendar className="mr-2" />
+                    <span>{formatDate(tour.createdAt)}</span>
+                  </div>
                   
-                  <Stack spacing={2}>
-                    <HStack>
-                      <FaMapMarkerAlt />
-                      <Text fontWeight="bold">Start:</Text>
-                      <Text noOfLines={1}>{tour.preferences.startLocation.address}</Text>
-                    </HStack>
+                  <div className="space-y-2">
+                    <div className="flex items-center">
+                      <FaMapMarkerAlt className="mr-2" />
+                      <span className="font-bold mr-2">Start:</span>
+                      <span className="truncate">{tour.preferences.startLocation.address}</span>
+                    </div>
                     
                     {!tour.preferences.returnToStart && (
-                      <HStack>
-                        <FaMapMarkerAlt />
-                        <Text fontWeight="bold">End:</Text>
-                        <Text noOfLines={1}>{tour.preferences.endLocation.address}</Text>
-                      </HStack>
+                      <div className="flex items-center">
+                        <FaMapMarkerAlt className="mr-2" />
+                        <span className="font-bold mr-2">End:</span>
+                        <span className="truncate">{tour.preferences.endLocation.address}</span>
+                      </div>
                     )}
-                  </Stack>
+                  </div>
                   
-                  <HStack spacing={4}>
-                    <Flex align="center">
-                      <FaRoute />
-                      <Text ml={2}>
+                  <div className="flex space-x-4">
+                    <div className="flex items-center">
+                      <FaRoute className="mr-2" />
+                      <span>
                         {tour.stats?.distance
                           ? `${(tour.stats.distance / 1000).toFixed(1)} km`
                           : `${(tour.preferences.distance / 1000).toFixed(1)} km`}
-                      </Text>
-                    </Flex>
+                      </span>
+                    </div>
                     
-                    <Flex align="center">
-                      <FaClock />
-                      <Text ml={2}>
+                    <div className="flex items-center">
+                      <FaClock className="mr-2" />
+                      <span>
                         {tour.stats?.duration
                           ? `${Math.round(tour.stats.duration / 60)} min`
                           : `${tour.preferences.duration} min`}
-                      </Text>
-                    </Flex>
+                      </span>
+                    </div>
                     
-                    <Flex align="center">
-                      <FaWalking />
-                      <Text ml={2}>
+                    <div className="flex items-center">
+                      <FaWalking className="mr-2" />
+                      <span>
                         {tour.stats?.poiCount || tour.route.length} stops
-                      </Text>
-                    </Flex>
-                  </HStack>
+                      </span>
+                    </div>
+                  </div>
                   
-                  <Box>
-                    <Text fontWeight="bold" mb={1}>Interests:</Text>
-                    <Flex wrap="wrap" gap={2}>
+                  <div>
+                    <p className="font-bold mb-1">Interests:</p>
+                    <div className="flex flex-wrap gap-2">
                       {tour.preferences.interests.map((interest, idx) => (
-                        <Badge key={idx} colorScheme="teal" p={1} borderRadius="md">
+                        <span key={idx} className="bg-teal-100 text-teal-700 px-2 py-1 text-xs rounded">
                           {interest}
-                        </Badge>
+                        </span>
                       ))}
-                    </Flex>
-                  </Box>
+                    </div>
+                  </div>
                   
-                  <Flex justify="space-between" mt={2}>
+                  <div className="flex justify-between mt-2">
                     <Link href={`/view-tour/${tour.id}`} passHref>
-                      <Button colorScheme="teal" size="sm">
+                      <button className="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1 text-sm rounded">
                         View Tour
-                      </Button>
+                      </button>
                     </Link>
                     
-                    <Button 
-                      colorScheme="red" 
-                      variant="outline" 
-                      size="sm"
+                    <button 
+                      className="border border-red-500 text-red-500 hover:bg-red-50 px-3 py-1 text-sm rounded"
                       onClick={() => handleDeleteTour(tour.id)}
                     >
                       Delete
-                    </Button>
-                  </Flex>
-                </VStack>
-              </CardBody>
-            </Card>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           ))}
-        </SimpleGrid>
+        </div>
       )}
-    </Container>
+    </div>
   );
 } 

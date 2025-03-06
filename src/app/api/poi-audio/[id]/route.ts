@@ -4,10 +4,13 @@ import { PrismaClient } from '@prisma/client';
 // Initialize Prisma client
 const prisma = new PrismaClient();
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+type RouteParams = {
+  params: {
+    id: string;
+  };
+};
+
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const poiId = params.id;
     
