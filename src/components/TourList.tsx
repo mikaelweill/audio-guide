@@ -117,21 +117,39 @@ export default function TourList({ tours, loading }: TourListProps) {
     // If google_maps_url is not available, create one from the tour data
     let url = 'https://www.google.com/maps/dir/?api=1';
     
-    // Add origin
-    url += `&origin=${tour.start_location.lat},${tour.start_location.lng}`;
-    
-    // Add destination
-    if (tour.return_to_start) {
-      url += `&destination=${tour.start_location.lat},${tour.start_location.lng}`;
+    // Add origin - use address if available, otherwise coordinates
+    if (tour.start_location.address) {
+      url += `&origin=${encodeURIComponent(tour.start_location.address)}`;
     } else {
-      url += `&destination=${tour.end_location.lat},${tour.end_location.lng}`;
+      url += `&origin=${tour.start_location.lat},${tour.start_location.lng}`;
     }
     
-    // Add waypoints if there are any POIs
+    // Add destination - use address if available, otherwise coordinates
+    if (tour.return_to_start) {
+      if (tour.start_location.address) {
+        url += `&destination=${encodeURIComponent(tour.start_location.address)}`;
+      } else {
+        url += `&destination=${tour.start_location.lat},${tour.start_location.lng}`;
+      }
+    } else {
+      if (tour.end_location.address) {
+        url += `&destination=${encodeURIComponent(tour.end_location.address)}`;
+      } else {
+        url += `&destination=${tour.end_location.lat},${tour.end_location.lng}`;
+      }
+    }
+    
+    // Add POIs as waypoints
     if (tour.tourPois.length > 0) {
       const waypoints = tour.tourPois
         .sort((a, b) => a.sequence_number - b.sequence_number)
-        .map(poi => `${poi.poi.location.lat},${poi.poi.location.lng}`)
+        .map(poi => {
+          if (poi.poi.formatted_address) {
+            return encodeURIComponent(poi.poi.formatted_address);
+          } else {
+            return `${poi.poi.location.lat},${poi.poi.location.lng}`;
+          }
+        })
         .join('|');
       
       url += `&waypoints=${waypoints}`;
