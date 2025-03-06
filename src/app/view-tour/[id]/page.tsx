@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaMapMarkerAlt, FaWalking, FaRoute, FaClock, FaArrowLeft, FaMapMarked, FaTag } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaWalking, FaRoute, FaClock, FaArrowLeft, FaMapMarked, FaTag, FaVolumeUp } from 'react-icons/fa';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import AudioGuideControls from '@/components/AudioGuideControls';
@@ -104,6 +104,18 @@ export default function ViewTourPage({ params }: ViewTourPageProps) {
           <p className="text-lg">{tour.description}</p>
         )}
         
+        {/* Audio Guide Generation - Prominently placed at the top of the tour */}
+        <div className="bg-blue-50 p-6 rounded-lg shadow-sm">
+          <div className="flex items-center mb-4">
+            <FaVolumeUp className="text-blue-500 mr-3 text-xl" />
+            <h2 className="text-xl font-bold">Audio Tour Guide</h2>
+          </div>
+          <p className="mb-4">Generate audio guides for all points of interest in this tour. Listen to brief overviews or detailed information about each location.</p>
+          
+          {/* Audio Guide Controls Component */}
+          <AudioGuideControls tour={tour} />
+        </div>
+        
         <div className="flex flex-wrap gap-6">
           <div className="flex-1 min-w-[300px]">
             <div className="flex flex-col space-y-6">
@@ -188,9 +200,6 @@ export default function ViewTourPage({ params }: ViewTourPageProps) {
                   ))}
                 </ul>
               </div>
-              
-              {/* Add Audio Guide Controls */}
-              <AudioGuideControls tour={tour} />
             </div>
           </div>
           

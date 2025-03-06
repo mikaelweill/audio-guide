@@ -4,6 +4,20 @@
 
 This document outlines our implementation approach for generating, storing, and delivering audio guides for points of interest (POIs) in our tour application. The system uses free public APIs to gather information, leverages GPT for content generation, and employs Text-to-Speech (TTS) for audio creation.
 
+## Current Implementation Status
+
+### Completed Components
+- Data collection services implemented for Wikipedia and Wikivoyage APIs
+- Content generation service integrated with GPT-4
+- Text-to-Speech conversion service using OpenAI's TTS API
+- Basic UI components for audio guide generation and playback
+- Integration with the tour view page
+
+### In Progress
+- Storage implementation for audio files
+- Database schema updates for storing audio guide references
+- Testing and optimization
+
 ## Audio Content Structure
 
 We implement a 3-tier audio content structure to provide users with flexibility in how much information they want to consume:
@@ -59,28 +73,43 @@ To minimize costs while maximizing content quality, we utilize these free public
    - We already have access to basic place information
    - Opening hours, ratings, types, etc.
 
-## Implementation Process
+## Current Implementation Flow
 
-### 1. Data Collection
+### 1. User Interface
+
+We have implemented a simplified approach with the following flow:
+1. A single "Generate Audio Guides" button on the tour view page
+2. When clicked, this button initiates the audio generation process for all POIs in the tour
+3. Once generated, each POI displays four buttons:
+   - Three buttons for playing the different audio tiers (30-60s, 1-2m, 3m+)
+   - One button to view the full text transcript
+
+This approach simplifies the user experience while still providing access to all content tiers.
+
+### 2. Data Collection Service
 ```javascript
-async function collectPOIData(poi) {
-  // Try to get data from multiple free sources
-  const data = {
-    basic: poi,  // Google Places data we already have
-    wiki: await getWikipediaContent(poi.name),
-    travel: await getWikivoyageContent(poi.name),
-    structured: await getWikidataInfo(poi.name),
-    geo: await getOSMDetails(poi.location)
-  };
+// We've implemented services for:
+// - Wikipedia data collection
+// - Wikivoyage data collection
+// - Aggregation of data from multiple sources
 
-  return filterAndCombineData(data);
+async function collectPoiData(poi) {
+  const wikipediaData = await getWikipediaData(poi.name, poi.location);
+  const wikivoyageData = await getWikivoyageData(poi.name, poi.location);
+  
+  return {
+    basicInfo: poi,
+    wikipedia: wikipediaData,
+    wikivoyage: wikivoyageData
+  };
 }
 ```
 
-### 2. Content Generation
+### 3. Content Generation Service
 ```javascript
-async function generateAudioContent(combinedData) {
-  const prompt = createContentPrompt(combinedData);
+// Server-side API endpoint
+async function generateContent(poiData) {
+  const prompt = createContentPrompt(poiData);
   
   const response = await openai.chat.completions.create({
     model: "gpt-4",
@@ -97,83 +126,39 @@ async function generateAudioContent(combinedData) {
     response_format: { type: "json_object" }
   });
 
-  const content = JSON.parse(response.choices[0].message.content);
+  // Parse and return the structured content
   return {
-    tier1: content.coreTier,
-    tier2: content.secondaryTier,
-    tier3: content.tertiaryTier
+    core: content.coreTier,
+    secondary: content.secondaryTier,
+    tertiary: content.tertiaryTier,
+    credits: content.credits
   };
 }
 ```
 
-### 3. Text-to-Speech Conversion
+### 4. Text-to-Speech Service
 ```javascript
-async function generateAudio(content, poiId) {
-  const audioFiles = [];
-  
+// Server-side API endpoint
+async function convertTextToSpeech(content, poiId) {
   // Generate audio for each tier
-  for (let i = 1; i <= 3; i++) {
-    const tierContent = content[`tier${i}`];
-    const audioResponse = await openai.audio.speech.create({
-      model: "tts-1",
-      voice: "alloy",
-      input: tierContent
-    });
-
-    const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
-    const fileName = `${poiId}_tier${i}.mp3`;
-    
-    // Upload to Supabase bucket
-    const { data, error } = await supabase.storage
-      .from('audio-guides')
-      .upload(fileName, audioBuffer, {
-        contentType: 'audio/mpeg',
-        cacheControl: '3600'
-      });
-      
-    if (error) throw new Error(`Error uploading audio: ${error.message}`);
-    
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('audio-guides')
-      .getPublicUrl(fileName);
-      
-    audioFiles.push({
-      tier: i,
-      url: urlData.publicUrl,
-      duration: calculateAudioDuration(audioBuffer)
-    });
-  }
+  const coreAudio = await generateTTS(content.core, "nova");
+  const secondaryAudio = await generateTTS(content.secondary, "nova");
+  const tertiaryAudio = await generateTTS(content.tertiary, "nova");
   
-  return audioFiles;
+  // For now, we're returning URLs directly for testing
+  // In production, these will be stored in Supabase
+  return {
+    coreAudioUrl: coreAudio.url,
+    secondaryAudioUrl: secondaryAudio.url,
+    tertiaryAudioUrl: tertiaryAudio.url
+  };
 }
 ```
 
-### 4. Database Storage
-```javascript
-async function saveAudioMetadata(poiId, audioFiles) {
-  const { data, error } = await supabase
-    .from('poi_audio')
-    .insert({
-      poi_id: poiId,
-      tier1_url: audioFiles[0].url,
-      tier1_duration: audioFiles[0].duration,
-      tier2_url: audioFiles[1].url,
-      tier2_duration: audioFiles[1].duration,
-      tier3_url: audioFiles[2].url,
-      tier3_duration: audioFiles[2].duration,
-      created_at: new Date().toISOString()
-    });
-    
-  if (error) throw new Error(`Error saving audio metadata: ${error.message}`);
-  return data;
-}
-```
-
-## Storage Architecture
+## Planned Storage Architecture
 
 ### Supabase Buckets
-We use Supabase Storage to store audio files:
+We will use Supabase Storage to store audio files:
 - Bucket: `audio-guides`
 - File naming convention: `{poi_id}_tier{1|2|3}.mp3`
 - Public access with cache control
@@ -199,27 +184,27 @@ CREATE TABLE poi_audio (
 CREATE INDEX poi_audio_poi_id_idx ON poi_audio(poi_id);
 ```
 
-## User Experience
+## Next Steps
 
-### Audio Playback Controls
-- Play/Pause button for current tier
-- "Tell Me More" button to progress to next tier
-- Skip to next POI option
-- Playback speed control (0.8x, 1x, 1.2x, 1.5x)
-- Background playback support
-- Automatic pause when headphones disconnected
+1. **Implement Storage Integration**
+   - Configure Supabase bucket for audio storage
+   - Implement file upload and URL generation
+   - Update API endpoints to store and retrieve files
 
-### Caching Strategy
-- Download audio for current tour when tour starts
-- Cache audio files for offline use
-- Clear cache option for managing storage
-- Prefetch next POI's audio while approaching
+2. **Database Integration**
+   - Add the poi_audio table to the database schema
+   - Implement queries to save and fetch audio metadata
+   - Link audio guides to existing POIs
 
-### Accessibility Features
-- Text transcripts available for each audio tier
-- Visual indicators during playback
-- Compatible with screen readers
-- Auto-pause when device is in silent mode
+3. **UI Enhancements**
+   - Add loading indicators and progress feedback
+   - Implement playback controls (pause, resume, speed)
+   - Optimize mobile experience
+
+4. **Testing and Optimization**
+   - Test with various POI types and data availability
+   - Optimize prompt engineering for better content
+   - Implement error handling and fallbacks
 
 ## Future Enhancements
 

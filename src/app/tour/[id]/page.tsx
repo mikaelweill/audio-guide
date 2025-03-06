@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Tour } from '@/components/TourList';
+import { dataCollectionService } from '@/services/audioGuide';
 
 export default function TourPage() {
   const params = useParams();
@@ -16,6 +17,12 @@ export default function TourPage() {
   
   // State to track the current stop in the tour
   const [currentStopIndex, setCurrentStopIndex] = useState(0);
+  
+  // Audio guide generation states
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [audioData, setAudioData] = useState<Record<string, any>>({});
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [currentGenerationStep, setCurrentGenerationStep] = useState('');
   
   // Fetch tour data
   useEffect(() => {
@@ -69,6 +76,99 @@ export default function TourPage() {
       return `${hours}h ${minutes}m`;
     }
     return `${minutes} min`;
+  };
+  
+  // Function to generate audio guides for all POIs in the tour
+  const handleGenerateAudioGuides = async () => {
+    if (!tour || !tour.tourPois || tour.tourPois.length === 0) {
+      alert('No POIs found in this tour');
+      return;
+    }
+
+    setIsGeneratingAudio(true);
+    setCurrentGenerationStep('Starting audio guide generation...');
+    setGenerationProgress(0);
+
+    try {
+      const audioResults: Record<string, any> = {};
+      const totalPois = tour.tourPois.length;
+      const sortedPois = [...tour.tourPois].sort((a, b) => a.sequence_number - b.sequence_number);
+
+      // Process each POI in the tour
+      for (let i = 0; i < totalPois; i++) {
+        const poiData = sortedPois[i].poi;
+        const progressPercent = Math.round((i / totalPois) * 100);
+        setGenerationProgress(progressPercent);
+        
+        setCurrentGenerationStep(`Collecting data for ${poiData.name} (${i + 1}/${totalPois})...`);
+        
+        // 1. Collect data from sources
+        const enrichedPoiData = await dataCollectionService.collectPoiData({
+          name: poiData.name,
+          formatted_address: poiData.formatted_address || '',
+          location: poiData.location || null,
+          types: poiData.types || [],
+          rating: poiData.rating,
+          photo_references: poiData.photo_references || []
+        });
+
+        setCurrentGenerationStep(`Generating content for ${poiData.name} (${i + 1}/${totalPois})...`);
+        
+        // 2. Generate content using the server-side API
+        const contentResponse = await fetch('/api/content-generation', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ poiData: enrichedPoiData }),
+        });
+
+        if (!contentResponse.ok) {
+          throw new Error(`Failed to generate content for ${poiData.name}`);
+        }
+
+        const contentData = await contentResponse.json();
+        
+        setCurrentGenerationStep(`Converting to speech for ${poiData.name} (${i + 1}/${totalPois})...`);
+        
+        // 3. Convert to speech using the server-side API
+        const ttsResponse = await fetch('/api/text-to-speech', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            content: contentData.content,
+            poiId: poiData.id || `poi-${i}`,
+            voice: 'nova', // Default voice
+          }),
+        });
+
+        if (!ttsResponse.ok) {
+          throw new Error(`Failed to convert text to speech for ${poiData.name}`);
+        }
+
+        const audioFiles = await ttsResponse.json();
+        
+        // Store the results
+        audioResults[poiData.id || `poi-${i}`] = {
+          name: poiData.name,
+          content: contentData.content,
+          audioFiles: audioFiles.audioFiles,
+        };
+      }
+
+      setAudioData(audioResults);
+      setCurrentGenerationStep('');
+      setGenerationProgress(100);
+      
+      alert(`Generated audio guides for ${totalPois} POIs`);
+    } catch (error) {
+      console.error('Error generating audio guides:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate audio guides');
+    } finally {
+      setIsGeneratingAudio(false);
+    }
   };
   
   if (loading) {
@@ -127,6 +227,53 @@ export default function TourPage() {
       
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Audio Guide Generation Button - Parent level control */}
+        {!isGeneratingAudio && Object.keys(audioData).length === 0 && (
+          <div className="bg-blue-50 p-4 rounded-lg shadow-sm mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18 3a1 1 0 00-1.447-.894L8.763 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-4.382l6.553 3.276A1 1 0 0018 15V3z"></path>
+                </svg>
+                <h3 className="font-semibold text-lg">Audio Tour Guides</h3>
+              </div>
+              <button 
+                onClick={handleGenerateAudioGuides}
+                className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md font-medium text-sm flex items-center"
+              >
+                <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                </svg>
+                Generate Audio For All Stops
+              </button>
+            </div>
+            <p className="text-sm text-gray-600">
+              Generate audio guides for all stops on this tour. This will create audio content you can listen to at each location.
+            </p>
+          </div>
+        )}
+        
+        {/* Generation Progress Indicator */}
+        {isGeneratingAudio && (
+          <div className="bg-blue-50 p-4 rounded-lg shadow-sm mb-8">
+            <h3 className="font-semibold text-lg mb-3 flex items-center">
+              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Generating Audio Guides
+            </h3>
+            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+              <div 
+                className="bg-blue-600 h-2.5 rounded-full transition-all" 
+                style={{ width: `${generationProgress}%` }}
+              ></div>
+            </div>
+            <p className="text-sm text-gray-600">{currentGenerationStep}</p>
+            <p className="text-sm text-gray-500 mt-1">This may take a few minutes. Please don't close this page.</p>
+          </div>
+        )}
+        
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="bg-gray-200 rounded-full h-2.5 mb-2">
@@ -191,29 +338,76 @@ export default function TourPage() {
               )}
             </div>
             
-            {/* Content Placeholder (for future audio content) */}
+            {/* Content Section */}
             <div className="p-4">
               <h3 className="text-lg font-medium text-gray-900 mb-2">About this location</h3>
               <p className="text-gray-600 mb-4">
-                Audio guide content for this location will be generated and displayed here.
+                {Object.keys(audioData).length > 0 ? 
+                  "Audio guides for this location are ready to play below." : 
+                  "Audio guide content for this location will be generated and displayed here."}
               </p>
               
-              {/* Audio Player Placeholder */}
-              <div className="bg-gray-100 p-4 rounded-lg flex items-center justify-between mb-4">
-                <div className="flex items-center">
-                  <button className="bg-blue-500 text-white rounded-full p-2 mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
-                  <div>
-                    <p className="font-medium text-gray-800">Audio Guide</p>
-                    <p className="text-sm text-gray-500">Coming soon</p>
+              {/* Audio Player Section */}
+              {Object.keys(audioData).length > 0 && audioData[currentStop.poi.id || `poi-${currentStopIndex}`] ? (
+                <div className="bg-gray-100 p-4 rounded-lg mb-4">
+                  <div className="flex flex-col space-y-2">
+                    <button 
+                      className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center"
+                      onClick={() => {
+                        const audio = new Audio(audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.coreAudioUrl);
+                        audio.play();
+                      }}
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                      </svg>
+                      Play Brief Overview (30-60s)
+                    </button>
+                    
+                    <button 
+                      className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center"
+                      onClick={() => {
+                        const audio = new Audio(audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.secondaryAudioUrl);
+                        audio.play();
+                      }}
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                      </svg>
+                      Play Detailed Guide (1-2 min)
+                    </button>
+                    
+                    <button 
+                      className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded flex items-center justify-center"
+                      onClick={() => {
+                        const audio = new Audio(audioData[currentStop.poi.id || `poi-${currentStopIndex}`].audioFiles.tertiaryAudioUrl);
+                        audio.play();
+                      }}
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                      </svg>
+                      Play In-Depth Exploration (3+ min)
+                    </button>
                   </div>
                 </div>
-                <div className="text-gray-500">2:34</div>
-              </div>
+              ) : (
+                <div className="bg-gray-100 p-4 rounded-lg flex items-center justify-between mb-4">
+                  <div className="flex items-center">
+                    <button className="bg-blue-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </button>
+                    <div>
+                      <p className="font-medium text-gray-800">Audio Guide</p>
+                      <p className="text-sm text-gray-500">Generate audio guides using the button at the top</p>
+                    </div>
+                  </div>
+                  <div className="text-gray-500">--:--</div>
+                </div>
+              )}
               
               {/* Google Maps Link */}
               <a 
