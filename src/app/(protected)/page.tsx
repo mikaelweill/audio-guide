@@ -197,8 +197,8 @@ export default function Home() {
       const accessToken = authData.session?.access_token;
       
       if (accessToken && pois.length > 0) {
-        // Process at most 3 POIs in parallel as a test
-        const poisToProcess = pois.slice(0, 3);
+        // Process all POIs in parallel instead of just 3
+        const poisToProcess = pois;
         console.log(`🎯 Processing ${poisToProcess.length} POIs in parallel`);
         
         // First, fetch Wikipedia & Wikivoyage content for each POI
