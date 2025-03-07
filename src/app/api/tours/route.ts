@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
           total_distance,
           total_duration,
           google_maps_url,
-          tourPois (
+          TourPoi (
             id,
             sequence_number,
             poi:Poi (
