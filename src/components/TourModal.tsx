@@ -66,6 +66,8 @@ const DEFAULT_LOCATION = {
 type Phase = 'preferences' | 'poi-selection' | 'results';
 
 export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCATION, mapsApiLoaded }: TourModalProps) {
+  console.log("⭐⭐⭐ TOUR MODAL COMPONENT LOADED - NEW VERSION ⭐⭐⭐");
+
   // Current phase of tour generation
   const [currentPhase, setCurrentPhase] = useState<Phase>('preferences');
   
@@ -523,122 +525,210 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
     setCurrentPhase('poi-selection');
   };
   
-  // Handle saving tour
-  const handleSaveTour = async () => {
-    try {
-      setIsSaving(true);
-      
-      // Generate a name if not provided
-      const tourName = formData.tourName || `Tour near ${preferences.startLocation.address}`;
-      
-      // Debug tourRoute structure
-      console.log('Tour route length:', tourRoute.length);
-      if (tourRoute.length > 0) {
-        console.log('First POI sample:', {
-          place_id: tourRoute[0].place_id,
-          name: tourRoute[0].name,
-          types: tourRoute[0].types
-        });
-      }
-      
-      // Filter out special markers and simplify the route data
-      const simplifiedRoute = tourRoute
-        .filter(poi => !poi.types.includes('starting_point') && !poi.types.includes('end_point'))
-        .map(poi => ({
-          place_id: poi.place_id,
-          name: poi.name,
-          types: poi.types,
-          geometry: poi.geometry,
-          vicinity: poi.vicinity,
-          rating: poi.rating,
-          photos: poi.photos
-        }));
-      
-      console.log(`Filtered route: ${simplifiedRoute.length} POIs (removed special markers)`);
-      
-      // Prepare the preferences in the expected format
-      const apiPreferences = {
-        interests: preferences.interests,
-        duration: preferences.duration,
-        distance: preferences.distance,
-        startLocation: {
-          position: preferences.startLocation.position || userLocation,
-          address: preferences.startLocation.address,
-          useCurrentLocation: preferences.startLocation.useCurrentLocation
-        },
-        endLocation: {
-          position: preferences.endLocation.position || userLocation,
-          address: preferences.endLocation.address,
-          useCurrentLocation: preferences.endLocation.useCurrentLocation
-        },
-        returnToStart: preferences.returnToStart,
-        transportationMode: preferences.transportationMode
-      };
-      
-      // Prepare API request payload
-      const payload = {
-        name: tourName,
-        description: formData.tourDescription || '',
-        route: simplifiedRoute,
-        preferences: apiPreferences,
-        stats: tourStats
-      };
-      
-      console.log('Saving tour to database...');
-      console.log('API payload:', JSON.stringify(payload, null, 2));
-      
-      // Call the API to save the tour
-      const response = await fetch('/api/tours', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-        credentials: 'include' // Important: send cookies with the request
-      });
-      
-      console.log(`API response status: ${response.status}`);
-      
-      if (!response.ok) {
-        // Try to get error details from response
+  // Add this completely new function right before or after the existing handleSaveTour
+  // This is a new implementation that completely replaces the old one
+  const saveWithSupabaseFunction = () => {
+    console.log("🚀 RUNNING NEW SAVE FUNCTION 🚀");
+    
+    // 1. FIRST OPERATION: Extract data to be saved
+    // Extract all tour data first (no async operations)
+    const tourName = formData.tourName || `Tour near ${preferences.startLocation.address}`;
+    
+    // Simplify and extract route data
+    const simplifiedRoute = tourRoute
+      .filter(poi => !poi.types.includes('starting_point') && !poi.types.includes('end_point'))
+      .map(poi => ({
+        place_id: poi.place_id,
+        name: poi.name,
+        types: poi.types,
+        geometry: poi.geometry,
+        vicinity: poi.vicinity,
+        rating: poi.rating,
+        photos: poi.photos
+      }));
+    
+    // Prepare the preferences in the expected format
+    const apiPreferences = {
+      interests: preferences.interests,
+      duration: preferences.duration,
+      distance: preferences.distance,
+      startLocation: {
+        position: preferences.startLocation.position || userLocation,
+        address: preferences.startLocation.address,
+        useCurrentLocation: preferences.startLocation.useCurrentLocation
+      },
+      endLocation: {
+        position: preferences.endLocation.position || userLocation,
+        address: preferences.endLocation.address,
+        useCurrentLocation: preferences.endLocation.useCurrentLocation
+      },
+      returnToStart: preferences.returnToStart,
+      transportationMode: preferences.transportationMode
+    };
+    
+    // Prepare API request payload
+    const payload = {
+      name: tourName,
+      description: formData.tourDescription || '',
+      route: simplifiedRoute,
+      preferences: apiPreferences,
+      stats: tourStats
+    };
+
+    // 2. CLOSE THE MODAL - SIMPLE, DIRECT, NO TRICKS
+    console.log("🚪 Closing modal as a separate operation");
+    onClose();
+
+    // 3. SECOND OPERATION: Background work (after modal closes)
+    // Start the async work after returning from this function
+    setTimeout(() => {
+      // Create a function to handle the async work
+      const handleBackgroundWork = async () => {
         try {
-          const errorText = await response.text();
-          console.error('Failed to save tour:', errorText);
-          throw new Error(`Server error: ${response.status} - ${errorText}`);
-        } catch (e) {
-          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+          setIsSaving(true);
+          console.log('💾 Saving tour to database...');
+          
+          // Save to database
+          const response = await fetch('/api/tours', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            credentials: 'include'
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Server error: ${response.status} - ${errorText}`);
+          }
+          
+          // Parse the response
+          const responseText = await response.text();
+          let data;
+          try {
+            data = JSON.parse(responseText);
+          } catch (parseError) {
+            throw new Error(`Invalid response from server: ${response.status}`);
+          }
+          
+          // Check for errors
+          if (!data.success) {
+            throw new Error(data.error || 'Failed to save tour');
+          }
+          
+          console.log('✅ Tour saved successfully with ID:', data.tourId);
+          
+          // Show success notification
+          try {
+            const toast = require('react-hot-toast').toast;
+            toast.success('Tour saved successfully!');
+          } catch (toastError) {
+            // Fallback notification if toast fails
+            const notification = document.createElement('div');
+            notification.style.position = 'fixed';
+            notification.style.bottom = '20px';
+            notification.style.right = '20px';
+            notification.style.backgroundColor = '#10B981';
+            notification.style.color = 'white';
+            notification.style.padding = '12px 24px';
+            notification.style.borderRadius = '8px';
+            notification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+            notification.style.zIndex = '9999';
+            notification.textContent = 'Tour saved successfully!';
+            document.body.appendChild(notification);
+            
+            // Remove notification after 3 seconds
+            setTimeout(() => {
+              document.body.removeChild(notification);
+            }, 3000);
+          }
+          
+          // Call Supabase function
+          try {
+            console.log("🔊 Calling Supabase functions for audio guides...");
+            
+            // Get Supabase client and auth token
+            const { createClient } = require('@/utils/supabase/client');
+            const supabase = createClient();
+            const { data: authData } = await supabase.auth.getSession();
+            const accessToken = authData.session?.access_token;
+            
+            if (accessToken && simplifiedRoute.length > 0) {
+              const firstPoi = simplifiedRoute[0];
+              
+              // Test function with first POI
+              const functionResponse = await fetch(
+                'https://uzqollduvddowyzjvmzn.supabase.co/functions/v1/process-poi',
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                  },
+                  body: JSON.stringify({ 
+                    poiData: {
+                      id: firstPoi.place_id,
+                      place_id: firstPoi.place_id,
+                      basic: {
+                        name: firstPoi.name,
+                        formatted_address: firstPoi.vicinity || '',
+                        location: firstPoi.geometry?.location || { lat: 0, lng: 0 },
+                        types: firstPoi.types || ["point_of_interest"],
+                      },
+                      // Keep test data short
+                      wikipedia: { extract: "Short test extract for Wikipedia." },
+                      wikivoyage: { extract: "Short test extract for Wikivoyage." }
+                    }
+                  }),
+                }
+              );
+              
+              console.log(`🎙️ Supabase function response:`, functionResponse.status);
+              
+              if (functionResponse.ok) {
+                const result = await functionResponse.json();
+                console.log("✅ Supabase function succeeded:", result);
+              } else {
+                const errorText = await functionResponse.text();
+                console.error("❌ Supabase function failed:", errorText);
+              }
+            }
+          } catch (functionError) {
+            console.error("❌ Error with Supabase functions:", functionError);
+          }
+        } catch (error) {
+          console.error('❌ Error in background processing:', error);
+          
+          // Show error notification
+          const errorNotification = document.createElement('div');
+          errorNotification.style.position = 'fixed';
+          errorNotification.style.bottom = '20px';
+          errorNotification.style.right = '20px';
+          errorNotification.style.backgroundColor = '#EF4444';
+          errorNotification.style.color = 'white';
+          errorNotification.style.padding = '12px 24px';
+          errorNotification.style.borderRadius = '8px';
+          errorNotification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+          errorNotification.style.zIndex = '9999';
+          errorNotification.textContent = `Failed to save tour: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          document.body.appendChild(errorNotification);
+          
+          // Remove notification after 5 seconds
+          setTimeout(() => {
+            document.body.removeChild(errorNotification);
+          }, 5000);
+        } finally {
+          setIsSaving(false);
         }
-      }
+      };
       
-      // Get the response text
-      const responseText = await response.text();
-      console.log('API raw response:', responseText);
-      
-      // Parse the response if possible
-      let data;
-      try {
-        data = JSON.parse(responseText);
-        console.log('API response data:', data);
-      } catch (parseError) {
-        console.error('Failed to parse API response:', responseText);
-        throw new Error(`Invalid response from server: ${response.status} ${response.statusText}`);
-      }
-      
-      // Check for errors
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to save tour');
-      }
-      
-      console.log('Tour saved successfully with ID:', data.tourId);
-      alert('Tour saved successfully to the database!');
-      onClose();
-    } catch (error) {
-      console.error('Error saving tour:', error);
-      alert(`Failed to save tour: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSaving(false);
-    }
+      // Execute the async work
+      handleBackgroundWork();
+    }, 0);
   };
+  
+  // Now find the onSave prop in the component JSX (should be near the bottom) and replace it
+  // Replace: onSave={handleSaveTour}
+  // With: onSave={saveWithSupabaseFunction}
   
   if (!isOpen) return null;
   
@@ -894,7 +984,7 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
               transportationMode: preferences.transportationMode
             }}
             onBack={handleBackToPOISelection}
-            onSave={handleSaveTour}
+            onSave={saveWithSupabaseFunction}
           />
         );
     }

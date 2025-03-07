@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { dataCollectionService } from '@/services/audioGuide';
+import { createClient } from '@/utils/supabase/client';
 
 type AudioGuideControlsProps = {
   tour: any;
@@ -45,18 +46,51 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
       const audioResults: Record<string, any> = {};
       const totalPois = tour.route.length;
       
+      // Initialize Supabase client
+      const supabase = createClient();
+      
       // Update UI to show we're processing all POIs at once
-      setCurrentStep(`Processing all ${totalPois} POIs simultaneously...`);
+      setCurrentStep(`Processing all ${totalPois} POIs simultaneously using Supabase Edge Functions...`);
       
       // Create an array of processing functions for all POIs
       const poiProcessingPromises = tour.route.map(async (poi: any, index: number) => {
         try {
-          // Update UI to show which POI is being processed - but don't setCurrentStep here
-          // as it would cause UI flicker with parallel processing
+          // Update UI to show which POI is being processed
           console.log(`Processing POI ${index + 1}/${totalPois}: ${poi.name}`);
+          
+          // Determine POI ID
+          const poiId = poi.place_id || `poi-${tour.route.indexOf(poi)}`;
+          
+          // First check if this POI already has audio guides in the database
+          const { data: existingAudio, error } = await supabase
+            .from('poi')
+            .select('brief_audio_url, detailed_audio_url, complete_audio_url')
+            .eq('id', poiId)
+            .single();
+          
+          // If we already have all three audio files, skip processing
+          if (existingAudio && 
+              existingAudio.brief_audio_url && 
+              existingAudio.detailed_audio_url && 
+              existingAudio.complete_audio_url) {
+            console.log(`POI ${poi.name} already has audio guides - skipping processing`);
+            
+            // Fetch the full audio data including transcripts
+            const existingData = await fetchPoiAudioData(poiId);
+            
+            return {
+              poiId: poiId,
+              name: poi.name,
+              skipped: true,
+              existingData: existingData,
+              success: true
+            };
+          }
           
           // 1. Collect data from sources
           const poiData = await dataCollectionService.collectPoiData({
+            id: poiId,
+            place_id: poiId,
             name: poi.name,
             formatted_address: poi.vicinity || poi.formatted_address || '',
             location: poi.geometry?.location || null,
@@ -65,45 +99,36 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
             photo_references: poi.photos?.map((p: any) => p.photo_reference) || []
           });
           
-          // 2. Generate content using the server-side API
-          const contentResponse = await fetch('/api/content-generation', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ poiData }),
-          });
+          // 2. Call the Supabase Edge Function to process this POI
+          const { data: authData } = await supabase.auth.getSession();
+          const accessToken = authData.session?.access_token;
+          
+          const response = await fetch(
+            'https://uzqollduvddowyzjvmzn.supabase.co/functions/v1/process-poi',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({ poiData }),
+            }
+          );
 
-          if (!contentResponse.ok) {
-            throw new Error(`Failed to generate content for ${poi.name}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Function failed for ${poi.name}: ${response.status} ${errorText}`);
           }
 
-          const contentData = await contentResponse.json();
+          const result = await response.json();
+          console.log(`Completed processing for ${poi.name}:`, result);
           
-          // 3. Convert to speech using the server-side API
-          const ttsResponse = await fetch('/api/text-to-speech', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              content: contentData.content,
-              poiId: poi.place_id || `poi-${tour.route.indexOf(poi)}`,
-              voice: 'nova', // Default voice
-            }),
-          });
-
-          if (!ttsResponse.ok) {
-            throw new Error(`Failed to convert text to speech for ${poi.name}`);
-          }
-
-          await ttsResponse.json();
-          
-          // Return the POI ID for success tracking
           return {
-            poiId: poi.place_id || `poi-${tour.route.indexOf(poi)}`,
+            poiId: poiId,
             name: poi.name,
-            success: true
+            result: result,
+            success: result.success || false,
+            existingContent: result.existingContent || false
           };
         } catch (error) {
           console.error(`Error processing POI ${poi.name}:`, error);
@@ -128,6 +153,7 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
       
       // Process results as they complete
       const completedPois: string[] = [];
+      const skippedPois: string[] = [];
       const failedPois: string[] = [];
       const successfulPoiIds: string[] = [];
       
@@ -140,8 +166,26 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
           const poiResult = result.value;
           
           if (poiResult.success) {
-            completedPois.push(poiResult.name);
+            // If we used existing content or skipped, note that
+            if (poiResult.existingContent || poiResult.skipped) {
+              skippedPois.push(poiResult.name);
+            } else {
+              completedPois.push(poiResult.name);
+            }
+            
             successfulPoiIds.push(poiResult.poiId);
+            
+            // If we already have the data (skipped case), add it to audioResults
+            if (poiResult.existingData) {
+              audioResults[poiResult.poiId] = poiResult.existingData;
+            } else if (poiResult.result) {
+              // Format the data from the Edge Function to match what our UI expects
+              audioResults[poiResult.poiId] = {
+                name: poiResult.name,
+                audioFiles: poiResult.result.audioFiles,
+                content: poiResult.result.content
+              };
+            }
           } else {
             failedPois.push(poiResult.name);
           }
@@ -150,29 +194,33 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
       
       // Update UI with summary of what happened
       if (failedPois.length > 0) {
-        setCurrentStep(`Completed ${completedPois.length}/${totalPois} POIs. Failed: ${failedPois.join(', ')}`);
+        setCurrentStep(`Completed ${completedPois.length} new, ${skippedPois.length} existing, ${failedPois.length} failed out of ${totalPois} POIs.`);
+      } else if (skippedPois.length > 0) {
+        setCurrentStep(`Successfully processed ${completedPois.length} new locations and reused ${skippedPois.length} existing ones.`);
       } else {
         setCurrentStep(`Successfully processed all ${totalPois} POIs!`);
       }
       
-      // Fetch audio data from database for successful POIs
-      setCurrentStep('Fetching audio data from database...');
+      // Fetch any missing audio data for successful POIs
+      const missingPoiIds = successfulPoiIds.filter(poiId => !audioResults[poiId]);
       
-      const audioDataPromises = successfulPoiIds.map(poiId => fetchPoiAudioData(poiId));
-      const audioDataResults = await Promise.allSettled(audioDataPromises);
-      
-      // Process fetched audio data
-      audioDataResults.forEach((result, index) => {
-        if (result.status === 'fulfilled' && result.value) {
-          const poiId = successfulPoiIds[index];
-          audioResults[poiId] = result.value;
-        }
-      });
+      if (missingPoiIds.length > 0) {
+        setCurrentStep('Fetching remaining audio data from database...');
+        
+        const audioDataPromises = missingPoiIds.map(poiId => fetchPoiAudioData(poiId));
+        const audioDataResults = await Promise.allSettled(audioDataPromises);
+        
+        // Process fetched audio data
+        audioDataResults.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value) {
+            const poiId = missingPoiIds[index];
+            audioResults[poiId] = result.value;
+          }
+        });
+      }
 
       console.log("Successful POI IDs:", successfulPoiIds);
-      console.log("Audio data fetched from DB:", audioDataResults);
       console.log("Final audioResults:", audioResults);
-      console.log("Setting audioData state with:", audioResults);
       
       setAudioData(audioResults);
       setProgress(100);

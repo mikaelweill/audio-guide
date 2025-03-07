@@ -5,6 +5,7 @@ import Header from "@/components/Layout/Header";
 import { AuthProvider } from "@/context/AuthContext";
 import AuthStatus from "@/components/Layout/AuthStatus";
 import DebugPanel from "@/components/Layout/DebugPanel";
+import { Toaster } from 'react-hot-toast';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -31,6 +32,7 @@ export default function RootLayout({
           </main>
           <AuthStatus />
           {process.env.NODE_ENV === "development" && <DebugPanel />}
+          <Toaster position="bottom-right" />
         </AuthProvider>
       </body>
     </html>

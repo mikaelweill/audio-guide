@@ -1,0 +1,12 @@
+{
+  "tasks": {
+    "dev": "deno run --allow-net --allow-env --allow-read index.ts",
+    "deploy": "supabase functions deploy --project-ref uzqollduvddowyzjvmzn process-poi"
+  },
+  "importMap": "./import_map.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["deno.window"],
+    "strict": true
+  }
+} 
