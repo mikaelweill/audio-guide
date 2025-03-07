@@ -49,6 +49,7 @@ const TRANSPORTATION_MODES = [
 interface TourModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSave: (tourData: any) => void;
   userLocation?: {
     lat: number;
     lng: number;
@@ -65,7 +66,7 @@ const DEFAULT_LOCATION = {
 // Tour generation phases
 type Phase = 'preferences' | 'poi-selection' | 'results';
 
-export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCATION, mapsApiLoaded }: TourModalProps) {
+export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFAULT_LOCATION, mapsApiLoaded }: TourModalProps) {
   console.log("⭐⭐⭐ TOUR MODAL COMPONENT LOADED - NEW VERSION ⭐⭐⭐");
 
   // Current phase of tour generation
@@ -494,8 +495,9 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
         transportationMode: preferences.transportationMode
       };
       
-      // Fetch POIs
-      const pois = await discoverPOIs(apiPreferences);
+      // REPLACED: Instead of using fetch to a non-existent API, call the function directly
+      console.log('Calling discoverPOIs directly with maxResults=3...');
+      const pois = await discoverPOIs(apiPreferences, { maxResults: 3 });
       setDiscoveredPOIs(pois);
       
       // Move to next phase
@@ -525,12 +527,10 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
     setCurrentPhase('poi-selection');
   };
   
-  // Add this completely new function right before or after the existing handleSaveTour
-  // This is a new implementation that completely replaces the old one
-  const saveWithSupabaseFunction = () => {
-    console.log("🚀 RUNNING NEW SAVE FUNCTION 🚀");
+  // Replace the complex saveWithSupabaseFunction with a simple function that prepares data
+  const prepareDataForSave = () => {
+    console.log("🔄 Preparing tour data for saving...");
     
-    // 1. FIRST OPERATION: Extract data to be saved
     // Extract all tour data first (no async operations)
     const tourName = formData.tourName || `Tour near ${preferences.startLocation.address}`;
     
@@ -575,214 +575,153 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
       stats: tourStats
     };
 
-    // 2. CLOSE THE MODAL - SIMPLE, DIRECT, NO TRICKS
-    console.log("🚪 Closing modal as a separate operation");
-    onClose();
-
-    // 3. SECOND OPERATION: Background work (after modal closes)
-    // Start the async work after returning from this function
-    setTimeout(() => {
-      // Create a function to handle the async work
-      const handleBackgroundWork = async () => {
-        try {
-          setIsSaving(true);
-          console.log('💾 Saving tour to database...');
-          
-          // Save to database
-          const response = await fetch('/api/tours', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            credentials: 'include'
-          });
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Server error: ${response.status} - ${errorText}`);
-          }
-          
-          // Parse the response
-          const responseText = await response.text();
-          let data;
-          try {
-            data = JSON.parse(responseText);
-          } catch (parseError) {
-            throw new Error(`Invalid response from server: ${response.status}`);
-          }
-          
-          // Check for errors
-          if (!data.success) {
-            throw new Error(data.error || 'Failed to save tour');
-          }
-          
-          console.log('✅ Tour saved successfully with ID:', data.tourId);
-          
-          // Show success notification
-          try {
-            const toast = require('react-hot-toast').toast;
-            toast.success('Tour saved successfully!');
-          } catch (toastError) {
-            // Fallback notification if toast fails
-            const notification = document.createElement('div');
-            notification.style.position = 'fixed';
-            notification.style.bottom = '20px';
-            notification.style.right = '20px';
-            notification.style.backgroundColor = '#10B981';
-            notification.style.color = 'white';
-            notification.style.padding = '12px 24px';
-            notification.style.borderRadius = '8px';
-            notification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-            notification.style.zIndex = '9999';
-            notification.textContent = 'Tour saved successfully!';
-            document.body.appendChild(notification);
-            
-            // Remove notification after 3 seconds
-            setTimeout(() => {
-              document.body.removeChild(notification);
-            }, 3000);
-          }
-          
-          // Call Supabase function
-          try {
-            console.log("🔊 Calling Supabase functions for audio guides...");
-            
-            // Get Supabase client and auth token
-            const { createClient } = require('@/utils/supabase/client');
-            const supabase = createClient();
-            const { data: authData } = await supabase.auth.getSession();
-            const accessToken = authData.session?.access_token;
-            
-            if (accessToken && simplifiedRoute.length > 0) {
-              const firstPoi = simplifiedRoute[0];
-              
-              // Test function with first POI
-              const functionResponse = await fetch(
-                'https://uzqollduvddowyzjvmzn.supabase.co/functions/v1/process-poi',
-                {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                  },
-                  body: JSON.stringify({ 
-                    poiData: {
-                      id: firstPoi.place_id,
-                      place_id: firstPoi.place_id,
-                      basic: {
-                        name: firstPoi.name,
-                        formatted_address: firstPoi.vicinity || '',
-                        location: firstPoi.geometry?.location || { lat: 0, lng: 0 },
-                        types: firstPoi.types || ["point_of_interest"],
-                      },
-                      // Keep test data short
-                      wikipedia: { extract: "Short test extract for Wikipedia." },
-                      wikivoyage: { extract: "Short test extract for Wikivoyage." }
-                    }
-                  }),
-                }
-              );
-              
-              console.log(`🎙️ Supabase function response:`, functionResponse.status);
-              
-              if (functionResponse.ok) {
-                const result = await functionResponse.json();
-                console.log("✅ Supabase function succeeded:", result);
-              } else {
-                const errorText = await functionResponse.text();
-                console.error("❌ Supabase function failed:", errorText);
-              }
-            }
-          } catch (functionError) {
-            console.error("❌ Error with Supabase functions:", functionError);
-          }
-        } catch (error) {
-          console.error('❌ Error in background processing:', error);
-          
-          // Show error notification
-          const errorNotification = document.createElement('div');
-          errorNotification.style.position = 'fixed';
-          errorNotification.style.bottom = '20px';
-          errorNotification.style.right = '20px';
-          errorNotification.style.backgroundColor = '#EF4444';
-          errorNotification.style.color = 'white';
-          errorNotification.style.padding = '12px 24px';
-          errorNotification.style.borderRadius = '8px';
-          errorNotification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-          errorNotification.style.zIndex = '9999';
-          errorNotification.textContent = `Failed to save tour: ${error instanceof Error ? error.message : 'Unknown error'}`;
-          document.body.appendChild(errorNotification);
-          
-          // Remove notification after 5 seconds
-          setTimeout(() => {
-            document.body.removeChild(errorNotification);
-          }, 5000);
-        } finally {
-          setIsSaving(false);
-        }
-      };
-      
-      // Execute the async work
-      handleBackgroundWork();
-    }, 0);
+    return payload;
   };
-  
-  // Now find the onSave prop in the component JSX (should be near the bottom) and replace it
-  // Replace: onSave={handleSaveTour}
-  // With: onSave={saveWithSupabaseFunction}
+
+  // Replace handleSaveTour to use the new onSave prop
+  const handleSaveTour = () => {
+    setIsSaving(true);
+    
+    try {
+      // Prepare the data
+      const tourData = prepareDataForSave();
+      
+      // Pass data to parent component and let it handle saving
+      onSave(tourData);
+    } catch (error) {
+      console.error("Error preparing tour data:", error);
+      
+      // Show error with DOM if needed
+      const errorNotification = document.createElement('div');
+      errorNotification.style.position = 'fixed';
+      errorNotification.style.bottom = '20px';
+      errorNotification.style.right = '20px';
+      errorNotification.style.backgroundColor = '#EF4444';
+      errorNotification.style.color = 'white';
+      errorNotification.style.padding = '12px 24px';
+      errorNotification.style.borderRadius = '8px';
+      errorNotification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+      errorNotification.style.zIndex = '9999';
+      errorNotification.textContent = `Failed to prepare tour data: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      document.body.appendChild(errorNotification);
+      
+      // Remove notification after 5 seconds
+      setTimeout(() => {
+        try {
+          document.body.removeChild(errorNotification);
+        } catch (e) {
+          // Ignore if already removed
+        }
+      }, 5000);
+    } finally {
+      // No need to reset isSaving as the component will be unmounted when modal closes
+    }
+  };
   
   if (!isOpen) return null;
   
   // Determine what content to show based on current phase
   const renderModalContent = () => {
-    switch (currentPhase) {
-      case 'preferences':
-        return (
-          <form onSubmit={handleDiscoverPOIs} className="w-full">
-            {discoveryError && (
-              <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
-                {discoveryError}
-              </div>
+    if (currentPhase === 'preferences') {
+      return (
+        <form onSubmit={handleDiscoverPOIs} className="w-full">
+          {discoveryError && (
+            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
+              {discoveryError}
+            </div>
+          )}
+        
+          {/* Interests Section */}
+          <div className="mb-6">
+            <label className="block text-gray-700 font-medium mb-2">What are you interested in?</label>
+            <div className="flex flex-wrap gap-2">
+              {INTERESTS_OPTIONS.map(interest => (
+                <button
+                  key={interest}
+                  type="button"
+                  onClick={() => toggleInterest(interest)}
+                  className={`px-3 py-2 rounded-full text-sm transition duration-200 cursor-pointer ${
+                    preferences.interests.includes(interest)
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {interest}
+                </button>
+              ))}
+            </div>
+            {preferences.interests.length === 0 && (
+              <p className="text-red-500 text-xs mt-1">Please select at least one interest</p>
             )}
-          
-            {/* Interests Section */}
-            <div className="mb-6">
-              <label className="block text-gray-700 font-medium mb-2">What are you interested in?</label>
-              <div className="flex flex-wrap gap-2">
-                {INTERESTS_OPTIONS.map(interest => (
-                  <button
-                    key={interest}
-                    type="button"
-                    onClick={() => toggleInterest(interest)}
-                    className={`px-3 py-2 rounded-full text-sm transition duration-200 cursor-pointer ${
-                      preferences.interests.includes(interest)
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {interest}
-                  </button>
-                ))}
-              </div>
-              {preferences.interests.length === 0 && (
-                <p className="text-red-500 text-xs mt-1">Please select at least one interest</p>
+          </div>
+
+          {/* Start Location */}
+          <div className="mb-6">
+            <label className="block text-gray-700 font-medium mb-2">Starting Location</label>
+            <div className="relative">
+              {mapsApiLoaded ? (
+                <Autocomplete
+                  onLoad={onStartAutocompleteLoad}
+                  onPlaceChanged={onStartPlaceChanged}
+                >
+                  <input
+                    type="text"
+                    placeholder="Enter starting location"
+                    className="w-full p-2 border border-gray-300 rounded-md text-gray-700"
+                    value={startAddress}
+                    onChange={handleStartLocationChange}
+                  />
+                </Autocomplete>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Loading autocomplete..."
+                  className="w-full p-2 border border-gray-300 rounded-md text-gray-700"
+                  disabled
+                />
               )}
+              <button
+                type="button"
+                onClick={useCurrentLocationForStart}
+                className={`mt-2 text-sm ${
+                  preferences.startLocation.useCurrentLocation
+                    ? 'text-blue-600 font-medium'
+                    : 'text-blue-500 hover:text-blue-700'
+                } cursor-pointer`}
+              >
+                {preferences.startLocation.useCurrentLocation ? '✓ Using current location' : 'Use my current location'}
+              </button>
+            </div>
+          </div>
+
+          {/* End Location Options */}
+          <div className="mb-6">
+            <label className="block text-gray-700 font-medium mb-2">End Location</label>
+            <div className="mb-3">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={preferences.returnToStart}
+                  onChange={toggleReturnToStart}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded cursor-pointer"
+                />
+                <span className="ml-2 text-gray-700">Return to starting point</span>
+              </label>
             </div>
 
-            {/* Start Location */}
-            <div className="mb-6">
-              <label className="block text-gray-700 font-medium mb-2">Starting Location</label>
+            {!preferences.returnToStart && (
               <div className="relative">
                 {mapsApiLoaded ? (
                   <Autocomplete
-                    onLoad={onStartAutocompleteLoad}
-                    onPlaceChanged={onStartPlaceChanged}
+                    onLoad={onEndAutocompleteLoad}
+                    onPlaceChanged={onEndPlaceChanged}
                   >
                     <input
                       type="text"
-                      placeholder="Enter starting location"
+                      placeholder="Enter end location"
                       className="w-full p-2 border border-gray-300 rounded-md text-gray-700"
-                      value={startAddress}
-                      onChange={handleStartLocationChange}
+                      value={endAddress}
+                      onChange={handleEndLocationChange}
                     />
                   </Autocomplete>
                 ) : (
@@ -795,199 +734,154 @@ export default function TourModal({ isOpen, onClose, userLocation = DEFAULT_LOCA
                 )}
                 <button
                   type="button"
-                  onClick={useCurrentLocationForStart}
+                  onClick={useCurrentLocationForEnd}
                   className={`mt-2 text-sm ${
-                    preferences.startLocation.useCurrentLocation
+                    preferences.endLocation.useCurrentLocation
                       ? 'text-blue-600 font-medium'
                       : 'text-blue-500 hover:text-blue-700'
                   } cursor-pointer`}
                 >
-                  {preferences.startLocation.useCurrentLocation ? '✓ Using current location' : 'Use my current location'}
+                  {preferences.endLocation.useCurrentLocation ? '✓ Using current location' : 'Use my current location'}
                 </button>
               </div>
-            </div>
+            )}
+            <p className="text-gray-500 text-xs mt-2 italic">Leave blank for a one-way, free-form exploration</p>
+          </div>
 
-            {/* End Location Options */}
-            <div className="mb-6">
-              <label className="block text-gray-700 font-medium mb-2">End Location</label>
-              <div className="mb-3">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={preferences.returnToStart}
-                    onChange={toggleReturnToStart}
-                    className="h-4 w-4 text-blue-600 border-gray-300 rounded cursor-pointer"
-                  />
-                  <span className="ml-2 text-gray-700">Return to starting point</span>
-                </label>
-              </div>
-
-              {!preferences.returnToStart && (
-                <div className="relative">
-                  {mapsApiLoaded ? (
-                    <Autocomplete
-                      onLoad={onEndAutocompleteLoad}
-                      onPlaceChanged={onEndPlaceChanged}
-                    >
-                      <input
-                        type="text"
-                        placeholder="Enter end location"
-                        className="w-full p-2 border border-gray-300 rounded-md text-gray-700"
-                        value={endAddress}
-                        onChange={handleEndLocationChange}
-                      />
-                    </Autocomplete>
-                  ) : (
-                    <input
-                      type="text"
-                      placeholder="Loading autocomplete..."
-                      className="w-full p-2 border border-gray-300 rounded-md text-gray-700"
-                      disabled
-                    />
-                  )}
-                  <button
-                    type="button"
-                    onClick={useCurrentLocationForEnd}
-                    className={`mt-2 text-sm ${
-                      preferences.endLocation.useCurrentLocation
-                        ? 'text-blue-600 font-medium'
-                        : 'text-blue-500 hover:text-blue-700'
-                    } cursor-pointer`}
-                  >
-                    {preferences.endLocation.useCurrentLocation ? '✓ Using current location' : 'Use my current location'}
-                  </button>
-                </div>
-              )}
-              <p className="text-gray-500 text-xs mt-2 italic">Leave blank for a one-way, free-form exploration</p>
+          {/* Duration Section */}
+          <div className="mb-6">
+            <label className="block text-gray-700 font-medium mb-2">Tour Duration (minutes)</label>
+            <div className="flex gap-2">
+              {DURATION_OPTIONS.map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => updateDuration(option)}
+                  className={`flex-1 px-3 py-2 rounded-md text-sm transition duration-200 cursor-pointer ${
+                    preferences.duration === option
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
             </div>
+          </div>
 
-            {/* Duration Section */}
-            <div className="mb-6">
-              <label className="block text-gray-700 font-medium mb-2">Tour Duration (minutes)</label>
-              <div className="flex gap-2">
-                {DURATION_OPTIONS.map(option => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => updateDuration(option)}
-                    className={`flex-1 px-3 py-2 rounded-md text-sm transition duration-200 cursor-pointer ${
-                      preferences.duration === option
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
+          {/* Distance Section */}
+          <div className="mb-6">
+            <label className="block text-gray-700 font-medium mb-2">Distance (km)</label>
+            <div className="flex gap-2">
+              {DISTANCE_OPTIONS.map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => updateDistance(option)}
+                  className={`flex-1 px-3 py-2 rounded-md text-sm transition duration-200 cursor-pointer ${
+                    preferences.distance === option
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
             </div>
+          </div>
+          
+          {/* Transportation Mode */}
+          <div className="mb-8">
+            <label className="block text-gray-700 font-medium mb-2">Transportation Mode</label>
+            <div className="flex gap-2">
+              {TRANSPORTATION_MODES.map(mode => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => updateTransportationMode(mode.id as 'walking' | 'transit')}
+                  className={`flex-1 px-3 py-2 rounded-md text-sm transition duration-200 cursor-pointer ${
+                    preferences.transportationMode === mode.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-            {/* Distance Section */}
-            <div className="mb-6">
-              <label className="block text-gray-700 font-medium mb-2">Distance (km)</label>
-              <div className="flex gap-2">
-                {DISTANCE_OPTIONS.map(option => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => updateDistance(option)}
-                    className={`flex-1 px-3 py-2 rounded-md text-sm transition duration-200 cursor-pointer ${
-                      preferences.distance === option
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            {/* Transportation Mode */}
-            <div className="mb-8">
-              <label className="block text-gray-700 font-medium mb-2">Transportation Mode</label>
-              <div className="flex gap-2">
-                {TRANSPORTATION_MODES.map(mode => (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    onClick={() => updateTransportationMode(mode.id as 'walking' | 'transit')}
-                    className={`flex-1 px-3 py-2 rounded-md text-sm transition duration-200 cursor-pointer ${
-                      preferences.transportationMode === mode.id
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Find POIs Button */}
-            <button
-              type="submit"
-              disabled={preferences.interests.length === 0 || isDiscovering}
-              className={`w-full py-3 rounded-md text-white font-medium transition duration-200 cursor-pointer ${
-                preferences.interests.length === 0 || isDiscovering
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              {isDiscovering ? 'Finding Points of Interest...' : 'Find Points of Interest'}
-            </button>
-          </form>
-        );
-      
-      case 'poi-selection':
-        return (
-          <POISelection 
-            pois={discoveredPOIs}
-            tourPreferences={{
-              interests: preferences.interests,
-              duration: preferences.duration,
-              distance: preferences.distance,
-              startLocation: {
-                position: preferences.startLocation.position!,
-                address: preferences.startLocation.address,
-              },
-              endLocation: {
-                position: preferences.endLocation.position || preferences.startLocation.position!,
-                address: preferences.endLocation.address || preferences.startLocation.address,
-              },
-              returnToStart: preferences.returnToStart,
-              transportationMode: preferences.transportationMode
-            }}
-            onGenerateTour={handleGenerateTour}
-            onBack={handleBackToPreferences}
-          />
-        );
-      
-      case 'results':
-        return (
-          <TourResult 
-            route={tourRoute}
-            stats={tourStats}
-            preferences={{
-              interests: preferences.interests,
-              duration: preferences.duration,
-              distance: preferences.distance,
-              startLocation: {
-                position: preferences.startLocation.position!,
-                address: preferences.startLocation.address,
-              },
-              endLocation: {
-                position: preferences.endLocation.position || preferences.startLocation.position!,
-                address: preferences.endLocation.address || preferences.startLocation.address,
-              },
-              returnToStart: preferences.returnToStart,
-              transportationMode: preferences.transportationMode
-            }}
-            onBack={handleBackToPOISelection}
-            onSave={saveWithSupabaseFunction}
-          />
-        );
+          {/* Find POIs Button */}
+          <button
+            type="submit"
+            disabled={preferences.interests.length === 0 || isDiscovering}
+            className={`w-full py-3 rounded-md text-white font-medium transition duration-200 cursor-pointer ${
+              preferences.interests.length === 0 || isDiscovering
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {isDiscovering ? 'Finding Points of Interest...' : 'Find Points of Interest'}
+          </button>
+        </form>
+      );
     }
+    
+    if (currentPhase === 'poi-selection') {
+      return (
+        <POISelection 
+          pois={discoveredPOIs}
+          tourPreferences={{
+            interests: preferences.interests,
+            duration: preferences.duration,
+            distance: preferences.distance,
+            startLocation: {
+              position: preferences.startLocation.position!,
+              address: preferences.startLocation.address,
+            },
+            endLocation: {
+              position: preferences.endLocation.position || preferences.startLocation.position!,
+              address: preferences.endLocation.address || preferences.startLocation.address,
+            },
+            returnToStart: preferences.returnToStart,
+            transportationMode: preferences.transportationMode
+          }}
+          onGenerateTour={handleGenerateTour}
+          onBack={handleBackToPreferences}
+        />
+      );
+    }
+    
+    if (currentPhase === 'results') {
+      return (
+        <TourResult
+          route={tourRoute}
+          stats={tourStats}
+          preferences={{
+            interests: preferences.interests,
+            duration: preferences.duration,
+            distance: preferences.distance,
+            startLocation: {
+              position: preferences.startLocation.position || userLocation,
+              address: preferences.startLocation.address,
+            },
+            endLocation: {
+              position: preferences.endLocation.position || preferences.startLocation.position || userLocation,
+              address: preferences.endLocation.address || preferences.startLocation.address,
+            },
+            returnToStart: preferences.returnToStart,
+            transportationMode: preferences.transportationMode
+          }}
+          onBack={handleBackToPOISelection}
+          onSaveTour={handleSaveTour}
+          isSaving={isSaving}
+          formData={formData}
+          setFormData={setFormData}
+        />
+      );
+    }
+    
+    return null;
   };
 
   return (

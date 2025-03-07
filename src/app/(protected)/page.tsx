@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useJsApiLoader, Libraries } from '@react-google-maps/api';
 import TourModal from '@/components/TourModal';
 import TourList, { Tour } from '@/components/TourList';
+import { toast } from 'react-hot-toast';
 
 // Extract tour fetching logic to a separate client component
 function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[]) => void }) {
@@ -134,6 +135,116 @@ export default function Home() {
     console.log(`📋 HOME: Tours loaded callback with ${loadedTours.length} tours`);
     setTours(loadedTours);
   }, []);
+
+  // New function to save tour data to database
+  const saveTour = async (tourData: any) => {
+    try {
+      console.log('💾 HOME: Saving tour to database...');
+      
+      // Save to database using the API
+      const response = await fetch('/api/tours', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tourData),
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      }
+      
+      // Parse and validate response
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        throw new Error(`Invalid response from server: ${response.status}`);
+      }
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to save tour');
+      }
+      
+      console.log('✅ HOME: Tour saved successfully with ID:', data.tourId);
+      
+      // Show success notification
+      toast.success('Tour saved successfully!');
+      
+      // If we have valid tour data with POIs, process them with Supabase
+      if (tourData.route && tourData.route.length > 0) {
+        processPOIsWithSupabase(tourData.route, data.tourId);
+      }
+      
+      // Force refresh the tour list
+      const tourLoader = document.querySelector('[data-tour-loader="true"]');
+      if (tourLoader) {
+        // @ts-ignore
+        tourLoader.loadTours?.();
+      }
+    } catch (error) {
+      console.error('❌ HOME: Error saving tour:', error);
+      toast.error(`Failed to save tour: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+  
+  // New function to process POIs with Supabase Edge Function
+  const processPOIsWithSupabase = async (pois: any[], tourId: string) => {
+    try {
+      console.log("🔊 HOME: Calling Supabase functions for audio guides...");
+      
+      const { createClient } = require('@/utils/supabase/client');
+      const supabase = createClient();
+      const { data: authData } = await supabase.auth.getSession();
+      const accessToken = authData.session?.access_token;
+      
+      if (accessToken && pois.length > 0) {
+        const firstPoi = pois[0];
+        
+        console.log(`🎯 HOME: Processing first POI: ${firstPoi.name}`);
+        
+        const response = await fetch(
+          'https://uzqollduvddowyzjvmzn.supabase.co/functions/v1/process-poi',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ 
+              poiData: {
+                id: firstPoi.place_id,
+                place_id: firstPoi.place_id,
+                basic: {
+                  name: firstPoi.name,
+                  formatted_address: firstPoi.vicinity || '',
+                  location: firstPoi.geometry?.location || { lat: 0, lng: 0 },
+                  types: firstPoi.types || ["point_of_interest"],
+                },
+                wikipedia: { extract: "Short test extract for Wikipedia." },
+                wikivoyage: { extract: "Short test extract for Wikivoyage." }
+              }
+            }),
+          }
+        );
+        
+        console.log(`🎙️ HOME: Supabase function response status:`, response.status);
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log("✅ HOME: Supabase function succeeded:", result);
+        } else {
+          const errorText = await response.text();
+          console.error("❌ HOME: Supabase function failed:", errorText);
+        }
+      } else {
+        console.warn("⚠️ HOME: No access token or POIs available for Supabase functions");
+      }
+    } catch (error) {
+      console.error("❌ HOME: Error with Supabase functions:", error);
+    }
+  };
   
   return (
     <div className="min-h-screen bg-gray-50">
@@ -174,10 +285,16 @@ export default function Home() {
         {/* Tour list */}
         <TourList tours={tours} loading={false} />
         
-        {/* Tour creation modal */}
+        {/* Tour creation modal - with new onSave prop */}
         <TourModal 
           isOpen={isModalOpen} 
           onClose={closeModal} 
+          onSave={(tourData) => {
+            // First close the modal immediately
+            closeModal();
+            // Then handle the saving separately
+            saveTour(tourData);
+          }}
           userLocation={userLocation || undefined}
           mapsApiLoaded={isLoaded}
         />

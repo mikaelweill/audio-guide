@@ -85,8 +85,12 @@ function mapInterestToGoogleType(interest: string): string[] {
 /**
  * Discover POIs based on user preferences
  */
-export async function discoverPOIs(preferences: TourPreferences): Promise<POI[]> {
+export async function discoverPOIs(
+  preferences: TourPreferences, 
+  options: { maxResults?: number } = {}
+): Promise<POI[]> {
   const { interests, distance, startLocation } = preferences;
+  const { maxResults } = options;
   
   // Calculate search radius in meters
   const searchRadius = distance * 1000; // Convert km to meters
@@ -122,7 +126,9 @@ export async function discoverPOIs(preferences: TourPreferences): Promise<POI[]>
 
   // Calculate recommended count using the new function
   const recommendedPOICount = calculateRecommendedCount(preferences.duration);
-  const presentationPOICount = Math.min(30, recommendedPOICount * 4);
+  
+  // If maxResults is provided, use it to limit the presentation count
+  const presentationPOICount = maxResults || Math.min(30, recommendedPOICount * 4);
   
   // POIs will be collected here
   let allPOIs: POI[] = [];

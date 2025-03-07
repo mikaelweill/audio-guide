@@ -7,12 +7,26 @@ import { GoogleMap, MarkerF, DirectionsRenderer } from '@react-google-maps/api';
 interface TourResultProps {
   route: POI[];
   stats: any;
-  preferences: TourPreferences;
+  preferences?: TourPreferences;
   onBack: () => void;
   onSave?: () => void;
+  onSaveTour?: () => void;
+  isSaving?: boolean;
+  formData?: any;
+  setFormData?: (data: any) => void;
 }
 
-export default function TourResult({ route, stats, preferences, onBack, onSave }: TourResultProps) {
+export default function TourResult({ 
+  route, 
+  stats, 
+  preferences, 
+  onBack, 
+  onSave, 
+  onSaveTour,
+  isSaving = false,
+  formData = {},
+  setFormData = () => {}
+}: TourResultProps) {
   const [activeStep, setActiveStep] = useState(0);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +97,7 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
         destination: route[route.length - 1].geometry.location,
         waypoints,
         optimizeWaypoints: false, // We've already optimized the route
-        travelMode: preferences.transportationMode === 'transit' 
+        travelMode: preferences?.transportationMode === 'transit' 
           ? google.maps.TravelMode.TRANSIT 
           : google.maps.TravelMode.WALKING,
       },
@@ -116,6 +130,14 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
     if (index === 0) return 'green';
     if (index === route.length - 1) return 'red';
     return 'blue';
+  };
+  
+  const handleSave = () => {
+    if (onSaveTour) {
+      onSaveTour();
+    } else if (onSave) {
+      onSave();
+    }
   };
   
   return (
@@ -333,15 +355,14 @@ export default function TourResult({ route, stats, preferences, onBack, onSave }
         >
           Back
         </button>
-        {onSave && (
-          <button
-            type="button"
-            onClick={onSave}
-            className="px-4 py-2 bg-blue-600 rounded-md text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Save Tour
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving}
+          className="px-4 py-2 bg-blue-600 rounded-md text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          {isSaving ? 'Saving...' : 'Save Tour'}
+        </button>
       </div>
     </div>
   );

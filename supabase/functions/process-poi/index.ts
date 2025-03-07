@@ -422,56 +422,43 @@ async function textToSpeech(text, voice = 'nova', openai) {
   }
 }
 
-// Update the main function to process content types independently rather than with Promise.all
-// In the main serve function, replace the Promise.all content processing with:
-
-/*
-    // Original code with Promise.all:
-    const audioResults = await Promise.all(
-      contentMappings.map(({ contentType, text }) => 
-        processContentType(contentType, text, poiData.id || poiData.place_id, voice, supabaseClient, openai)
-      )
-    );
-    
-    // Collect audio URLs
-    const audioUrls = {
-      coreAudioUrl: audioResults[0].audioUrl,
-      secondaryAudioUrl: audioResults[1].audioUrl,
-      tertiaryAudioUrl: audioResults[2].audioUrl
-    };
-*/
-
-// Replace with this more resilient approach:
+// Replace with this properly parallel approach:
 async function processAllContentTypes(contentMappings, poiId, voice, supabaseClient, openai) {
-  console.log(`Processing ${contentMappings.length} content types independently`);
+  console.log(`Processing ${contentMappings.length} content types in parallel`);
   
+  // Create promises for each content type without awaiting them
+  const processingPromises = contentMappings.map(({ contentType, text }) => {
+    // Return a promise that includes both the content type and the result
+    return processContentType(contentType, text, poiId, voice, supabaseClient, openai)
+      .then(result => ({ contentType, result }))
+      .catch(error => {
+        console.error(`Error processing ${contentType} content:`, error);
+        // Return a partial result with the content type but no audio URL
+        return { contentType, result: { audioUrl: '' } };
+      });
+  });
+  
+  // Wait for all promises to resolve in parallel
+  const results = await Promise.all(processingPromises);
+  
+  // Build the result object
   const audioUrls = {
     coreAudioUrl: '',
     secondaryAudioUrl: '',
     tertiaryAudioUrl: ''
   };
   
-  // Process each content type independently
-  for (const { contentType, text } of contentMappings) {
-    try {
-      console.log(`Starting processing of ${contentType} content (${text.length} characters)`);
-      const result = await processContentType(contentType, text, poiId, voice, supabaseClient, openai);
-      
-      // Map content type to the appropriate audio URL property
-      if (contentType === 'brief') {
-        audioUrls.coreAudioUrl = result.audioUrl;
-      } else if (contentType === 'detailed') {
-        audioUrls.secondaryAudioUrl = result.audioUrl;
-      } else if (contentType === 'complete') {
-        audioUrls.tertiaryAudioUrl = result.audioUrl;
-      }
-      
-      console.log(`Successfully processed ${contentType} content`);
-    } catch (error) {
-      console.error(`Error processing ${contentType} content:`, error);
-      // Continue with other content types instead of failing everything
+  // Map results to the appropriate properties
+  results.forEach(({ contentType, result }) => {
+    if (contentType === 'brief') {
+      audioUrls.coreAudioUrl = result.audioUrl;
+    } else if (contentType === 'detailed') {
+      audioUrls.secondaryAudioUrl = result.audioUrl;
+    } else if (contentType === 'complete') {
+      audioUrls.tertiaryAudioUrl = result.audioUrl;
     }
-  }
+    console.log(`Successfully processed ${contentType} content`);
+  });
   
   return audioUrls;
 }
@@ -562,98 +549,74 @@ async function saveToDatabase(supabaseClient, poiId, data) {
   try {
     console.log(`Attempting to save data for POI ID: ${poiId}`);
 
-    // First, let's check if the POI table exists and create it if it doesn't
-    try {
-      console.log('Checking if POI table exists...');
-      
-      // Try to query the table to see if it exists
-      const { error: tableError } = await supabaseClient
-        .from('Poi')
-        .select('id')
-        .limit(1);
-      
-      // If we get a specific error about the table not existing, create it
-      if (tableError && tableError.code === '42P01') {
-        console.log('Table does not exist. Creating POI table...');
-        
-        // Create the table using SQL
-        const { error: createError } = await supabaseClient.rpc(
-          'execute_sql',
-          {
-            sql: `
-              CREATE TABLE IF NOT EXISTS public."Poi" (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                brief_transcript TEXT,
-                detailed_transcript TEXT,
-                complete_transcript TEXT,
-                brief_audio_url TEXT,
-                detailed_audio_url TEXT,
-                complete_audio_url TEXT,
-                audio_generated_at TIMESTAMP WITH TIME ZONE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-              );
-            `
-          }
-        );
-        
-        if (createError) {
-          // If we can't create using RPC, we'll try a different approach
-          console.error('Error creating table using RPC:', createError);
-          
-          // Let's try inserting directly with fallback handling
-          console.log('Using direct insert with fallback approach');
-        } else {
-          console.log('Successfully created POI table');
-        }
-      }
-    } catch (tableLookupError) {
-      console.error('Error checking table existence:', tableLookupError);
+    // First check if the POI exists
+    const { data: existingPoi, error: checkError } = await supabaseClient
+      .from('Poi')
+      .select('id')
+      .eq('id', poiId)
+      .single();
+    
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Error checking POI existence:', checkError);
+      throw new Error(`Database error: ${checkError.message}`);
     }
     
-    // Now try to insert the data, regardless of whether we created the table or not
-    // First try with 'Poi' (lowercase)
-    try {
-      console.log('Attempting to save to "Poi" table...');
-      const updateData = {
-        name: data.name,
-        brief_transcript: data.briefTranscript,
-        detailed_transcript: data.detailedTranscript, 
-        complete_transcript: data.completeTranscript,
-        brief_audio_url: data.briefAudioUrl,
-        detailed_audio_url: data.detailedAudioUrl,
-        complete_audio_url: data.completeAudioUrl,
-        audio_generated_at: new Date().toISOString()
-      };
-      
-      console.log('Data being saved:', JSON.stringify(updateData, null, 2));
-      
-      // First try to check if the record exists by trying to update
+    // Prepare update data - only include audio-related fields
+    const audioUpdateData = {
+      brief_transcript: data.briefTranscript,
+      detailed_transcript: data.detailedTranscript,
+      complete_transcript: data.completeTranscript,
+      brief_audio_url: data.briefAudioUrl,
+      detailed_audio_url: data.detailedAudioUrl,
+      complete_audio_url: data.completeAudioUrl,
+      audio_generated_at: new Date().toISOString()
+    };
+    
+    let result;
+    
+    if (existingPoi) {
+      // POI exists, just update audio fields
+      console.log(`POI ${poiId} exists, updating audio data only`);
       const { data: updateResult, error: updateError } = await supabaseClient
         .from('Poi')
-        .upsert({
-          id: poiId,
-          place_id: poiId,
-          formatted_address: data.formatted_address || 'Unknown location',
-          name: data.name || 'Unnamed location',
-          location: data.location || { lat: 0, lng: 0 }, // Default to 0,0 if missing
-          types: data.types || ["point_of_interest"], // Default to generic type
-          last_updated_at: new Date().toISOString(), // Current timestamp
-          ...updateData
-        })
+        .update(audioUpdateData)
+        .eq('id', poiId)
         .select();
       
       if (updateError) {
-        console.error('Error updating "Poi" table:', updateError);
-        throw new Error(`Database error: ${updateError.message || 'Failed to save POI audio data'}`);
+        console.error('Error updating audio data:', updateError);
+        throw new Error(`Database error: ${updateError.message}`);
       }
       
-      console.log(`Successfully saved audio data for POI ${poiId} to "Poi" table`);
-      return updateResult;
-    } catch (saveError) {
-      console.error('Error in main save operation:', saveError);
-      throw saveError;
+      result = updateResult;
+      console.log(`Successfully updated audio data for POI ${poiId}`);
+    } else {
+      // POI doesn't exist (unlikely), create a new record
+      console.log(`POI ${poiId} doesn't exist, creating new record`);
+      const { data: insertResult, error: insertError } = await supabaseClient
+        .from('Poi')
+        .insert({
+          id: poiId,
+          place_id: poiId,
+          name: data.name || 'Unnamed location',
+          formatted_address: data.formatted_address || 'Unknown location',
+          location: data.location || { lat: 0, lng: 0 },
+          types: data.types || ["point_of_interest"],
+          last_updated_at: new Date().toISOString(),
+          ...audioUpdateData
+        })
+        .select();
+      
+      if (insertError) {
+        console.error('Error inserting new POI record:', insertError);
+        throw new Error(`Database error: ${insertError.message}`);
+      }
+      
+      result = insertResult;
+      console.log(`Successfully created new POI record for ${poiId}`);
     }
+    
+    return result;
   } catch (error) {
     console.error('Error in saveToDatabase:', error);
     throw new Error(`Failed to save POI data to database: ${error instanceof Error ? error.message : 'Unknown error'}`);
