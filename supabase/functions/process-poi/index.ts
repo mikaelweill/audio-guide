@@ -104,9 +104,11 @@ async function processPOI(poiData: any) {
     throw new Error("POI is missing required ID field");
   }
   
-  // Prioritize using the UUID ID format (which contains hyphens) if available
+  // Ensure we have both ID formats
   const poiId = poiData.id || poiData.place_id;
-  console.log(`Using ID: ${poiId} for database operations`);
+  const placeId = poiData.place_id || poiData.id;
+  
+  console.log(`Using ID: ${poiId} and place_id: ${placeId} for database operations`);
   
   // Initialize Supabase client and OpenAI
   const supabaseClient = createClient(
@@ -153,6 +155,7 @@ async function processPOI(poiData: any) {
   // Save results to database with the UUID ID using snake_case column names
   const dbResult = await saveToDatabase(supabaseClient, poiId, {
     name: poiData.basic?.name,
+    place_id: placeId, // Explicitly set place_id
     brief_transcript: coreContent,
     detailed_transcript: secondaryContent,
     complete_transcript: tertiaryContent,
@@ -167,6 +170,7 @@ async function processPOI(poiData: any) {
   
   return {
     poiId,
+    placeId,
     audioUrls: mappedAudioUrls,
     transcripts: {
       brief: coreContent,
@@ -579,39 +583,38 @@ async function saveToDatabase(supabaseClient, poiId, data) {
     let idToUse = poiId;
     
     // If we have a place_id format (starts with Ch) but not a UUID format, log a warning
-    if (poiId.startsWith('Ch') && !poiId.includes('-')) {
-      console.warn(`Warning: Using Google Place ID (${poiId}) instead of UUID. Frontend may not find this data.`);
+    const isGooglePlaceId = poiId.startsWith('Ch') && !poiId.includes('-');
+    if (isGooglePlaceId) {
+      console.warn(`Warning: Using Google Place ID (${poiId}) for lookup - it should match place_id in database`);
     }
     
-    // Convert data to use snake_case column names (to match database schema)
-    const dataForDb = {
-      id: idToUse,
-      name: data.name,
+    // Just prepare the audio data fields to update
+    const audioOnlyFields = {
       brief_transcript: data.brief_transcript,
       detailed_transcript: data.detailed_transcript,
       complete_transcript: data.complete_transcript,
       brief_audio_url: data.brief_audio_url,
       detailed_audio_url: data.detailed_audio_url,
       complete_audio_url: data.complete_audio_url,
-      formatted_address: data.formatted_address,
-      location: data.location,
-      types: data.types,
-      last_updated_at: data.last_updated_at
+      audio_generated_at: new Date().toISOString()
     };
     
-    // Log the full data being saved for debugging
-    console.log('Saving data to database:', dataForDb);
+    // Log the fields being updated
+    console.log('Updating database with audio fields:', audioOnlyFields);
     
-    const { data: insertedData, error } = await supabaseClient
+    // Simple update operation - only update the audio-related fields
+    // Look up the row using place_id instead of id
+    const { data: updateResult, error: updateError } = await supabaseClient
       .from('Poi')
-      .upsert(dataForDb, { onConflict: 'id' });
+      .update(audioOnlyFields)
+      .eq('place_id', idToUse);
     
-    if (error) {
-      console.error(`Error saving to database: ${error.message}`);
-      throw error;
+    if (updateError) {
+      console.error(`Error updating POI audio data: ${updateError.message}`);
+      throw updateError;
     }
     
-    console.log(`Successfully added/updated POI data in database for ID: ${idToUse}`);
+    console.log(`Successfully updated audio data for POI with place_id ${idToUse}`);
     return { success: true, id: idToUse };
     
   } catch (error: any) {

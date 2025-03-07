@@ -269,7 +269,19 @@ export default function Home() {
             if (response.ok) {
               const result = await response.json();
               console.log(`✅ POI ${poi.name} succeeded:`, result);
-              return { poi, success: true, result };
+              
+              // Check if the response has the expected data structure
+              if (result.success) {
+                return { 
+                  poi, 
+                  success: true, 
+                  result,
+                  audioUrls: result.result?.audioUrls || {} 
+                };
+              } else {
+                console.error(`Response indicates failure for POI ${poi.name}:`, result);
+                return { poi, success: false, error: result.error || "Unknown error" };
+              }
             } else {
               const errorText = await response.text();
               console.error(`❌ POI ${poi.name} failed:`, errorText);
@@ -289,6 +301,13 @@ export default function Home() {
         // Report summary and show toast notification
         const successCount = results.filter(r => r.success).length;
         console.log(`✅ Successfully processed ${successCount} of ${results.length} POIs`);
+        
+        // For successful results, log the audio URLs
+        results.filter(r => r.success).forEach(r => {
+          // Use optional chaining and type assertion to avoid TypeScript errors
+          const successResult = r as { poi: any; success: true; result: any; audioUrls: any };
+          console.log(`Audio URLs for POI ${successResult.poi.name}:`, successResult.result?.result?.audioUrls || 'No audio URLs found');
+        });
         
         if (successCount > 0) {
           toast.success(`Successfully processed ${successCount} points of interest`);
