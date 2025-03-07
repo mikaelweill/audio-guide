@@ -4,6 +4,7 @@ import "./globals.css";
 import Header from "@/components/Layout/Header";
 import { AuthProvider } from "@/context/AuthContext";
 import AuthStatus from "@/components/Layout/AuthStatus";
+import DebugPanel from "@/components/Layout/DebugPanel";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -29,6 +30,7 @@ export default function RootLayout({
             {children}
           </main>
           <AuthStatus />
+          {process.env.NODE_ENV === "development" && <DebugPanel />}
         </AuthProvider>
       </body>
     </html>

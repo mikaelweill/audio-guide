@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, ReactNode, useRef } from 'react';
+import { useState, useEffect, ReactNode, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Tour } from '@/components/TourList';
@@ -15,11 +15,16 @@ const logPage = (...args: any[]) => {
 };
 
 export default function TourPage() {
-  logPage('Component rendering');
+  // Don't log on every render - this causes React DevTools to trigger re-renders
+  // logPage('Component rendering');
   const mountCountRef = useRef(0);
+  const renderCountRef = useRef(0);
   
   // Track page lifecycle and loading performance
   useEffect(() => {
+    renderCountRef.current += 1;
+    logPage(`Component rendering (render #${renderCountRef.current})`);
+    
     mountCountRef.current += 1;
     logPage(`Mounted (count: ${mountCountRef.current})`);
     
@@ -78,140 +83,134 @@ export default function TourPage() {
   // Add this state variable to track the visible transcript
   const [showTranscript, setShowTranscript] = useState(false);
   
-  // Add this helper function near the top of your component
-  const getGoogleMapsUrl = (poi: any) => {
-    console.log("Creating Google Maps URL for:", poi);
-    
+  // Add a ref to track current time without causing re-renders
+  const currentTimeRef = useRef(0);
+  const lastTimeUpdateRef = useRef(0);
+  const TIME_UPDATE_THROTTLE = 250; // Only update time display every 250ms
+  
+  // Memoize this function to prevent it from being recreated on each render
+  const getGoogleMapsUrl = useCallback((poi: any) => {
     // Try using place_id first (most reliable)
     if (poi.id && poi.id.startsWith('ChI')) {
-      console.log("Using place_id for Google Maps URL:", poi.id);
       return `https://www.google.com/maps/place/?q=place_id:${poi.id}`;
     }
     
     // Try using formatted address if available
     if (poi.formatted_address) {
-      console.log("Using formatted address for Google Maps URL:", poi.formatted_address);
       const encodedAddress = encodeURIComponent(poi.formatted_address);
       return `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
     }
     
     // If we have coordinates, use those as fallback
     if (poi.location && typeof poi.location === 'object' && poi.location.lat && poi.location.lng) {
-      console.log("Using coordinates for Google Maps URL:", poi.location);
       return `https://www.google.com/maps/search/?api=1&query=${poi.location.lat},${poi.location.lng}`;
     }
     
     // Fallback to using the name if we have it
     if (poi.name) {
-      console.log("Using name for Google Maps URL:", poi.name);
       const encodedName = encodeURIComponent(poi.name);
       return `https://www.google.com/maps/search/?api=1&query=${encodedName}`;
     }
     
     // Final fallback - generic Google Maps link
-    console.log("No valid data for Google Maps URL, using generic link");
     return "https://www.google.com/maps";
-  };
+  }, []);
   
   // Fetch tour data
   useEffect(() => {
-    const fetchTour = async () => {
-      // Create abort controller for timeout management
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        console.warn('Aborting tour fetch due to timeout');
-        controller.abort();
-      }, 8000); // 8 second timeout
-      
-      try {
-        setLoading(true);
-        
-        console.log(`Fetching tour data for ID: ${tourId}`);
-        const response = await fetch(`/api/tours/${tourId}`, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache, no-store, must-revalidate'
-          },
-          signal: controller.signal // Use the abort controller
-        });
-        
-        // Clear timeout since request completed
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          console.error(`Tour fetch failed with status: ${response.status}`);
-          
-          // Handle authentication errors specially
-          if (response.status === 401) {
-            console.error('Authentication error - not logged in or session expired');
-            setError('Authentication error: You need to log in again');
-            // No need to redirect - protected layout will handle this
-            setLoading(false);
-            return;
-          }
-          
-          try {
-            const errorText = await response.text();
-            console.error('Error response:', errorText);
-            
-            // Try to parse the error as JSON if possible
-            try {
-              const errorJson = JSON.parse(errorText);
-              setError(errorJson.error || `Error ${response.status}: Failed to load tour`);
-            } catch (e) {
-              // If not JSON, use the raw text
-              setError(`Error ${response.status}: ${errorText}`);
-            }
-          } catch (textError) {
-            setError(`Error ${response.status}: Failed to load tour data`);
-          }
-          
-          throw new Error(`Error fetching tour: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.success && data.tour) {
-          console.log('Tour data fetched successfully');
-          setTour(data.tour);
-          
-          // Once the tour is loaded, fetch any existing audio guides
-          fetchExistingAudioGuides(data.tour.tourPois);
-          
-          // Handle warning about ownership if present
-          if (data.warning) {
-            console.warn(data.warning);
-          }
-        } else {
-          setError(data.error || 'Failed to load tour data');
-        }
-      } catch (error: any) {
-        // Handle abort error specially
-        if (error.name === 'AbortError') {
-          console.error('Tour fetch aborted due to timeout');
-          setError('Request timed out. The server took too long to respond. Please try again later.');
-        } else {
-          console.error('Error fetching tour:', error);
-          setError(error instanceof Error ? error.message : 'An unknown error occurred');
-        }
-      } finally {
-        setLoading(false);
-        // Ensure timeout is cleared in all cases
-        clearTimeout(timeoutId);
-      }
-    };
-    
-    // No need for separate timeout as we're using AbortController
-    
-    if (tourId) {
-      fetchTour();
-    }
-  }, [tourId, router]);
+    fetchTour();
+  }, [tourId]);
   
-  // Add this new function to fetch existing audio guides
-  const fetchExistingAudioGuides = async (tourPois: any[]) => {
+  // Add this memoized fetchTour function before the useEffect
+  const fetchTour = useCallback(async () => {
+    // Create abort controller for timeout management
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.warn('Aborting tour fetch due to timeout');
+      controller.abort();
+    }, 8000); // 8 second timeout
+    
+    try {
+      setLoading(true);
+      
+      const response = await fetch(`/api/tours/${tourId}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
+        },
+        signal: controller.signal // Use the abort controller
+      });
+      
+      // Clear timeout since request completed
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        console.error(`Tour fetch failed with status: ${response.status}`);
+        
+        // Handle authentication errors specially
+        if (response.status === 401) {
+          console.error('Authentication error - not logged in or session expired');
+          setError('Authentication error: You need to log in again');
+          // No need to redirect - protected layout will handle this
+          setLoading(false);
+          return;
+        }
+        
+        try {
+          const errorText = await response.text();
+          console.error('Error response:', errorText);
+          
+          // Try to parse the error as JSON if possible
+          try {
+            const errorJson = JSON.parse(errorText);
+            setError(errorJson.error || `Error ${response.status}: Failed to load tour`);
+          } catch (e) {
+            // If not JSON, use the raw text
+            setError(`Error ${response.status}: ${errorText}`);
+          }
+        } catch (textError) {
+          setError(`Error ${response.status}: Failed to load tour data`);
+        }
+        
+        throw new Error(`Error fetching tour: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.tour) {
+        console.log('Tour data fetched successfully');
+        setTour(data.tour);
+        
+        // Once the tour is loaded, fetch any existing audio guides
+        fetchExistingAudioGuides(data.tour.tourPois);
+        
+        // Handle warning about ownership if present
+        if (data.warning) {
+          console.warn(data.warning);
+        }
+      } else {
+        setError(data.error || 'Failed to load tour data');
+      }
+    } catch (error: any) {
+      // Handle abort error specially
+      if (error.name === 'AbortError') {
+        console.error('Tour fetch aborted due to timeout');
+        setError('Request timed out. The server took too long to respond. Please try again later.');
+      } else {
+        console.error('Error fetching tour:', error);
+        setError(error instanceof Error ? error.message : 'An unknown error occurred');
+      }
+    } finally {
+      setLoading(false);
+      // Ensure timeout is cleared in all cases
+      clearTimeout(timeoutId);
+    }
+  }, [tourId]);
+  
+  // Also memoize this function
+  const fetchExistingAudioGuides = useCallback(async (tourPois: any[]) => {
     console.log('Checking for existing audio guides...');
     
     try {
@@ -245,13 +244,11 @@ export default function TourPage() {
         console.log('Found existing audio guides:', data.audioGuides);
         // Update the audio data state with existing guides
         setAudioData(data.audioGuides);
-      } else {
-        console.log('No existing audio guides found or error:', data.error || 'Unknown error');
       }
     } catch (error) {
       console.error('Error fetching existing audio guides:', error);
     }
-  };
+  }, []);
   
   // Navigate to the next or previous stop
   const goToStop = (index: number) => {
@@ -373,8 +370,8 @@ export default function TourPage() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
   
-  // Update the playAudio function with better loading/error handling
-  const playAudio = (url: string, label: string) => {
+  // Update the playAudio function with throttling for timeupdate events
+  const playAudio = useCallback((url: string, label: string) => {
     console.log(`Attempting to play audio: ${label} from URL: ${url}`);
     
     if (!url) {
@@ -440,9 +437,6 @@ export default function TourPage() {
           const errorMessage = errorMessages[audio.error.code] || "Unknown error";
           
           console.warn(`Audio error: ${errorMessage}. Trying with download approach...`);
-          
-          // Don't show alert - we'll try to recover
-          // alert(`Failed to play audio: ${errorMessage}. Please try downloading the file instead.`);
         }
         
         setIsAudioLoading(false);
@@ -482,8 +476,17 @@ export default function TourPage() {
         setIsPlaying(true);
       });
       
+      // Modify the timeupdate event to use throttling
       audio.addEventListener('timeupdate', () => {
-        setCurrentTime(audio.currentTime);
+        // Always update the ref in real-time (no re-render)
+        currentTimeRef.current = audio.currentTime;
+        
+        // Only update the state (causing re-render) at throttled intervals
+        const now = Date.now();
+        if (now - lastTimeUpdateRef.current > TIME_UPDATE_THROTTLE) {
+          setCurrentTime(audio.currentTime);
+          lastTimeUpdateRef.current = now;
+        }
       });
       
       audio.addEventListener('playing', () => {
@@ -523,10 +526,10 @@ export default function TourPage() {
       setIsPlaying(false);
       alert(`Error setting up audio playback: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  };
+  }, [audioElement, isAudioLoading]);
   
-  // Add these control functions
-  const togglePlayPause = () => {
+  // Make these control functions memoized callbacks
+  const togglePlayPause = useCallback(() => {
     if (!audioElement) return;
     
     if (isPlaying) {
@@ -537,15 +540,15 @@ export default function TourPage() {
         alert(`Could not play audio: ${error.message}`);
       });
     }
-  };
+  }, [audioElement, isPlaying]);
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = parseFloat(e.target.value);
     if (audioElement) {
       audioElement.currentTime = newTime;
       setCurrentTime(newTime);
     }
-  };
+  }, [audioElement]);
   
   // Fix currentStop declaration position
   // This will ensure currentStop is defined before it's used in useEffect
