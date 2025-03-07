@@ -169,9 +169,6 @@ export default function Home() {
       
       console.log('✅ HOME: Tour saved successfully with ID:', data.tourId);
       
-      // Show success notification
-      toast.success('Tour saved successfully!');
-      
       // If we have valid tour data with POIs, process them with Supabase
       if (tourData.route && tourData.route.length > 0) {
         processPOIsWithSupabase(tourData.route, data.tourId);
@@ -189,10 +186,10 @@ export default function Home() {
     }
   };
   
-  // New function to process POIs with Supabase Edge Function
+  // Process POIs with Supabase Edge Function
   const processPOIsWithSupabase = async (pois: any[], tourId: string) => {
     try {
-      console.log("🔊 HOME: Calling Supabase functions for audio guides...");
+      console.log(`🔊 HOME: Processing ${pois.length} POIs in parallel with individual Edge Function calls...`);
       
       const { createClient } = require('@/utils/supabase/client');
       const supabase = createClient();
@@ -200,49 +197,110 @@ export default function Home() {
       const accessToken = authData.session?.access_token;
       
       if (accessToken && pois.length > 0) {
-        const firstPoi = pois[0];
+        // Process at most 3 POIs in parallel as a test
+        const poisToProcess = pois.slice(0, 3);
+        console.log(`🎯 Processing ${poisToProcess.length} POIs in parallel`);
         
-        console.log(`🎯 HOME: Processing first POI: ${firstPoi.name}`);
-        
-        const response = await fetch(
-          'https://uzqollduvddowyzjvmzn.supabase.co/functions/v1/process-poi',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({ 
-              poiData: {
-                id: firstPoi.place_id,
-                place_id: firstPoi.place_id,
-                basic: {
-                  name: firstPoi.name,
-                  formatted_address: firstPoi.vicinity || '',
-                  location: firstPoi.geometry?.location || { lat: 0, lng: 0 },
-                  types: firstPoi.types || ["point_of_interest"],
-                },
-                wikipedia: { extract: "Short test extract for Wikipedia." },
-                wikivoyage: { extract: "Short test extract for Wikivoyage." }
-              }
-            }),
-          }
+        // First, fetch Wikipedia & Wikivoyage content for each POI
+        const poisWithExtracts = await Promise.all(
+          poisToProcess.map(async (poi) => {
+            try {
+              // Get Wikipedia extract if available
+              const wikipediaResponse = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(poi.name)}`);
+              const wikipediaData = wikipediaResponse.ok ? await wikipediaResponse.json() : null;
+              
+              // Get Wikivoyage extract if available (simplified - this would need actual wikivoyage API)
+              const wikivoyageData = null; // For now, we'll just use Wikipedia data
+              
+              return {
+                ...poi,
+                extraData: {
+                  wikipedia: wikipediaData ? {
+                    extract: wikipediaData.extract || "No Wikipedia information found.",
+                    url: wikipediaData.content_urls?.desktop?.page || ""
+                  } : { extract: "No Wikipedia information available." },
+                  wikivoyage: wikivoyageData || { extract: "No Wikivoyage information available." }
+                }
+              };
+            } catch (error) {
+              console.error(`Error fetching data for POI ${poi.name}:`, error);
+              return {
+                ...poi,
+                extraData: {
+                  wikipedia: { extract: "Could not fetch Wikipedia data." },
+                  wikivoyage: { extract: "Could not fetch Wikivoyage data." }
+                }
+              };
+            }
+          })
         );
         
-        console.log(`🎙️ HOME: Supabase function response status:`, response.status);
+        // Create an array of promises (one for each POI)
+        const processingPromises = poisWithExtracts.map(poi => {
+          console.log(`Creating promise for POI: ${poi.name} (ID: ${poi.id}, place_id: ${poi.place_id})`);
+          console.log(`Wikipedia extract length: ${poi.extraData?.wikipedia?.extract?.length || 0} characters`);
+          
+          return fetch(
+            'https://uzqollduvddowyzjvmzn.supabase.co/functions/v1/process-poi',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({ 
+                poiData: {
+                  id: poi.id, // Send the UUID format ID that the frontend expects
+                  place_id: poi.place_id,
+                  basic: {
+                    name: poi.name,
+                    formatted_address: poi.vicinity || poi.formatted_address || '',
+                    location: poi.geometry?.location || { lat: 0, lng: 0 },
+                    types: poi.types || ["point_of_interest"],
+                  },
+                  wikipedia: poi.extraData?.wikipedia || { extract: "No Wikipedia information available." },
+                  wikivoyage: poi.extraData?.wikivoyage || { extract: "No Wikivoyage information available." }
+                }
+              }),
+            }
+          )
+          .then(async response => {
+            console.log(`🎙️ POI ${poi.name} response status:`, response.status);
+            if (response.ok) {
+              const result = await response.json();
+              console.log(`✅ POI ${poi.name} succeeded:`, result);
+              return { poi, success: true, result };
+            } else {
+              const errorText = await response.text();
+              console.error(`❌ POI ${poi.name} failed:`, errorText);
+              return { poi, success: false, error: errorText };
+            }
+          })
+          .catch(error => {
+            console.error(`❌ Error processing POI ${poi.name}:`, error);
+            return { poi, success: false, error };
+          });
+        });
         
-        if (response.ok) {
-          const result = await response.json();
-          console.log("✅ HOME: Supabase function succeeded:", result);
+        // Wait for all POIs to be processed in parallel
+        console.log(`Waiting for all ${processingPromises.length} POIs to complete processing...`);
+        const results = await Promise.all(processingPromises);
+        
+        // Report summary and show toast notification
+        const successCount = results.filter(r => r.success).length;
+        console.log(`✅ Successfully processed ${successCount} of ${results.length} POIs`);
+        
+        if (successCount > 0) {
+          toast.success(`Successfully processed ${successCount} points of interest`);
         } else {
-          const errorText = await response.text();
-          console.error("❌ HOME: Supabase function failed:", errorText);
+          toast.error("Failed to process any points of interest");
         }
       } else {
         console.warn("⚠️ HOME: No access token or POIs available for Supabase functions");
       }
     } catch (error) {
       console.error("❌ HOME: Error with Supabase functions:", error);
+      toast.error("Error processing tour content");
     }
   };
   

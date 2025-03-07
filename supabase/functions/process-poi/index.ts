@@ -9,170 +9,173 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400'
 }
 
-serve(async (req) => {
-  // Handle CORS preflight requests
+// Main handler for the function
+serve(async (req: Request) => {
+  // Enable CORS
   if (req.method === 'OPTIONS') {
-    console.log('Handling CORS preflight request');
-    return new Response('ok', { headers: corsHeaders, status: 200 });
+    return new Response('ok', {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   }
 
   try {
-    // Get request data
-    const { poiData } = await req.json()
+    const { poiData, poisArray } = await req.json();
     
-    if (!poiData || !poiData.basic || !poiData.basic.name) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid POI data. Must include basic information.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+    // Handle either a single POI or an array of POIs
+    if (poisArray && Array.isArray(poisArray) && poisArray.length > 0) {
+      console.log(`Processing ${poisArray.length} POIs in parallel`);
+      
+      // Process multiple POIs in parallel
+      const results = await Promise.all(
+        poisArray.map(async (poi) => {
+          try {
+            const result = await processPOI(poi);
+            return { 
+              poiId: poi.id || poi.place_id,
+              success: true, 
+              result 
+            };
+          } catch (error: any) {
+            console.error(`Error processing POI ${poi.id || poi.place_id}:`, error);
+            return { 
+              poiId: poi.id || poi.place_id,
+              success: false, 
+              error: error.message 
+            };
+          }
+        })
       );
-    }
-    
-    // Initialize Supabase client (for database queries and updates)
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-    
-    // Check if this POI already has audio content
-    const poiId = poiData.id || poiData.place_id;
-    console.log(`Checking if POI ${poiData.basic.name} (${poiId}) already has content...`);
-    
-    const { data: existingAudio, error: queryError } = await supabaseClient
-      .from('Poi')
-      .select('brief_audio_url, detailed_audio_url, complete_audio_url, brief_transcript, detailed_transcript, complete_transcript')
-      .eq('id', poiId)
-      .single();
-    
-    // If we have all the content and audio URLs, return them without regenerating
-    if (!queryError && existingAudio && 
-        existingAudio.brief_audio_url && 
-        existingAudio.detailed_audio_url && 
-        existingAudio.complete_audio_url) {
-      console.log(`POI ${poiData.basic.name} already has audio - returning existing data`);
+      
       return new Response(
-        JSON.stringify({
-          success: true,
-          poiId: poiId,
-          name: poiData.basic.name,
-          audioFiles: {
-            coreAudioUrl: existingAudio.brief_audio_url,
-            secondaryAudioUrl: existingAudio.detailed_audio_url,
-            tertiaryAudioUrl: existingAudio.complete_audio_url
-          },
-          content: {
-            core: existingAudio.brief_transcript,
-            secondary: existingAudio.detailed_transcript,
-            tertiary: existingAudio.complete_transcript
-          },
-          existingContent: true
-        }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200 
+        JSON.stringify({ success: true, results }),
+        {
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          }
         }
       );
-    }
-    
-    if (queryError) {
-      console.log(`Could not find existing POI data, will generate new content. Error: ${queryError.message}`);
-    } else {
-      console.log(`POI ${poiData.basic.name} needs new or updated content.`);
-    }
-    
-    // Initialize OpenAI
-    const openai = new OpenAI({
-      apiKey: Deno.env.get('OPENAI_API_KEY'),
-    })
-    
-    // 1. Generate all content in parallel (where possible)
-    console.log(`Generating content for ${poiData.basic.name}...`);
-    
-    // Generate core content
-    const coreContent = await generateCoreContent(openai, poiData);
-    
-    // Generate secondary and tertiary content in parallel
-    const [secondaryContent, tertiaryContent] = await Promise.all([
-      generateSecondaryContent(openai, poiData, coreContent),
-      generateTertiaryContent(openai, poiData, coreContent)
-    ]);
-    
-    // Generate credits
-    const credits = generateCredits(poiData);
-    
-    const content = {
-      core: coreContent,
-      secondary: secondaryContent,
-      tertiary: tertiaryContent,
-      credits: credits
-    };
-    
-    // 2. Generate speech in parallel
-    console.log(`Converting to speech for ${poiData.basic.name}...`);
-    
-    const voice = 'nova'; // Default voice
-    const contentMappings = [
-      { contentType: 'brief', text: content.core },
-      { contentType: 'detailed', text: content.secondary },
-      { contentType: 'complete', text: content.tertiary }
-    ];
-    
-    // Replace with this more resilient approach:
-    const audioUrls = await processAllContentTypes(contentMappings, poiId, voice, supabaseClient, openai);
-    
-    // 3. Save results to database
-    console.log(`Saving results for ${poiData.basic.name}...`);
-    
-    await saveToDatabase(supabaseClient, poiData.id || poiData.place_id, {
-      name: poiData.basic.name,
-      briefTranscript: content.core,
-      detailedTranscript: content.secondary,
-      completeTranscript: content.tertiary,
-      briefAudioUrl: audioUrls.coreAudioUrl,
-      detailedAudioUrl: audioUrls.secondaryAudioUrl,
-      completeAudioUrl: audioUrls.tertiaryAudioUrl,
-      formatted_address: poiData?.basic?.formatted_address || poiData?.vicinity || 'Unknown location',
-      location: poiData?.basic?.location || { lat: 0, lng: 0 },
-      types: poiData?.basic?.types || ["point_of_interest"],
-      last_updated_at: new Date().toISOString()
-    });
-    
-    // Return success
-    return new Response(
-      JSON.stringify({
-        success: true,
-        poiId: poiData.id || poiData.place_id,
-        name: poiData.basic.name,
-        audioFiles: {
-          coreAudioUrl: audioUrls.coreAudioUrl,
-          secondaryAudioUrl: audioUrls.secondaryAudioUrl,
-          tertiaryAudioUrl: audioUrls.tertiaryAudioUrl
-        },
-        content: {
-          core: content.core,
-          secondary: content.secondary,
-          tertiary: content.tertiary,
-          credits: content.credits
+    } 
+    // Handle single POI (backwards compatibility)
+    else if (poiData) {
+      const result = await processPOI(poiData);
+      return new Response(
+        JSON.stringify({ success: true, result }),
+        {
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          }
         }
-      }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
-      }
-    )
-  } catch (error) {
-    console.error('Error processing POI:', error);
+      );
+    } 
+    else {
+      throw new Error("No valid POI data provided");
+    }
+  } catch (error: any) {
+    console.error("Error processing request:", error);
     return new Response(
       JSON.stringify({ 
-        error: error.message || 'Unknown error',
-        details: error.stack || 'No stack trace available'
+        success: false, 
+        error: error.message || "Unknown error",
+        stack: error.stack
       }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500 
+      {
+        status: 500,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
       }
     );
   }
 });
+
+// Function to process a single POI
+async function processPOI(poiData: any) {
+  console.log(`Processing POI: ${poiData.basic?.name || poiData.id || 'unknown'}`);
+  
+  // Validate POI data
+  if (!poiData.id && !poiData.place_id) {
+    throw new Error("POI is missing required ID field");
+  }
+  
+  // Prioritize using the UUID ID format (which contains hyphens) if available
+  const poiId = poiData.id || poiData.place_id;
+  console.log(`Using ID: ${poiId} for database operations`);
+  
+  // Initialize Supabase client and OpenAI
+  const supabaseClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  );
+  
+  const openai = new OpenAI({
+    apiKey: Deno.env.get('OPENAI_API_KEY'),
+  });
+  
+  // Generate all content using proper prompting and OpenAI
+  console.log(`Generating content for ${poiData.basic?.name}...`);
+  
+  // Generate core content using Wikipedia/Wikivoyage data
+  const coreContent = await generateCoreContent(openai, poiData);
+  
+  // Generate secondary and tertiary content in parallel
+  const [secondaryContent, tertiaryContent] = await Promise.all([
+    generateSecondaryContent(openai, poiData, coreContent),
+    generateTertiaryContent(openai, poiData, coreContent)
+  ]);
+  
+  // Generate credits
+  const credits = generateCredits(poiData);
+  
+  // Prepare content mappings for audio generation
+  const contentMappings = [
+    { contentType: 'brief', text: coreContent },
+    { contentType: 'detailed', text: secondaryContent },
+    { contentType: 'complete', text: tertiaryContent }
+  ];
+  
+  // Process all content types in parallel to get audio URLs
+  const audioResults = await processAllContentTypes(contentMappings, poiId, 'nova', supabaseClient, openai);
+  
+  // Make sure our result keys match the database column names
+  const mappedAudioUrls = {
+    brief_audio_url: audioResults.coreAudioUrl,
+    detailed_audio_url: audioResults.secondaryAudioUrl, 
+    complete_audio_url: audioResults.tertiaryAudioUrl
+  };
+  
+  // Save results to database with the UUID ID using snake_case column names
+  const dbResult = await saveToDatabase(supabaseClient, poiId, {
+    name: poiData.basic?.name,
+    brief_transcript: coreContent,
+    detailed_transcript: secondaryContent,
+    complete_transcript: tertiaryContent,
+    brief_audio_url: audioResults.coreAudioUrl,
+    detailed_audio_url: audioResults.secondaryAudioUrl,
+    complete_audio_url: audioResults.tertiaryAudioUrl,
+    formatted_address: poiData?.basic?.formatted_address || poiData?.vicinity || 'Unknown location',
+    location: poiData?.basic?.location || { lat: 0, lng: 0 },
+    types: poiData?.basic?.types || ["point_of_interest"],
+    last_updated_at: new Date().toISOString()
+  });
+  
+  return {
+    poiId,
+    audioUrls: mappedAudioUrls,
+    transcripts: {
+      brief: coreContent,
+      detailed: secondaryContent,
+      complete: tertiaryContent
+    },
+    dbResult
+  };
+}
 
 // Helper functions for content generation
 async function generateCoreContent(openai, poiData) {
@@ -424,43 +427,66 @@ async function textToSpeech(text, voice = 'nova', openai) {
 
 // Replace with this properly parallel approach:
 async function processAllContentTypes(contentMappings, poiId, voice, supabaseClient, openai) {
-  console.log(`Processing ${contentMappings.length} content types in parallel`);
+  console.log(`Processing ${contentMappings.length} content types in PARALLEL`);
   
-  // Create promises for each content type without awaiting them
+  // Debug to check exactly what's being passed
+  console.log(`Content types to process:`, contentMappings.map(c => c.contentType).join(', '));
+  
+  // Create promises for each content type WITHOUT awaiting them
   const processingPromises = contentMappings.map(({ contentType, text }) => {
+    console.log(`Creating promise for ${contentType} content (not awaiting yet)`);
     // Return a promise that includes both the content type and the result
     return processContentType(contentType, text, poiId, voice, supabaseClient, openai)
-      .then(result => ({ contentType, result }))
+      .then(result => ({
+        type: contentType,
+        audioUrl: result.audioUrl
+      }))
       .catch(error => {
         console.error(`Error processing ${contentType} content:`, error);
-        // Return a partial result with the content type but no audio URL
-        return { contentType, result: { audioUrl: '' } };
+        return {
+          type: contentType,
+          error: error.message || 'Unknown error'
+        };
       });
   });
   
-  // Wait for all promises to resolve in parallel
+  // Wait for ALL content types to complete in parallel
+  console.log(`Waiting for all ${processingPromises.length} promises to resolve...`);
   const results = await Promise.all(processingPromises);
   
-  // Build the result object
-  const audioUrls = {
-    coreAudioUrl: '',
-    secondaryAudioUrl: '',
-    tertiaryAudioUrl: ''
+  console.log(`All ${results.length} promises have resolved`);
+  
+  // Process results and determine what succeeded/failed
+  const successfulResults = results.filter(r => r.audioUrl);
+  const failedResults = results.filter(r => r.error);
+  
+  console.log(`${successfulResults.length} succeeded, ${failedResults.length} failed`);
+  
+  if (failedResults.length > 0) {
+    console.warn('Failed content types:', failedResults.map(r => r.type).join(', '));
+  }
+  
+  // Map results to a more convenient structure for caller
+  // Update to use snake_case for returned property names to match database schema
+  const resultMap = {
+    coreAudioUrl: results.find(r => r.type === 'brief')?.audioUrl || null,
+    secondaryAudioUrl: results.find(r => r.type === 'detailed')?.audioUrl || null,
+    tertiaryAudioUrl: results.find(r => r.type === 'complete')?.audioUrl || null
   };
   
-  // Map results to the appropriate properties
-  results.forEach(({ contentType, result }) => {
-    if (contentType === 'brief') {
-      audioUrls.coreAudioUrl = result.audioUrl;
-    } else if (contentType === 'detailed') {
-      audioUrls.secondaryAudioUrl = result.audioUrl;
-    } else if (contentType === 'complete') {
-      audioUrls.tertiaryAudioUrl = result.audioUrl;
-    }
-    console.log(`Successfully processed ${contentType} content`);
-  });
+  // Make sure all promises resolved successfully
+  if (Object.values(resultMap).some(v => v === null)) {
+    const missingTypes = [];
+    if (!resultMap.coreAudioUrl) missingTypes.push('brief');
+    if (!resultMap.secondaryAudioUrl) missingTypes.push('detailed');
+    if (!resultMap.tertiaryAudioUrl) missingTypes.push('complete');
+    
+    console.warn(`Warning: Some audio types failed to process: ${missingTypes.join(', ')}`);
+  } else {
+    console.log(`All 3 promises have resolved`);
+  }
   
-  return audioUrls;
+  return resultMap;
 }
 
 // Helper functions for processing content and generating audio
@@ -547,78 +573,49 @@ async function storeAudioFile(
 
 async function saveToDatabase(supabaseClient, poiId, data) {
   try {
-    console.log(`Attempting to save data for POI ID: ${poiId}`);
-
-    // First check if the POI exists
-    const { data: existingPoi, error: checkError } = await supabaseClient
-      .from('Poi')
-      .select('id')
-      .eq('id', poiId)
-      .single();
+    console.log(`Adding audio data for POI ID: ${poiId}`);
     
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Error checking POI existence:', checkError);
-      throw new Error(`Database error: ${checkError.message}`);
+    // Check which ID format we have - prefer the UUID format that frontend expects
+    let idToUse = poiId;
+    
+    // If we have a place_id format (starts with Ch) but not a UUID format, log a warning
+    if (poiId.startsWith('Ch') && !poiId.includes('-')) {
+      console.warn(`Warning: Using Google Place ID (${poiId}) instead of UUID. Frontend may not find this data.`);
     }
     
-    // Prepare update data - only include audio-related fields
-    const audioUpdateData = {
-      brief_transcript: data.briefTranscript,
-      detailed_transcript: data.detailedTranscript,
-      complete_transcript: data.completeTranscript,
-      brief_audio_url: data.briefAudioUrl,
-      detailed_audio_url: data.detailedAudioUrl,
-      complete_audio_url: data.completeAudioUrl,
-      audio_generated_at: new Date().toISOString()
+    // Convert data to use snake_case column names (to match database schema)
+    const dataForDb = {
+      id: idToUse,
+      name: data.name,
+      brief_transcript: data.brief_transcript,
+      detailed_transcript: data.detailed_transcript,
+      complete_transcript: data.complete_transcript,
+      brief_audio_url: data.brief_audio_url,
+      detailed_audio_url: data.detailed_audio_url,
+      complete_audio_url: data.complete_audio_url,
+      formatted_address: data.formatted_address,
+      location: data.location,
+      types: data.types,
+      last_updated_at: data.last_updated_at
     };
     
-    let result;
+    // Log the full data being saved for debugging
+    console.log('Saving data to database:', dataForDb);
     
-    if (existingPoi) {
-      // POI exists, just update audio fields
-      console.log(`POI ${poiId} exists, updating audio data only`);
-      const { data: updateResult, error: updateError } = await supabaseClient
-        .from('Poi')
-        .update(audioUpdateData)
-        .eq('id', poiId)
-        .select();
-      
-      if (updateError) {
-        console.error('Error updating audio data:', updateError);
-        throw new Error(`Database error: ${updateError.message}`);
-      }
-      
-      result = updateResult;
-      console.log(`Successfully updated audio data for POI ${poiId}`);
-    } else {
-      // POI doesn't exist (unlikely), create a new record
-      console.log(`POI ${poiId} doesn't exist, creating new record`);
-      const { data: insertResult, error: insertError } = await supabaseClient
-        .from('Poi')
-        .insert({
-          id: poiId,
-          place_id: poiId,
-          name: data.name || 'Unnamed location',
-          formatted_address: data.formatted_address || 'Unknown location',
-          location: data.location || { lat: 0, lng: 0 },
-          types: data.types || ["point_of_interest"],
-          last_updated_at: new Date().toISOString(),
-          ...audioUpdateData
-        })
-        .select();
-      
-      if (insertError) {
-        console.error('Error inserting new POI record:', insertError);
-        throw new Error(`Database error: ${insertError.message}`);
-      }
-      
-      result = insertResult;
-      console.log(`Successfully created new POI record for ${poiId}`);
+    const { data: insertedData, error } = await supabaseClient
+      .from('Poi')
+      .upsert(dataForDb, { onConflict: 'id' });
+    
+    if (error) {
+      console.error(`Error saving to database: ${error.message}`);
+      throw error;
     }
     
-    return result;
-  } catch (error) {
-    console.error('Error in saveToDatabase:', error);
-    throw new Error(`Failed to save POI data to database: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.log(`Successfully added/updated POI data in database for ID: ${idToUse}`);
+    return { success: true, id: idToUse };
+    
+  } catch (error: any) {
+    console.error(`Error in saveToDatabase: ${error.message}`);
+    throw error;
   }
 } 
