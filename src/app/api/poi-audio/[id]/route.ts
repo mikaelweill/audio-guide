@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-// Initialize Prisma client
-const prisma = new PrismaClient();
+import prisma from '@/lib/prisma'; // Import shared Prisma instance
 
 type RouteParams = {
   params: {

@@ -1,188 +1,151 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@/utils/supabase/server';
 import prisma from '@/lib/prisma';
-import { cookies } from 'next/headers';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  console.log('⭐️ Tour ID API: Request started');
+  console.time('tour-api-timer');
+  
   try {
     // Properly await params to fix the warning
     const tourId = await Promise.resolve(params.id);
-    console.log(`Tour API: Fetching tour with ID ${tourId}`);
+    console.log(`⭐️ Tour ID API: Fetching tour with ID ${tourId}`);
     
     // Log the cookies we're receiving (only names for security)
     const cookieList = request.cookies.getAll().map(c => c.name);
-    console.log(`Tour API: Received cookies: ${cookieList.join(', ')}`);
+    console.log(`⭐️ Tour ID API: Received cookies: ${cookieList.join(', ')}`);
+    
+    // Validate tour ID
+    if (!tourId) {
+      console.error('⭐️ Tour ID API: No tour ID provided');
+      return NextResponse.json({ 
+        success: false, 
+        error: 'No tour ID provided' 
+      }, { status: 400 });
+    }
     
     // Create a Supabase client
-    console.log('Tour API: Creating Supabase client');
-
-    // We need to use request cookies here since they're directly accessible
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get: (name) => {
-            return request.cookies.get(name)?.value || '';
-          },
-          set: () => {}, // We're only reading in API routes
-          remove: () => {}, // We're only reading in API routes
-        },
-      }
-    );
-    
-    console.log('Tour API: Fetching session');
-    const { data, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError) {
-      console.error('Tour API: Session error:', sessionError);
-      return NextResponse.json(
-        { success: false, error: 'Session error: ' + sessionError.message },
-        { status: 401 }
-      );
-    }
-    
-    const session = data.session;
-    
-    if (!session) {
-      console.log('Tour API: No active session found');
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized - No active session' },
-        { status: 401 }
-      );
-    }
-    
-    const userId = session.user.id;
-    
-    console.log(`Tour API: Authenticated user ID ${userId}, fetching tour ID ${tourId}`);
-    
-    // Try using Prisma first
+    console.log('⭐️ Tour ID API: Creating Supabase client');
     try {
-      console.log('Tour API: Attempting to fetch tour with Prisma');
-      const tour = await prisma.tour.findFirst({
-        where: {
-          id: tourId,
-          // Temporarily commenting out user check to see if we can get the tour
-          // user_id: userId
-        },
-        include: {
-          tourPois: {
-            include: {
-              poi: true
-            },
-            orderBy: {
-              sequence_number: 'asc'
-            }
-          }
-        }
-      });
+      console.time('supabase-client-creation');
+      const supabase = await createClient();
+      console.timeEnd('supabase-client-creation');
       
-      if (!tour) {
-        console.log(`Tour API: Tour with ID ${tourId} not found`);
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Tour not found' 
-        }, { status: 404 });
+      console.log('⭐️ Tour ID API: Fetching session');
+      console.time('session-fetch');
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      console.timeEnd('session-fetch');
+      
+      if (sessionError) {
+        console.error('⭐️ Tour ID API: Session error:', sessionError);
+        return NextResponse.json(
+          { success: false, error: 'Session error: ' + sessionError.message },
+          { status: 401 }
+        );
       }
       
-      // Check if this tour belongs to the user
-      if (tour.user_id !== userId) {
-        console.log(`Tour API: Tour found but belongs to user ${tour.user_id}, not ${userId}`);
-        // For debugging purposes, return the tour anyway
-        return NextResponse.json({ 
-          success: true, 
-          tour,
-          warning: 'This tour belongs to another user'
-        }, { status: 200 });
+      const session = data.session;
+      
+      if (!session) {
+        console.log('⭐️ Tour ID API: No active session found');
+        return NextResponse.json(
+          { success: false, error: 'Unauthorized - No active session' },
+          { status: 401 }
+        );
       }
       
-      console.log(`Tour API: Found tour with Prisma`);
+      const userId = session.user.id;
       
-      return NextResponse.json({ 
-        success: true, 
-        tour
-      }, { status: 200 });
+      console.log(`⭐️ Tour ID API: Authenticated user ID ${userId}, fetching tour ID ${tourId}`);
       
-    } catch (prismaError) {
-      console.error('Tour API: Error fetching tour with Prisma:', prismaError);
-      
-      // Fallback to Supabase query if Prisma fails
-      console.log('Tour API: Falling back to Supabase query');
-      
-      // Get tour with tourPois and pois
-      const { data: tour, error } = await supabase
-        .from('Tour')
-        .select(`
-          id, 
-          name, 
-          description,
-          created_at,
-          last_updated_at,
-          start_location, 
-          end_location,
-          return_to_start,
-          transportation_mode,
-          total_distance,
-          total_duration,
-          google_maps_url,
-          tourPois (
-            id,
-            sequence_number,
-            poi:Poi (
-              id,
-              name,
-              formatted_address,
-              location,
-              types,
-              rating,
-              photo_references
-            )
-          )
-        `)
-        .eq('id', tourId)
-        .eq('user_id', userId)
-        .single();
-      
-      if (error) {
-        if (error.code === 'PGRST116') {
-          console.log(`Tour API: Tour with ID ${tourId} not found or does not belong to user ${userId}`);
+      // Try using Prisma directly without fallbacks
+      try {
+        console.log('⭐️ Tour ID API: Fetching tour with Prisma - START');
+        console.time('prisma-fetch');
+        
+        // First, just check if the tour exists at all
+        const tourExists = await prisma.tour.findUnique({
+          where: { id: tourId },
+          select: { id: true }
+        });
+        
+        console.log(`⭐️ Tour ID API: Tour exists check: ${!!tourExists}`);
+        
+        if (!tourExists) {
+          console.log(`⭐️ Tour ID API: Tour with ID ${tourId} not found`);
+          console.timeEnd('tour-api-timer');
           return NextResponse.json({ 
             success: false, 
             error: 'Tour not found' 
           }, { status: 404 });
         }
         
-        console.error('Tour API: Error fetching tour with Supabase:', error);
+        // Now fetch the full tour with related data
+        const tour = await prisma.tour.findFirst({
+          where: {
+            id: tourId,
+            // Including user check now
+            user_id: userId
+          },
+          include: {
+            tourPois: {
+              include: {
+                poi: true
+              },
+              orderBy: {
+                sequence_number: 'asc'
+              }
+            }
+          }
+        });
+        
+        console.timeEnd('prisma-fetch');
+        console.log('⭐️ Tour ID API: Prisma fetch completed');
+        
+        if (!tour) {
+          console.log(`⭐️ Tour ID API: Tour with ID ${tourId} not found or not owned by user ${userId}`);
+          console.timeEnd('tour-api-timer');
+          return NextResponse.json({ 
+            success: false, 
+            error: 'Tour not found or you do not have permission to access it' 
+          }, { status: 404 });
+        }
+        
+        console.log(`⭐️ Tour ID API: Found tour with Prisma, returning data`);
+        console.timeEnd('tour-api-timer');
+        
+        return NextResponse.json({ 
+          success: true, 
+          tour
+        }, { status: 200 });
+        
+      } catch (prismaError) {
+        console.error('⭐️ Tour ID API: Error fetching tour with Prisma:', prismaError);
+        console.timeEnd('tour-api-timer');
+        
         return NextResponse.json({ 
           success: false, 
-          error: error.message 
+          error: 'Database error: ' + (prismaError instanceof Error ? prismaError.message : 'Unknown error')
         }, { status: 500 });
       }
-      
-      if (!tour) {
-        console.log(`Tour API: Tour with ID ${tourId} not found or does not belong to user ${userId}`);
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Tour not found' 
-        }, { status: 404 });
-      }
-      
-      console.log(`Tour API: Found tour with Supabase`);
-      
+    } catch (supabaseError) {
+      console.error('⭐️ Tour ID API: Error creating Supabase client:', supabaseError);
+      console.timeEnd('tour-api-timer');
       return NextResponse.json({ 
-        success: true, 
-        tour
-      }, { status: 200 });
+        success: false, 
+        error: 'Error creating authentication client' 
+      }, { status: 500 });
     }
   } catch (error) {
-    console.error('Tour API: Unexpected error:', error);
+    console.error('⭐️ Tour ID API: Unexpected error:', error);
     if (error instanceof Error) {
-      console.error('Tour API: Error details:', error.message);
-      console.error('Tour API: Error stack:', error.stack);
+      console.error('⭐️ Tour ID API: Error details:', error.message);
+      console.error('⭐️ Tour ID API: Error stack:', error.stack);
     }
+    console.timeEnd('tour-api-timer');
     return NextResponse.json({ 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error'

@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  // Disable strict mode to prevent double-rendering that causes auth issues
+  reactStrictMode: false,
   images: {
     domains: ['maps.googleapis.com', 'lh3.googleusercontent.com'],
   },
@@ -16,16 +17,36 @@ const nextConfig = {
     // Only use this for deployment if you're handling type checking separately
     ignoreBuildErrors: true,
   },
-  // Ensure API routes are handled properly
+  // Improve caching for better navigation
   async headers() {
     return [
       {
-        // Apply these headers to all routes
-        source: '/(.*)',
+        // API routes - no caching
+        source: '/api/:path*',
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=0, must-revalidate',
+            value: 'no-store, must-revalidate',
+          }
+        ],
+      },
+      {
+        // Static assets - cache aggressively
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          }
+        ],
+      },
+      {
+        // Regular pages - allow some caching
+        source: '/((?!api|_next/static).*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=60, stale-while-revalidate=300',
           }
         ],
       },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/server';
 import { cookies } from 'next/headers';
 
 // Initialize OpenAI client (server-side only)
@@ -11,7 +11,7 @@ const openai = new OpenAI({
 export async function POST(request: NextRequest) {
   try {
     // Authentication check
-    const supabase = createServerComponentClient({ cookies });
+    const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
     
     // TEMPORARILY DISABLED FOR TESTING

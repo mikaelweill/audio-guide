@@ -1,9 +1,12 @@
 import prisma from '@/lib/prisma';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/utils/supabase/client';
 import { POI, TourPreferences } from '@/lib/places-api';
 import axios from 'axios';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaClientKnownRequestError, PrismaClientValidationError } from '@prisma/client/runtime/library';
+
+// Initialize the singleton Supabase client
+const supabase = createClient();
 
 // Type for tour creation
 interface CreateTourInput {

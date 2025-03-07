@@ -1,11 +1,19 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, Fragment } from 'react';
 import { Autocomplete } from '@react-google-maps/api';
 import POISelection from './POISelection';
 import TourResult from './TourResult';
 import { POI, TourPreferences as ApiTourPreferences, discoverPOIs } from '@/lib/places-api';
-import { supabase } from '@/lib/supabase';
+import { Dialog, Transition } from '@headlessui/react';
+import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import { useForm } from 'react-hook-form';
+import { GoogleMap, Marker } from '@react-google-maps/api';
+import { createClient } from '@/utils/supabase/client';
+
+// Initialize the singleton Supabase client
+const supabase = createClient();
 
 interface Location {
   address: string;

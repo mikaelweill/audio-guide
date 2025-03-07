@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     
     // Get the user session using our server client
     console.log('Tour API: Creating Supabase client');
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     
     // Fetch the session
     console.log('Tour API: Fetching session');
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Get the user session using our server client
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     
     // Fetch the session
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();

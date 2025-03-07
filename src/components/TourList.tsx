@@ -3,6 +3,21 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
+// Add debug logging for navigation
+const NAV_DEBUG = true;
+const logNav = (...args: any[]) => {
+  if (NAV_DEBUG) {
+    console.log(`🧭 NAV [${new Date().toISOString().split('T')[1].split('.')[0]}]:`, ...args);
+  }
+};
+
+// Add global type for navigation timestamp
+declare global {
+  interface Window {
+    _navTimestamp?: number;
+  }
+}
+
 // Tour type definition
 interface TourPoi {
   id: string;
@@ -368,6 +383,19 @@ export default function TourList({ tours, loading }: TourListProps) {
                 <Link
                   href={`/tour/${tour.id}`}
                   className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2 text-sm font-medium transition-colors flex items-center"
+                  onClick={() => {
+                    logNav(`Navigating to tour: ${tour.id}`);
+                    logNav(`Current URL: ${window.location.href}`);
+                    logNav(`Navigation triggered by Link component`);
+                    logNav(`Current visibility state: ${document.visibilityState}`);
+                    
+                    // Log cookies at navigation time
+                    const cookies = document.cookie.split(';').map(c => c.trim().split('=')[0]);
+                    logNav(`Cookies at navigation: ${cookies.join(', ')}`);
+                    
+                    // Capture navigation timestamp for duration tracking
+                    window._navTimestamp = Date.now();
+                  }}
                 >
                   <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M15 10l-9 5l9 5l9 -5l-9 -5z"></path>

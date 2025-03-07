@@ -4,8 +4,15 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
+
 import OTPInput from '@/components/OTPInput';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/utils/supabase/client';
+
+// Initialize the singleton Supabase client only when actually needed
+// This avoids potential module resolution issues
+const getSupabaseClient = () => {
+  return createClient();
+};
 
 export default function Login() {
   const router = useRouter();
@@ -22,6 +29,7 @@ export default function Login() {
   useEffect(() => {
     // Check existing session
     const checkSession = async () => {
+      const supabase = getSupabaseClient();
       const { data, error } = await supabase.auth.getSession();
       console.log('Direct Supabase session check:', { 
         session: data?.session ? 'exists' : 'none', 

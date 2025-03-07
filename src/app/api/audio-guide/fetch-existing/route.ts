@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@/utils/supabase/server';
 import { cookies } from 'next/headers';
 
 export async function POST(request: NextRequest) {
@@ -20,21 +20,7 @@ export async function POST(request: NextRequest) {
     console.log(`API: Fetching audio guides for ${poiIds.length} POIs`);
     
     // Create Supabase client
-    const cookieStore = cookies();
-    
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get: (name) => {
-            return request.cookies.get(name)?.value || '';
-          },
-          set: () => {}, // We're only reading in API routes
-          remove: () => {}, // We're only reading in API routes
-        },
-      }
-    );
+    const supabase = await createClient();
     
     // Get session for authentication
     const { data: { session } } = await supabase.auth.getSession();

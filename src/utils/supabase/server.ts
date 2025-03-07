@@ -1,17 +1,20 @@
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import type { Database } from '@/types/supabase'
+import type { CookieOptions } from '@supabase/ssr'
 
-export function createClient() {
-  // Create a Supabase client for server-side operations
-  return createServerClient(
+// For use in app/ directory (Server Components)
+export async function createClient<T = Database>() {
+  // Dynamically import cookies to avoid errors in Pages Router
+  const { cookies } = await import('next/headers')
+  const cookieStore = await cookies()
+  
+  return createServerClient<T>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         async get(name) {
           try {
-            // Properly await cookies() in Next.js 15
-            const cookieStore = await cookies()
             return cookieStore.get(name)?.value
           } catch (error) {
             console.error('Cookie get error:', error)
@@ -20,8 +23,6 @@ export function createClient() {
         },
         async set(name, value, options) {
           try {
-            // Properly await cookies() in Next.js 15
-            const cookieStore = await cookies()
             cookieStore.set(name, value, options)
           } catch (error) {
             console.error('Cookie set error:', error)
@@ -29,8 +30,6 @@ export function createClient() {
         },
         async remove(name, options) {
           try {
-            // Properly await cookies() in Next.js 15
-            const cookieStore = await cookies()
             cookieStore.set(name, '', { ...options, maxAge: 0 })
           } catch (error) {
             console.error('Cookie remove error:', error)
@@ -39,4 +38,37 @@ export function createClient() {
       }
     }
   )
+}
+
+// For use in pages/ directory with getServerSideProps
+export function createClientFromCookies<T = Database>(cookieString: string) {
+  return createServerClient<T>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name) {
+          const cookies = parseCookieString(cookieString)
+          return cookies[name]
+        },
+        set() {
+          // No-op for read-only
+        },
+        remove() {
+          // No-op for read-only
+        }
+      }
+    }
+  )
+}
+
+// Helper to parse cookie string
+function parseCookieString(cookieString: string): Record<string, string> {
+  if (!cookieString) return {}
+  
+  return cookieString.split(';').reduce((acc, cookie) => {
+    const [key, value] = cookie.trim().split('=')
+    if (key && value) acc[key] = decodeURIComponent(value)
+    return acc
+  }, {} as Record<string, string>)
 } 

@@ -5,8 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createClient } from '@/utils/supabase/server';
 import { Database } from '@/types/supabase';
 import audioGuideController, { VoiceOption } from '@/services/audioGuide';
 
@@ -15,7 +14,7 @@ import audioGuideController, { VoiceOption } from '@/services/audioGuide';
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createServerComponentClient<Database>({ cookies });
+    const supabase = await createClient<Database>();
     
     // Get the POI ID from the query string
     const searchParams = request.nextUrl.searchParams;
@@ -75,7 +74,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerComponentClient<Database>({ cookies });
+    const supabase = await createClient<Database>();
     
     // Check if user is authenticated
     const { data: { session } } = await supabase.auth.getSession();
@@ -165,7 +164,7 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createServerComponentClient<Database>({ cookies });
+    const supabase = await createClient<Database>();
     
     // Check if user is authenticated
     const { data: { session } } = await supabase.auth.getSession();

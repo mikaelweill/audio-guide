@@ -3,7 +3,24 @@
 import React, { useState, useEffect } from 'react';
 import { dataCollectionService } from '@/services/audioGuide';
 import { PoiData, AudioGuideContent, AudioFiles } from '@/services/audioGuide';
-import { supabase, getSession } from '@/lib/supabase';
+import { createClient } from '@/utils/supabase/client';
+
+// Initialize the singleton Supabase client only when actually needed
+// This avoids potential module resolution issues
+const getSupabaseClient = () => {
+  return createClient();
+};
+
+// Helper function to get session
+const getSession = async () => {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    console.error('Error getting session:', error);
+    return null;
+  }
+  return data.session;
+};
 
 export default function TestAudioGuide() {
   const [loading, setLoading] = useState<boolean>(false);

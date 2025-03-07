@@ -8,38 +8,31 @@ datasource db {
 }
 
 model Poi {
-  id                 String    @id
-  place_id           String    @unique
-  name               String
-  vicinity           String?
-  formatted_address  String
-  location           Json
-  types              Json
-  rating             Float?
-  user_ratings_total Int?
-  website            String?
-  phone_number       String?
-  price_level        Int?
-  opening_hours      Json?
-  google_maps_url    String?
-  thumbnail_url      String?
-  photo_references   Json?
-  last_updated_at    DateTime
-  
-  // Audio guide content transcripts (new fields)
-  brief_transcript     String?   @db.Text
-  detailed_transcript  String?   @db.Text
-  complete_transcript  String?   @db.Text
-  
-  // Audio guide URLs (new fields)
-  brief_audio_url      String?
-  detailed_audio_url   String?
-  complete_audio_url   String?
-  
-  // Generation info (new field)
-  audio_generated_at   DateTime?
-  
-  tourPois             TourPoi[]
+  id                  String    @id
+  place_id            String    @unique
+  name                String
+  vicinity            String?
+  formatted_address   String
+  location            Json
+  types               Json
+  rating              Float?
+  user_ratings_total  Int?
+  website             String?
+  phone_number        String?
+  price_level         Int?
+  opening_hours       Json?
+  google_maps_url     String?
+  thumbnail_url       String?
+  photo_references    Json?
+  last_updated_at     DateTime
+  audio_generated_at  DateTime?
+  brief_audio_url     String?
+  brief_transcript    String?
+  complete_audio_url  String?
+  complete_transcript String?
+  detailed_audio_url  String?
+  detailed_transcript String?
+  tourPois            TourPoi[]
 }
 
 model Tour {

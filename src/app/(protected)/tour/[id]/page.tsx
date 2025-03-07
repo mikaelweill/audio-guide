@@ -1,12 +1,52 @@
 'use client';
 
-import { useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect, ReactNode, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Tour } from '@/components/TourList';
 import { dataCollectionService } from '@/services/audioGuide';
 
+// Debug logging
+const PAGE_DEBUG = true;
+const logPage = (...args: any[]) => {
+  if (PAGE_DEBUG) {
+    console.log(`📄 TOUR PAGE [${new Date().toISOString().split('T')[1].split('.')[0]}]:`, ...args);
+  }
+};
+
 export default function TourPage() {
+  logPage('Component rendering');
+  const mountCountRef = useRef(0);
+  
+  // Track page lifecycle and loading performance
+  useEffect(() => {
+    mountCountRef.current += 1;
+    logPage(`Mounted (count: ${mountCountRef.current})`);
+    
+    // Performance tracking from navigation
+    if (typeof window !== 'undefined' && window._navTimestamp) {
+      const navigationTime = Date.now() - window._navTimestamp;
+      logPage(`Page loaded ${navigationTime}ms after navigation started`);
+      
+      // Clear the timestamp since we've used it
+      window._navTimestamp = undefined;
+    }
+    
+    // Log URL parameters and state
+    logPage('URL:', typeof window !== 'undefined' ? window.location.href : 'SSR');
+    logPage('Pathname:', typeof window !== 'undefined' ? window.location.pathname : 'SSR');
+    
+    // Log cookie state on mount
+    if (typeof document !== 'undefined') {
+      const cookies = document.cookie.split(';').map(c => c.trim().split('=')[0]);
+      logPage(`Cookies on mount: ${cookies.join(', ') || 'none'}`);
+    }
+    
+    return () => {
+      logPage(`Unmounting (count: ${mountCountRef.current})`);
+    };
+  }, []);
+
   const params = useParams();
   const router = useRouter();
   const tourId = params.id as string;
@@ -76,6 +116,13 @@ export default function TourPage() {
   // Fetch tour data
   useEffect(() => {
     const fetchTour = async () => {
+      // Create abort controller for timeout management
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.warn('Aborting tour fetch due to timeout');
+        controller.abort();
+      }, 8000); // 8 second timeout
+      
       try {
         setLoading(true);
         
@@ -85,9 +132,13 @@ export default function TourPage() {
           credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache'
-          }
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
+          },
+          signal: controller.signal // Use the abort controller
         });
+        
+        // Clear timeout since request completed
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
           console.error(`Tour fetch failed with status: ${response.status}`);
@@ -96,10 +147,7 @@ export default function TourPage() {
           if (response.status === 401) {
             console.error('Authentication error - not logged in or session expired');
             setError('Authentication error: You need to log in again');
-            
-            // You could redirect to login page here
-            // router.push('/login');
-            
+            // No need to redirect - protected layout will handle this
             setLoading(false);
             return;
           }
@@ -139,13 +187,23 @@ export default function TourPage() {
         } else {
           setError(data.error || 'Failed to load tour data');
         }
-      } catch (error) {
-        console.error('Error fetching tour:', error);
-        setError(error instanceof Error ? error.message : 'An unknown error occurred');
+      } catch (error: any) {
+        // Handle abort error specially
+        if (error.name === 'AbortError') {
+          console.error('Tour fetch aborted due to timeout');
+          setError('Request timed out. The server took too long to respond. Please try again later.');
+        } else {
+          console.error('Error fetching tour:', error);
+          setError(error instanceof Error ? error.message : 'An unknown error occurred');
+        }
       } finally {
         setLoading(false);
+        // Ensure timeout is cleared in all cases
+        clearTimeout(timeoutId);
       }
     };
+    
+    // No need for separate timeout as we're using AbortController
     
     if (tourId) {
       fetchTour();
@@ -537,16 +595,28 @@ export default function TourPage() {
   
   if (error || !tour) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen py-12 bg-gray-50">
-        <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
-          <p className="text-gray-700 mb-6">{error || 'Tour not found'}</p>
-          <Link 
-            href="/"
-            className="block w-full text-center bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
-          >
-            Return Home
-          </Link>
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-7xl mx-auto bg-white rounded-lg shadow p-6 my-6">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Error Loading Tour</h1>
+          <p className="mb-4">{error || 'Tour not found'}</p>
+          <div className="flex space-x-4">
+            <Link
+              href="/"
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            >
+              Go Back Home
+            </Link>
+            <button
+              onClick={() => {
+                setError(null);
+                setLoading(true);
+                window.location.reload();
+              }}
+              className="px-4 py-2 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
         </div>
       </div>
     );
