@@ -265,4 +265,90 @@ export async function PATCH(
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  console.log('⭐️ Tour Delete API: Request started');
+  console.time('tour-delete-timer');
+  
+  try {
+    const tourId = await Promise.resolve(params.id);
+    console.log(`⭐️ Tour Delete API: Attempting to delete tour ${tourId}`);
+    
+    // Create a Supabase client for auth
+    const supabase = await createClient();
+    const { data, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('⭐️ Tour Delete API: Session error:', sessionError);
+      return NextResponse.json(
+        { success: false, error: 'Session error: ' + sessionError.message },
+        { status: 401 }
+      );
+    }
+    
+    const session = data.session;
+    
+    if (!session) {
+      console.log('⭐️ Tour Delete API: No active session found');
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - No active session' },
+        { status: 401 }
+      );
+    }
+    
+    const userId = session.user.id;
+    console.log(`⭐️ Tour Delete API: Authenticated user ID ${userId}, deleting tour ID ${tourId}`);
+    
+    // Delete the tour
+    try {
+      // First verify the tour exists and is owned by this user
+      const existingTour = await prisma.tour.findFirst({
+        where: {
+          id: tourId,
+          user_id: userId
+        },
+        select: { id: true }
+      });
+      
+      if (!existingTour) {
+        console.log(`⭐️ Tour Delete API: Tour with ID ${tourId} not found or not owned by user ${userId}`);
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Tour not found or you do not have permission to delete it' 
+        }, { status: 404 });
+      }
+      
+      // Delete the tour - cascading delete will handle related records due to onDelete: Cascade in schema
+      await prisma.tour.delete({
+        where: { id: tourId }
+      });
+      
+      console.log(`⭐️ Tour Delete API: Successfully deleted tour ${tourId}`);
+      console.timeEnd('tour-delete-timer');
+      
+      return NextResponse.json({ 
+        success: true,
+        message: 'Tour successfully deleted'
+      }, { status: 200 });
+      
+    } catch (dbError) {
+      console.error('⭐️ Tour Delete API: Database error:', dbError);
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Database error: ' + (dbError instanceof Error ? dbError.message : 'Unknown error')
+      }, { status: 500 });
+    }
+    
+  } catch (error) {
+    console.error('⭐️ Tour Delete API: Unexpected error:', error);
+    console.timeEnd('tour-delete-timer');
+    return NextResponse.json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
 } 

@@ -60,6 +60,8 @@ export default function TourList({ tours, loading }: TourListProps) {
   const [editingTourId, setEditingTourId] = useState<string | null>(null);
   const [newTourName, setNewTourName] = useState<string>('');
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   const toggleExpand = (tourId: string) => {
     setExpandedTourId(expandedTourId === tourId ? null : tourId);
@@ -73,6 +75,54 @@ export default function TourList({ tours, loading }: TourListProps) {
   const cancelRenaming = () => {
     setEditingTourId(null);
     setNewTourName('');
+  };
+
+  const confirmDelete = (tourId: string) => {
+    setShowDeleteConfirm(tourId);
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteConfirm(null);
+  };
+
+  const deleteTour = async (tourId: string) => {
+    setIsDeleting(true);
+    
+    try {
+      const response = await fetch(`/api/tours/${tourId}`, {
+        method: 'DELETE',
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete tour');
+      }
+      
+      // Use filter to create a new array without the deleted tour
+      const updatedTours = tours.filter(tour => tour.id !== tourId);
+      
+      // Update the tours array immutably
+      if (tours.length !== updatedTours.length) {
+        // Replace the content of the tours array without changing the reference
+        tours.splice(0, tours.length, ...updatedTours);
+      }
+      
+      // Clear any expanded or editing state related to this tour
+      if (expandedTourId === tourId) {
+        setExpandedTourId(null);
+      }
+      
+      toast.success('Tour deleted successfully');
+      setShowDeleteConfirm(null);
+      
+      // Don't reload the entire list
+    } catch (error) {
+      console.error('Error deleting tour:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete tour');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const saveTourName = async (tourId: string) => {
@@ -98,22 +148,16 @@ export default function TourList({ tours, loading }: TourListProps) {
         throw new Error(data.error || 'Failed to update tour name');
       }
       
-      // Update the local tour list
-      tours.forEach(tour => {
-        if (tour.id === tourId) {
-          tour.name = newTourName.trim();
-        }
-      });
+      // Update the local tour list without refreshing
+      const updatedTour = tours.find(tour => tour.id === tourId);
+      if (updatedTour) {
+        updatedTour.name = newTourName.trim();
+      }
       
       toast.success('Tour renamed successfully');
       setEditingTourId(null);
       
-      // Refresh the tour list (optional but ensures data consistency)
-      const tourLoader = document.querySelector('[data-tour-loader="true"]');
-      if (tourLoader) {
-        // @ts-ignore
-        tourLoader.loadTours?.();
-      }
+      // Don't reload the entire list
     } catch (error) {
       console.error('Error renaming tour:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to rename tour');
@@ -268,28 +312,41 @@ export default function TourList({ tours, loading }: TourListProps) {
       {tours.map((tour) => (
         <div 
           key={tour.id} 
-          className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+          className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow relative"
         >
-          {/* Add a tour header with action buttons */}
-          <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
-            <div className="text-sm text-gray-500">Audio Guide</div>
-            <div className="flex space-x-1">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  startRenaming(tour.id, tour.name);
-                }}
-                className="text-xs text-gray-600 hover:text-blue-600 px-2 py-1 rounded flex items-center cursor-pointer"
-                title="Rename tour"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-                Rename
-              </button>
+          {/* Minimal delete confirmation tooltip */}
+          {showDeleteConfirm === tour.id && (
+            <div className="absolute top-0 right-0 z-10 mt-2 mr-2 bg-white border border-gray-200 rounded-md shadow-md py-2 px-3 text-sm">
+              <p className="text-gray-700 mb-2">Delete this tour?</p>
+              <div className="flex space-x-2">
+                <button
+                  onClick={cancelDelete}
+                  className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteTour(tour.id)}
+                  className="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors flex items-center"
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <>
+                      <svg className="animate-spin -ml-0.5 mr-1.5 h-3 w-3 text-red-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Deleting...
+                    </>
+                  ) : (
+                    'Confirm'
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
-          
+          )}
+
           <div className="p-4">
             <div className="flex justify-between items-center mb-2">
               {editingTourId === tour.id ? (
@@ -354,6 +411,18 @@ export default function TourList({ tours, loading }: TourListProps) {
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent expanding/collapsing when clicking delete
+                      confirmDelete(tour.id);
+                    }}
+                    className="ml-1 p-1 text-gray-400 hover:text-red-600 hover:bg-gray-100 rounded-full group-hover:opacity-100 opacity-60 cursor-pointer"
+                    title="Delete tour"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   </button>
                 </div>
@@ -537,6 +606,19 @@ export default function TourList({ tours, loading }: TourListProps) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                     </svg>
                     Rename Tour
+                  </button>
+                  
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      confirmDelete(tour.id);
+                    }}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium inline-flex items-center bg-red-50 hover:bg-red-100 px-3 py-2 rounded-md transition-colors cursor-pointer"
+                  >
+                    <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete Tour
                   </button>
                 </div>
 
