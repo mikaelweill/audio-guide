@@ -12,50 +12,70 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[]) => void 
   const [error, setError] = useState<string | null>(null);
   const [tours, setTours] = useState<Tour[]>([]);
   
-  // Simple fetch function
-  useEffect(() => {
-    const fetchTours = async () => {
-      console.log('🔄 TOUR LOADER: Fetching tours');
-      setIsLoading(true);
+  // Simple fetch function made accessible
+  const fetchTours = async () => {
+    console.log('🔄 TOUR LOADER: Fetching tours');
+    setIsLoading(true);
+    
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        
-        const response = await fetch('/api/tours', {
-          credentials: 'include',
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          throw new Error(`Error ${response.status}: Failed to load tours`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.success && Array.isArray(data.tours)) {
-          console.log(`✅ TOUR LOADER: Loaded ${data.tours.length} tours`);
-          setTours(data.tours);
-          onToursLoaded(data.tours);
-        } else {
-          throw new Error('Invalid response format');
-        }
-      } catch (error) {
-        console.error('❌ TOUR LOADER: Error loading tours:', error);
-        setError(error instanceof Error ? error.message : 'Failed to load tours');
-      } finally {
-        setIsLoading(false);
+      const response = await fetch('/api/tours', {
+        credentials: 'include',
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: Failed to load tours`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && Array.isArray(data.tours)) {
+        console.log(`✅ TOUR LOADER: Loaded ${data.tours.length} tours`);
+        setTours(data.tours);
+        onToursLoaded(data.tours);
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (error) {
+      console.error('❌ TOUR LOADER: Error loading tours:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load tours');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Expose the fetchTours function to parent components
+  useEffect(() => {
+    // Create a reference to the function on the DOM element for other components to access
+    const loaderElement = document.querySelector('[data-tour-loader="true"]');
+    if (loaderElement) {
+      // @ts-ignore - Adding custom property to the DOM element
+      loaderElement.loadTours = fetchTours;
+    }
+    
+    return () => {
+      // Clean up reference when unmounted
+      const loaderElement = document.querySelector('[data-tour-loader="true"]');
+      if (loaderElement) {
+        // @ts-ignore
+        delete loaderElement.loadTours;
       }
     };
-    
+  }, []);
+  
+  // Initial load
+  useEffect(() => {
     fetchTours();
   }, [onToursLoaded]);
   
   if (isLoading) {
     return (
-      <div className="w-full py-8">
+      <div className="w-full py-8" data-tour-loader="true">
         <div className="flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mr-3"></div>
           <p>Loading your tours...</p>
@@ -66,7 +86,7 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[]) => void 
   
   if (error) {
     return (
-      <div className="w-full py-6 px-4 bg-red-50 rounded-lg border border-red-200 mb-8">
+      <div className="w-full py-6 px-4 bg-red-50 rounded-lg border border-red-200 mb-8" data-tour-loader="true">
         <p className="text-red-600">{error}</p>
         <button 
           onClick={() => window.location.reload()}
@@ -78,7 +98,7 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[]) => void 
     );
   }
   
-  return null;
+  return <div data-tour-loader="true"></div>;
 }
 
 // Main Home component with simplified structure - no auth checks needed

@@ -151,4 +151,118 @@ export async function GET(
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  console.log('⭐️ Tour Update API: Request started');
+  console.time('tour-update-timer');
+  
+  try {
+    const tourId = await Promise.resolve(params.id);
+    
+    // Parse the request body
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      console.error('⭐️ Tour Update API: Invalid request body');
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Invalid request body' 
+      }, { status: 400 });
+    }
+    
+    // Validate input
+    const { name } = body;
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      console.error('⭐️ Tour Update API: Invalid or missing tour name');
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Tour name is required and must be a non-empty string' 
+      }, { status: 400 });
+    }
+    
+    // Create a Supabase client for auth
+    const supabase = await createClient();
+    const { data, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('⭐️ Tour Update API: Session error:', sessionError);
+      return NextResponse.json(
+        { success: false, error: 'Session error: ' + sessionError.message },
+        { status: 401 }
+      );
+    }
+    
+    const session = data.session;
+    
+    if (!session) {
+      console.log('⭐️ Tour Update API: No active session found');
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - No active session' },
+        { status: 401 }
+      );
+    }
+    
+    const userId = session.user.id;
+    console.log(`⭐️ Tour Update API: Authenticated user ID ${userId}, updating tour ID ${tourId}`);
+    
+    // Update the tour name
+    try {
+      // First verify the tour exists and is owned by this user
+      const existingTour = await prisma.tour.findFirst({
+        where: {
+          id: tourId,
+          user_id: userId
+        },
+        select: { id: true }
+      });
+      
+      if (!existingTour) {
+        console.log(`⭐️ Tour Update API: Tour with ID ${tourId} not found or not owned by user ${userId}`);
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Tour not found or you do not have permission to update it' 
+        }, { status: 404 });
+      }
+      
+      // Update the tour name
+      const updatedTour = await prisma.tour.update({
+        where: { id: tourId },
+        data: { 
+          name: name.trim(),
+          last_updated_at: new Date()
+        }
+      });
+      
+      console.log(`⭐️ Tour Update API: Successfully updated tour ${tourId}`);
+      console.timeEnd('tour-update-timer');
+      
+      return NextResponse.json({ 
+        success: true, 
+        tour: {
+          id: updatedTour.id,
+          name: updatedTour.name
+        }
+      }, { status: 200 });
+      
+    } catch (dbError) {
+      console.error('⭐️ Tour Update API: Database error:', dbError);
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Database error: ' + (dbError instanceof Error ? dbError.message : 'Unknown error')
+      }, { status: 500 });
+    }
+    
+  } catch (error) {
+    console.error('⭐️ Tour Update API: Unexpected error:', error);
+    console.timeEnd('tour-update-timer');
+    return NextResponse.json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
 } 

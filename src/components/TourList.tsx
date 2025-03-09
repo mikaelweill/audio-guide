@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Link from 'next/link';
+import { toast } from 'react-hot-toast';
 
 // Add debug logging for navigation
 const NAV_DEBUG = true;
@@ -56,9 +57,69 @@ interface TourListProps {
 
 export default function TourList({ tours, loading }: TourListProps) {
   const [expandedTourId, setExpandedTourId] = useState<string | null>(null);
+  const [editingTourId, setEditingTourId] = useState<string | null>(null);
+  const [newTourName, setNewTourName] = useState<string>('');
+  const [isRenaming, setIsRenaming] = useState<boolean>(false);
 
   const toggleExpand = (tourId: string) => {
     setExpandedTourId(expandedTourId === tourId ? null : tourId);
+  };
+
+  const startRenaming = (tourId: string, currentName: string) => {
+    setEditingTourId(tourId);
+    setNewTourName(currentName);
+  };
+
+  const cancelRenaming = () => {
+    setEditingTourId(null);
+    setNewTourName('');
+  };
+
+  const saveTourName = async (tourId: string) => {
+    if (!newTourName.trim()) {
+      toast.error('Tour name cannot be empty');
+      return;
+    }
+    
+    setIsRenaming(true);
+    
+    try {
+      const response = await fetch(`/api/tours/${tourId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: newTourName.trim() }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update tour name');
+      }
+      
+      // Update the local tour list
+      tours.forEach(tour => {
+        if (tour.id === tourId) {
+          tour.name = newTourName.trim();
+        }
+      });
+      
+      toast.success('Tour renamed successfully');
+      setEditingTourId(null);
+      
+      // Refresh the tour list (optional but ensures data consistency)
+      const tourLoader = document.querySelector('[data-tour-loader="true"]');
+      if (tourLoader) {
+        // @ts-ignore
+        tourLoader.loadTours?.();
+      }
+    } catch (error) {
+      console.error('Error renaming tour:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to rename tour');
+    } finally {
+      setIsRenaming(false);
+    }
   };
 
   const formatDuration = (seconds: number) => {
@@ -209,12 +270,94 @@ export default function TourList({ tours, loading }: TourListProps) {
           key={tour.id} 
           className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
         >
-          <div 
-            className="p-4 cursor-pointer"
-            onClick={() => toggleExpand(tour.id)}
-          >
-            <div className="flex justify-between items-start mb-2">
-              <h3 className="text-lg font-medium text-gray-800">{tour.name}</h3>
+          {/* Add a tour header with action buttons */}
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
+            <div className="text-sm text-gray-500">Audio Guide</div>
+            <div className="flex space-x-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startRenaming(tour.id, tour.name);
+                }}
+                className="text-xs text-gray-600 hover:text-blue-600 px-2 py-1 rounded flex items-center cursor-pointer"
+                title="Rename tour"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Rename
+              </button>
+            </div>
+          </div>
+          
+          <div className="p-4">
+            <div className="flex justify-between items-center mb-2">
+              {editingTourId === tour.id ? (
+                <div className="flex-1 mr-2">
+                  <input
+                    type="text"
+                    value={newTourName}
+                    onChange={(e) => setNewTourName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Tour name"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        saveTourName(tour.id);
+                      } else if (e.key === 'Escape') {
+                        cancelRenaming();
+                      }
+                    }}
+                  />
+                  <div className="flex space-x-2 mt-2">
+                    <button
+                      onClick={() => saveTourName(tour.id)}
+                      disabled={isRenaming}
+                      className="text-white bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded-md text-sm font-medium flex items-center"
+                    >
+                      {isRenaming ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Saving...
+                        </>
+                      ) : (
+                        'Save'
+                      )}
+                    </button>
+                    <button
+                      onClick={cancelRenaming}
+                      disabled={isRenaming}
+                      className="text-gray-700 bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded-md text-sm font-medium"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-1 items-center mr-2 group">
+                  <h3 
+                    className="text-lg font-medium text-gray-800 hover:text-blue-600 cursor-pointer"
+                    onClick={() => toggleExpand(tour.id)}
+                  >
+                    {tour.name}
+                  </h3>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent expanding/collapsing when clicking edit
+                      startRenaming(tour.id, tour.name);
+                    }}
+                    className="ml-2 p-1 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded-full group-hover:opacity-100 opacity-60 cursor-pointer"
+                    title="Rename tour"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               <div className="text-gray-400">
                 <svg 
                   xmlns="http://www.w3.org/2000/svg" 
@@ -222,6 +365,8 @@ export default function TourList({ tours, loading }: TourListProps) {
                   fill="none" 
                   viewBox="0 0 24 24" 
                   stroke="currentColor"
+                  onClick={() => toggleExpand(tour.id)}
+                  cursor="pointer"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -368,17 +513,32 @@ export default function TourList({ tours, loading }: TourListProps) {
               </div>
               
               <div className="mt-6 flex flex-wrap gap-2 justify-between">
-                <a 
-                  href={getGoogleMapsUrl(tour)} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-md transition-colors"
-                >
-                  <svg className="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-                  </svg>
-                  View Route in Google Maps
-                </a>
+                <div className="flex gap-2">
+                  <a 
+                    href={getGoogleMapsUrl(tour)} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-md transition-colors"
+                  >
+                    <svg className="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                    </svg>
+                    View Route in Google Maps
+                  </a>
+                  
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startRenaming(tour.id, tour.name);
+                    }}
+                    className="text-gray-600 hover:text-gray-800 text-sm font-medium inline-flex items-center bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md transition-colors cursor-pointer"
+                  >
+                    <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                    Rename Tour
+                  </button>
+                </div>
 
                 <Link
                   href={`/tour/${tour.id}`}
