@@ -146,10 +146,10 @@ async function processPOI(poiData: any) {
   const audioResults = await processAllContentTypes(contentMappings, poiId, 'nova', supabaseClient, openai);
   
   // Make sure our result keys match the database column names
-  const mappedAudioUrls = {
-    brief_audio_url: audioResults.coreAudioUrl,
-    detailed_audio_url: audioResults.secondaryAudioUrl, 
-    complete_audio_url: audioResults.tertiaryAudioUrl
+  const mappedAudioPaths = {
+    brief_audio_path: audioResults.coreAudioUrl,
+    detailed_audio_path: audioResults.secondaryAudioUrl, 
+    complete_audio_path: audioResults.tertiaryAudioUrl
   };
   
   // Save results to database with the UUID ID using snake_case column names
@@ -159,9 +159,9 @@ async function processPOI(poiData: any) {
     brief_transcript: coreContent,
     detailed_transcript: secondaryContent,
     complete_transcript: tertiaryContent,
-    brief_audio_url: audioResults.coreAudioUrl,
-    detailed_audio_url: audioResults.secondaryAudioUrl,
-    complete_audio_url: audioResults.tertiaryAudioUrl,
+    brief_audio_path: audioResults.coreAudioUrl,
+    detailed_audio_path: audioResults.secondaryAudioUrl,
+    complete_audio_path: audioResults.tertiaryAudioUrl,
     formatted_address: poiData?.basic?.formatted_address || poiData?.vicinity || 'Unknown location',
     location: poiData?.basic?.location || { lat: 0, lng: 0 },
     types: poiData?.basic?.types || ["point_of_interest"],
@@ -171,7 +171,7 @@ async function processPOI(poiData: any) {
   return {
     poiId,
     placeId,
-    audioUrls: mappedAudioUrls,
+    audioPaths: mappedAudioPaths,
     transcripts: {
       brief: coreContent,
       detailed: secondaryContent,
@@ -547,28 +547,10 @@ async function storeAudioFile(
     }
     
     console.log(`Successfully uploaded file: ${fileName}`);
+    console.log(`Returning storage path instead of signed URL: ${fileName}`);
     
-    // Create a signed URL with a 24-hour expiry
-    const { data: signedUrlData, error: signedUrlError } = await supabase
-      .storage
-      .from(bucketName)
-      .createSignedUrl(fileName, 60 * 60 * 24); // 24 hours in seconds
-    
-    if (signedUrlError) {
-      console.error('Error creating signed URL:', signedUrlError);
-      
-      // Fallback to public URL if signed URL fails
-      const { data: urlData } = supabase
-        .storage
-        .from(bucketName)
-        .getPublicUrl(fileName);
-      
-      console.log(`Fallback to public URL:`, urlData.publicUrl);
-      return urlData.publicUrl;
-    }
-    
-    console.log(`Generated signed URL (expires in 24h):`, signedUrlData.signedUrl);
-    return signedUrlData.signedUrl;
+    // Return just the storage path (no need for signed URL anymore)
+    return fileName;
   } catch (error) {
     console.error(`Failed to store file ${fileName}:`, error);
     throw error;
@@ -593,9 +575,9 @@ async function saveToDatabase(supabaseClient, poiId, data) {
       brief_transcript: data.brief_transcript,
       detailed_transcript: data.detailed_transcript,
       complete_transcript: data.complete_transcript,
-      brief_audio_url: data.brief_audio_url,
-      detailed_audio_url: data.detailed_audio_url,
-      complete_audio_url: data.complete_audio_url,
+      brief_audio_path: data.brief_audio_path,
+      detailed_audio_path: data.detailed_audio_path,
+      complete_audio_path: data.complete_audio_path,
       audio_generated_at: new Date().toISOString()
     };
     
