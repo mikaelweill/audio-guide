@@ -266,7 +266,7 @@ export default function TourList({ tours, loading }: TourListProps) {
               
               <div className="flex items-center ml-3">
                 <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
-                  {tour.tourPois.length} stops
+                  {tour.tourPois?.length || 0} stops
                 </span>
               </div>
             </div>

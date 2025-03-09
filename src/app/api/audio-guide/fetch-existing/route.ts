@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { cookies } from 'next/headers';
+import { generateSignedUrl } from '@/utils/storage-helpers';
 
 export async function POST(request: NextRequest) {
   console.log('API: Fetch existing audio guides endpoint called');
@@ -50,9 +50,9 @@ export async function POST(request: NextRequest) {
           brief_transcript,
           detailed_transcript,
           complete_transcript,
-          brief_audio_url,
-          detailed_audio_url,
-          complete_audio_url,
+          brief_audio_path,
+          detailed_audio_path,
+          complete_audio_path,
           audio_generated_at
         `)
         .eq('id', poiId)
@@ -63,22 +63,32 @@ export async function POST(request: NextRequest) {
         continue;
       }
       
-      if (poiData && (poiData.brief_audio_url || poiData.detailed_audio_url || poiData.complete_audio_url)) {
+      if (poiData && (poiData.brief_audio_path || poiData.detailed_audio_path || poiData.complete_audio_path)) {
         console.log(`API: Found audio guide for POI: ${poiId}`);
         
         // Format the data for the frontend
         const audioFiles: Record<string, string> = {};
         
-        if (poiData.brief_audio_url) {
-          audioFiles.coreAudioUrl = poiData.brief_audio_url;
+        // Generate signed URLs on the fly for each path
+        if (poiData.brief_audio_path) {
+          const signedUrl = await generateSignedUrl(poiData.brief_audio_path);
+          if (signedUrl) {
+            audioFiles.coreAudioUrl = signedUrl;
+          }
         }
         
-        if (poiData.detailed_audio_url) {
-          audioFiles.secondaryAudioUrl = poiData.detailed_audio_url;
+        if (poiData.detailed_audio_path) {
+          const signedUrl = await generateSignedUrl(poiData.detailed_audio_path);
+          if (signedUrl) {
+            audioFiles.secondaryAudioUrl = signedUrl;
+          }
         }
         
-        if (poiData.complete_audio_url) {
-          audioFiles.tertiaryAudioUrl = poiData.complete_audio_url;
+        if (poiData.complete_audio_path) {
+          const signedUrl = await generateSignedUrl(poiData.complete_audio_path);
+          if (signedUrl) {
+            audioFiles.tertiaryAudioUrl = signedUrl;
+          }
         }
         
         // Only add to response if there are audio files

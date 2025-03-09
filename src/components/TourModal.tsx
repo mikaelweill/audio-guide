@@ -496,8 +496,8 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
       };
       
       // REPLACED: Instead of using fetch to a non-existent API, call the function directly
-      console.log('Calling discoverPOIs directly without maxResults limit...');
-      const pois = await discoverPOIs(apiPreferences);
+      console.log('Calling discoverPOIs with maxResults limit of 3...');
+      const pois = await discoverPOIs(apiPreferences, { maxResults: 3 });
       setDiscoveredPOIs(pois);
       
       // Move to next phase

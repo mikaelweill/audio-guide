@@ -370,8 +370,8 @@ export default function TourPage() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
   
-  // Update the playAudio function with throttling for timeupdate events
-  const playAudio = useCallback((url: string, label: string) => {
+  // Update the playAudio function with URL refresh capability
+  const playAudio = useCallback(async (url: string, label: string) => {
     console.log(`Attempting to play audio: ${label} from URL: ${url}`);
     
     if (!url) {
@@ -411,11 +411,55 @@ export default function TourPage() {
           const currentTime = Math.floor(Date.now() / 1000);
           const timeLeft = expiryTimestamp - currentTime;
           
-          if (timeLeft <= 0) {
-            console.error('Presigned URL has expired. Please generate a new one.');
-            alert('The audio link has expired. Please regenerate the audio guides.');
-            setIsAudioLoading(false);
-            return;
+          // If URL is expired or about to expire (less than 5 minutes left)
+          if (timeLeft <= 300) {
+            console.log('Signed URL is expired or about to expire. Refreshing audio URLs...');
+            
+            // Get the current POI ID and audio type
+            const currentPoiId = currentStop?.poi?.id || `poi-${currentStopIndex}`;
+            const audioType = label === "Brief Overview" ? 'brief' : 
+                            label === "Detailed Guide" ? 'detailed' : 'in-depth';
+            
+            try {
+              // Fetch fresh audio URLs for the current POI
+              const refreshResponse = await fetch('/api/audio-guide/fetch-existing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ poiIds: [currentPoiId] })
+              });
+              
+              if (refreshResponse.ok) {
+                const refreshData = await refreshResponse.json();
+                if (refreshData.success && refreshData.audioGuides && refreshData.audioGuides[currentPoiId]) {
+                  // Update audioData state with fresh URLs
+                  const freshAudioData = refreshData.audioGuides[currentPoiId];
+                  
+                  setAudioData(prevData => ({
+                    ...prevData,
+                    [currentPoiId]: freshAudioData
+                  }));
+                  
+                  // Get the fresh URL based on audio type
+                  let freshUrl;
+                  if (audioType === 'brief') {
+                    freshUrl = freshAudioData.audioFiles.coreAudioUrl;
+                  } else if (audioType === 'detailed') {
+                    freshUrl = freshAudioData.audioFiles.secondaryAudioUrl;
+                  } else {
+                    freshUrl = freshAudioData.audioFiles.tertiaryAudioUrl;
+                  }
+                  
+                  if (freshUrl) {
+                    console.log(`Using fresh URL for ${label} audio`);
+                    url = freshUrl;
+                    setActiveAudioUrl(freshUrl);
+                  }
+                }
+              }
+            } catch (refreshError) {
+              console.error('Error refreshing audio URL:', refreshError);
+              // Continue with existing URL as fallback
+            }
           }
         }
       }
@@ -526,7 +570,7 @@ export default function TourPage() {
       setIsPlaying(false);
       alert(`Error setting up audio playback: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, [audioElement, isAudioLoading]);
+  }, [audioElement, isAudioLoading, currentStop, currentStopIndex, setAudioData]);
   
   // Make these control functions memoized callbacks
   const togglePlayPause = useCallback(() => {
@@ -784,7 +828,7 @@ export default function TourPage() {
                         <div className="flex flex-wrap gap-2">
                           <button 
                             className={`${currentAudioId === 'brief' ? 'bg-blue-600' : 'bg-blue-500 hover:bg-blue-600'} text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'brief' ? 'opacity-75 cursor-wait' : ''}`}
-                            onClick={() => {
+                            onClick={async () => {
                               setCurrentAudioId('brief');
                               const audioUrl = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.audioFiles?.coreAudioUrl;
                               console.log("Brief audio URL:", audioUrl);
@@ -792,7 +836,7 @@ export default function TourPage() {
                                 alert("No brief audio available. Try regenerating the audio guides.");
                                 return;
                               }
-                              playAudio(audioUrl, "Brief Overview");
+                              await playAudio(audioUrl, "Brief Overview");
                             }}
                             disabled={isAudioLoading}
                           >
@@ -816,7 +860,7 @@ export default function TourPage() {
                           
                           <button 
                             className={`${currentAudioId === 'detailed' ? 'bg-blue-600' : 'bg-blue-500 hover:bg-blue-600'} text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'detailed' ? 'opacity-75 cursor-wait' : ''}`}
-                            onClick={() => {
+                            onClick={async () => {
                               setCurrentAudioId('detailed');
                               const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.secondaryAudioUrl;
                               console.log("Detailed audio URL:", audioUrl);
@@ -824,7 +868,7 @@ export default function TourPage() {
                                 alert("No detailed audio available. Try regenerating the audio guides.");
                                 return;
                               }
-                              playAudio(audioUrl, "Detailed Guide");
+                              await playAudio(audioUrl, "Detailed Guide");
                             }}
                             disabled={isAudioLoading}
                           >
@@ -848,7 +892,7 @@ export default function TourPage() {
                           
                           <button 
                             className={`${currentAudioId === 'in-depth' ? 'bg-blue-600' : 'bg-blue-500 hover:bg-blue-600'} text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'in-depth' ? 'opacity-75 cursor-wait' : ''}`}
-                            onClick={() => {
+                            onClick={async () => {
                               setCurrentAudioId('in-depth');
                               const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.tertiaryAudioUrl;
                               console.log("In-depth audio URL:", audioUrl);
@@ -856,7 +900,7 @@ export default function TourPage() {
                                 alert("No in-depth audio available. Try regenerating the audio guides.");
                                 return;
                               }
-                              playAudio(audioUrl, "In-Depth Exploration");
+                              await playAudio(audioUrl, "In-Depth Exploration");
                             }}
                             disabled={isAudioLoading}
                           >

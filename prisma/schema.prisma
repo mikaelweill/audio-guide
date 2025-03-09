@@ -26,11 +26,11 @@ model Poi {
   photo_references    Json?
   last_updated_at     DateTime
   audio_generated_at  DateTime?
-  brief_audio_url     String?
+  brief_audio_path    String?
   brief_transcript    String?
-  complete_audio_url  String?
+  complete_audio_path String?
   complete_transcript String?
-  detailed_audio_url  String?
+  detailed_audio_path String?
   detailed_transcript String?
   tourPois            TourPoi[]
 }
