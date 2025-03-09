@@ -8,122 +8,132 @@
 - ✅ Toggle between fullscreen and contained map layouts
 - ✅ Error handling for geolocation access
 - ✅ Responsive design for mobile and desktop
+- ✅ POI discovery based on user preferences
+- ✅ Tour generation with optimized routes
+- ✅ Dynamic tour display with interactive map
+- ✅ Parallel processing of multiple POIs
 
 ### User Interface
 - ✅ Clean, minimalist landing page with map focus
 - ✅ Tour creation modal with interest selection
 - ✅ Interactive buttons with proper hover states
 - ✅ Loading states for map initialization
+- ✅ Tour itinerary display with POI details
+- ✅ Tour statistics (distance, duration, POI count)
+- ✅ Tour saving functionality
 
 ### Backend & Integration
-- ✅ Basic Supabase client configuration
+- ✅ Supabase client configuration and authentication
 - ✅ Environment variable setup (.env files)
-
-## Currently In Progress
-- 🔄 Interest selection in tour modal
-- 🔄 Tour generation flow
-- 🔄 Error handling improvements
-
-## Required Features for MVP
-
-### Authentication
-- ❌ Complete Supabase authentication integration
-- ❌ Login functionality
-- ❌ Registration functionality
-- ❌ User profile management
-- ❌ Protected routes for authenticated users
-
-### Tour Generation
-- ❌ Connect to Google Places API for POI data
-- ❌ Algorithm to generate tours based on user interests with specific heuristics:
-  - User's distance preference determines the search radius for POIs
-  - User's duration preference determines the number of POIs to include
-  - Selection prioritizes POIs with highest review counts and ratings > 4.0
-  - Ensure total tour time (including travel between POIs) meets user's duration preference
-  - Flexible location options:
-    - Custom starting point (current location or user-specified)
-    - End point options:
-      - Return to starting point (circular tour)
-      - End at a specific location (custom end point)
-      - No specific end point (free-form exploration)
-- ❌ Transportation mode selection (walking, public transit)
-- ❌ Tour routing based on user location and preferences
-- ❌ Saving generated tours to user profile
-- ❌ Viewing saved tours
+- ✅ Supabase Edge Function for AI-powered audio generation
+- ✅ OpenAI integration for content generation
+- ✅ Wikipedia API integration for POI information
+- ✅ Audio file storage in Supabase Storage
+- ✅ Database schema for users, tours, and POIs
 
 ### Audio Features
-- ❌ Integration with Text-to-Speech API
-- ❌ Audio content generation based on POI data
-- ❌ Audio player interface
-- ❌ Downloading tours for offline use
-- ❌ Audio controls (play, pause, skip)
+- ✅ Text-to-Speech using OpenAI API
+- ✅ Multiple audio formats per POI (brief, detailed, complete)
+- ✅ AI-enhanced narratives based on Wikipedia data
+- ✅ Parallel processing of audio generation
+- ✅ Audio content storage and retrieval
 
-### Navigation
-- ❌ Turn-by-turn navigation for tours
-- ❌ Proximity detection for POI narration
-- ❌ Tour progress tracking
-- ❌ Distance and time remaining calculations
+## Currently In Progress
+- 🔄 URL expiration handling for audio files
+- 🔄 POI image storage and display
+- 🔄 POI caching to reduce API calls
+- 🔄 Optimizing Supabase Edge Function performance
 
-### User Experience Enhancements
-- ❌ Tour rating system
-- ❌ Bookmarking favorite locations
-- ❌ Sharing tours with other users
-- ❌ Recommended tours based on popularity/user preferences
+## Features for MVP Enhancement (Capstone Focus)
 
-### Offline Functionality
-- ❌ Downloading tours for offline use
-- ❌ Offline maps support
-- ❌ Pre-planning tours for future locations
-- ❌ Audio content caching
+### Tour Experience Improvements
+- ❌ Multi-language support for audio guides
+- ❌ Downloadable tours for offline use
+- ❌ Time-aware tour recommendations (considering opening hours)
+- ❌ Dynamic rerouting based on real-time conditions
+- ❌ Theme-based specialized tours (architectural, historical, culinary)
+
+### Audio Enhancements
+- ❌ Custom narration voice selection
+- ❌ Voice interaction for additional information during tours
+- ❌ Binaural/spatial audio experiences
+- ❌ Automatic audio level adjustment based on environment
+
+### Advanced Technologies
+- ❌ Augmented reality integration (camera overlay information)
+- ❌ Image recognition for landmark identification
+- ❌ Contextual awareness (adapt content based on time, weather)
+- ❌ Local expert knowledge integration beyond Wikipedia
+
+### Social & Community Features
+- ❌ Tour sharing with friends/family
+- ❌ User contributions to POI information
+- ❌ Crowd-sourced verification and updates
+- ❌ Tour ratings and reviews
+- ❌ Social media integration
+
+### Business & Scalability Features
+- ❌ Premium content from professional tour guides
+- ❌ Local business recommendations (monetization opportunity)
+- ❌ Analytics dashboard for exploration history
+- ❌ Multi-platform support (PWA, native mobile)
+- ❌ Enterprise features for tour operators
+
+## Technical Architecture Improvements
+
+### Performance Optimizations
+- ❌ Advanced caching system for URLs and data
+- ❌ Geospatial database optimizations
+- ❌ Image compression and progressive loading
+- ❌ Reduce API calls through better data management
+- ❌ Battery optimization for mobile use
+
+### Infrastructure
+- ❌ Microservices architecture for scalability
+- ❌ Automated testing pipeline with CI/CD
+- ❌ Infrastructure as code (Terraform)
+- ❌ Content delivery network for global accessibility
+- ❌ Monitoring and analytics for system performance
 
 ## Technical Dependencies
 
 ### Current
-- Google Maps JavaScript API (for map display)
-- Supabase (for authentication and database)
+- Google Maps JavaScript API (map display and POI data)
+- Supabase (authentication, database, edge functions, storage)
+- OpenAI API (content generation and text-to-speech)
 - Next.js & React (frontend framework)
 - Tailwind CSS (styling)
+- Wikipedia API (additional POI information)
 
 ### Planned
-- Google Places API (for POI data)
-- Text-to-Speech API (OpenAI or alternative)
-- Geolocation APIs (for precise location tracking)
-
-## Known Limitations & Considerations
-
-1. **API Usage Costs**: 
-   - Google Maps API has usage limits and costs beyond free tier
-   - Text-to-Speech services typically charge per character/request
-
-2. **Data Sources for "Hidden Gems"**:
-   - Currently limited to standard POIs from Google Places
-   - Finding truly "hidden" locations requires specialized data sources
-
-3. **Transportation Modes**:
-   - Initial version will focus on walking tours
-   - Public transit integration adds complexity but expands tour range
-   - Need to consider time spent in transit vs. exploring
-
-4. **Offline Functionality**:
-   - Will need to implement caching for offline tour playback
-   - Maps may require additional implementation for offline use
-
-5. **Battery Usage**:
-   - Continuous GPS tracking can drain device batteries
-   - Need to optimize location update frequency
-
-6. **Accessibility**:
-   - Audio content needs to be supplemented with text for accessibility
-   - UI needs to meet accessibility standards
+- Augmented Reality SDKs
+- Speech recognition APIs
+- Real-time data services (weather, traffic, events)
+- Multi-language translation services
+- Analytics platforms
 
 ## Development Roadmap
 
-1. **Phase 1**: Complete authentication and basic tour generation
-2. **Phase 2**: Implement audio generation and playback
-3. **Phase 3**: Add navigation features and tour progress tracking
-4. **Phase 4**: Enhance with social features and recommendations
-5. **Phase 5**: Optimize for performance and offline use
-6. **Future Enhancements**: Ride-sharing integration for longer distances between POIs
+1. **Phase 1 (Completed)**: Authentication, tour generation, and audio creation
+2. **Phase 2 (Current)**: Optimizations and reliability improvements
+   - Fix audio URL expiration
+   - Enhance POI data with images
+   - Implement caching strategies
+   - Improve parallel processing
+3. **Phase 3 (Capstone)**: Select and implement advanced features
+   - Choose 3-5 standout features from the enhancement list
+   - Develop proof-of-concept implementations
+   - Integrate with existing architecture
+4. **Phase 4 (Capstone)**: Refinement and evaluation
+   - Conduct user testing
+   - Measure performance impacts
+   - Document architecture and design decisions
+   - Prepare presentation materials
+5. **Phase 5 (Future)**: Commercialization considerations
+   - Cost analysis and pricing models
+   - Scalability testing
+   - Marketing strategy
+   - Partnership opportunities
 
 ---
 
