@@ -150,9 +150,6 @@ export default function Header() {
             <NavLink href="/" active={pathname === '/'}>
               Home
             </NavLink>
-            <NavLink href="/test-audio-guide" active={pathname === '/test-audio-guide'}>
-              Test Audio Guide
-            </NavLink>
             <NavLink href="/profile" active={pathname.startsWith('/profile')}>
               Profile
             </NavLink>
@@ -171,9 +168,6 @@ export default function Header() {
             <nav className="flex flex-col space-y-4">
               <MobileNavLink href="/" active={pathname === '/'}>
                 Home
-              </MobileNavLink>
-              <MobileNavLink href="/test-audio-guide" active={pathname === '/test-audio-guide'}>
-                Test Audio Guide
               </MobileNavLink>
               <MobileNavLink href="/profile" active={pathname.startsWith('/profile')}>
                 Profile
