@@ -84,8 +84,13 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
       return '/placeholder-poi.jpg'; // Add a placeholder image to your public folder
     }
     
-    // Google Places API photo URL
-    return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${photos[0].photo_reference}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`;
+    // Use the getUrl function provided by Google Places API instead of building URL manually
+    try {
+      return photos[0].getUrl({ maxWidth: 400 });
+    } catch (error) {
+      console.error('Error getting photo URL:', error);
+      return '/placeholder-poi.jpg';
+    }
   };
   
   return (
@@ -123,9 +128,9 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
               onClick={() => togglePOISelection(poi)}
             >
               <div className="h-32 relative overflow-hidden rounded-t-md bg-gray-200">
-                {poi.photos && poi.photos[0] && poi.photos[0].photo_reference ? (
+                {poi.photos && poi.photos[0] ? (
                   <Image 
-                    src={`https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${poi.photos[0].photo_reference}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`}
+                    src={getPoiImage(poi)}
                     alt={poi.name}
                     fill
                     style={{ objectFit: 'cover' }}

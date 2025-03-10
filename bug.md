@@ -18,8 +18,9 @@
 
 ### Media & UI Improvements
 4. **Google Places API Images**
-   - Make sure pictures from Google API are properly displayed
-   - Implement proper saving of images with POI data
+   - ~~Fix incorrect URL parameter (`photoreference` -> `photo_reference`)~~
+   - ~~Fix POI image display in selection modal by using the getUrl() method~~
+   - Update database code to properly save image references
    - Handle image attribution requirements
 
 5. **Tour Navigation Flow**
@@ -34,4 +35,5 @@
 - Fix real-time updates for website data and images
 
 ## Completed Items
-- **Remove Test Features**: Removed the "Test Audio Guide" tab from the interface (May 10, 2024) 
+- **Remove Test Features**: Removed the "Test Audio Guide" tab from the interface (May 10, 2024)
+- **Fix Google Places API Images (UI)**: Fixed image display in POI selection by using Google's getUrl() function (May 10, 2024) 

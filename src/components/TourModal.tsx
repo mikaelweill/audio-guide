@@ -504,9 +504,12 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
         name: poi.name,
         has_details: !!poi.details,
         has_website: poi.details?.website ? true : false,
-        website_url: poi.details?.website
+        website_url: poi.details?.website,
+        has_photos: !!(poi.photos && poi.photos.length > 0),
+        photos: poi.photos 
       })));
       
+      // Make sure we're preserving the complete POI objects with photos
       setDiscoveredPOIs(pois);
       
       // Move to next phase

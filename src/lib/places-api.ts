@@ -24,9 +24,11 @@ export interface POI {
     location: Location;
   };
   photos?: {
-    photo_reference: string;
+    photo_reference?: string;
     width: number;
     height: number;
+    html_attributions?: string[];
+    getUrl?: (options?: { maxWidth?: number; maxHeight?: number }) => string;
   }[];
   rating?: number;
   user_ratings_total?: number;
@@ -47,9 +49,11 @@ export interface POIDetails {
   url?: string;
   price_level?: number;
   photos?: {
-    photo_reference: string;
+    photo_reference?: string;
     width: number;
     height: number;
+    html_attributions?: string[];
+    getUrl?: (options?: { maxWidth?: number; maxHeight?: number }) => string;
   }[];
   reviews?: {
     author_name: string;

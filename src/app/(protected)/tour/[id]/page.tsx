@@ -823,7 +823,7 @@ export default function TourPage() {
             <div className="h-64 bg-gray-300 flex items-center justify-center">
               {currentStop.poi.photo_references && currentStop.poi.photo_references.length > 0 ? (
                 <img 
-                  src={`https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${currentStop.poi.photo_references[0]}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`}
+                  src={`https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${currentStop.poi.photo_references[0]}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`}
                   alt={currentStop.poi.name}
                   className="w-full h-full object-cover"
                 />

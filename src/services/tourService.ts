@@ -78,7 +78,7 @@ export async function downloadAndStorePOIImage(
     
     // Google Places Photo API URL
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photoRef}&key=${apiKey}`;
+    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${photoRef}&key=${apiKey}`;
     
     // Fetch the image from Google
     const response = await axios.get(photoUrl, { responseType: 'arraybuffer' });
