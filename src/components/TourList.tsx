@@ -314,35 +314,37 @@ export default function TourList({ tours, loading }: TourListProps) {
           key={tour.id} 
           className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow relative"
         >
-          {/* Minimal delete confirmation tooltip */}
+          {/* Centered confirmation dialog without dark overlay */}
           {showDeleteConfirm === tour.id && (
-            <div className="absolute top-0 right-0 z-10 mt-2 mr-2 bg-white border border-gray-200 rounded-md shadow-md py-2 px-3 text-sm">
-              <p className="text-gray-700 mb-2">Delete this tour?</p>
-              <div className="flex space-x-2">
-                <button
-                  onClick={cancelDelete}
-                  className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
-                  disabled={isDeleting}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => deleteTour(tour.id)}
-                  className="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors flex items-center"
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? (
-                    <>
-                      <svg className="animate-spin -ml-0.5 mr-1.5 h-3 w-3 text-red-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Deleting...
-                    </>
-                  ) : (
-                    'Confirm'
-                  )}
-                </button>
+            <div className="absolute inset-0 flex items-center justify-center z-20">
+              <div className="bg-white border border-gray-200 rounded-md shadow-md py-3 px-4 text-sm z-30 relative max-w-[200px]">
+                <p className="text-gray-700 mb-3 text-center font-medium">Delete this tour?</p>
+                <div className="flex justify-center space-x-3">
+                  <button
+                    onClick={cancelDelete}
+                    className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
+                    disabled={isDeleting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => deleteTour(tour.id)}
+                    className="px-3 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors flex items-center"
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <>
+                        <svg className="animate-spin -ml-0.5 mr-1.5 h-3 w-3 text-red-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Deleting...
+                      </>
+                    ) : (
+                      'Confirm'
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           )}
