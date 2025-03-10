@@ -1,17 +1,25 @@
 import prisma from '@/lib/prisma';
-import { createClient } from '@/utils/supabase/client';
 import { POI, TourPreferences } from '@/lib/places-api';
 import axios from 'axios';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaClientKnownRequestError, PrismaClientValidationError } from '@prisma/client/runtime/library';
-import { supabase } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 
 // Check if we're in a browser environment
 const isBrowser = typeof window !== 'undefined';
 
-// Initialize the singleton Supabase client
-const supabaseClient = createClient();
+// Use only the server-side client for admin operations
+async function getSupabaseClient() {
+  try {
+    // Get server client which has service role for admin operations
+    const serverClient = await createServerSupabaseClient();
+    return serverClient;
+  } catch (error) {
+    console.error('Error creating Supabase client:', error);
+    throw new Error('Failed to initialize Supabase client');
+  }
+}
 
 // Simple function to ensure the bucket exists
 async function ensurePoiImagesBucket() {
@@ -134,10 +142,11 @@ export async function downloadAndStorePOIImage(
   poi: POI,
   poiId: string
 ): Promise<{ path: string | null; attribution: string | null }> {
-  // Skip during server-side rendering or build
+  // Don't skip on server, but log environment for debugging
   if (!isBrowser) {
-    console.log('📸 Skipping image download in server environment');
-    return { path: null, attribution: null };
+    console.log('📸 Running image download in server environment');
+  } else {
+    console.log('📸 Running image download in browser environment');
   }
   
   // No need to check bucket - we know it already exists
@@ -206,7 +215,11 @@ export async function downloadAndStorePOIImage(
       
       console.log(`💾 Uploading ${buffer.length} bytes to ${bucketName}/${fileName}`);
       
-      // Upload to Supabase storage
+      // Get admin Supabase client for storage operations
+      const supabaseClient = await getSupabaseClient();
+      console.log('📊 Using Supabase server client for upload');
+      
+      // Upload to Supabase storage using admin client
       const { data, error } = await supabaseClient.storage
         .from(bucketName)
         .upload(fileName, buffer, {
@@ -446,8 +459,11 @@ export async function createTour({
     // Generate Google Maps deep link for the full route
     const googleMapsUrl = generateGoogleMapsLink(route, preferences.transportationMode);
     
+    // Store POI IDs to process images AFTER transaction completes
+    const pois_to_update_with_images: {poi: POI, poiId: string}[] = [];
+    
     // Start transaction to ensure all data is saved together
-    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const tourId = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Generate a UUID for the tour
       const tourId = uuidv4();
       
@@ -505,50 +521,9 @@ export async function createTour({
         const poiId = await savePOI(poi);
         console.log(`POI saved with ID: ${poiId}`);
         
-        // Download and store thumbnail image
-        let thumbnailPath = null;
-        let imageAttribution = null;
-        if (poiId) {
-          console.log(`🔍 Attempting to download and store image for POI: ${poi.name} (${poiId})`);
-          try {
-            const imageResult = await downloadAndStorePOIImage(poi, poiId);
-            thumbnailPath = imageResult.path;
-            imageAttribution = imageResult.attribution;
-            console.log(`🖼️ Image download result:`, { thumbnailPath, imageAttribution });
-            
-            // Update the POI with the thumbnail URL and attribution if available
-            if (thumbnailPath || imageAttribution) {
-              console.log(`📝 Updating POI with image data: ` +
-                `path=${thumbnailPath}, attribution=${imageAttribution ? 'present' : 'null'}`);
-              
-              // Use a type assertion to bypass the TypeScript error
-              const updateData: any = {};
-              
-              // Only add fields if they exist
-              if (thumbnailPath !== null) {
-                updateData.thumbnail_url = thumbnailPath;
-              }
-              
-              if (imageAttribution !== null) {
-                updateData.image_attribution = imageAttribution;
-              }
-              
-              // Only update if we have data to update
-              if (Object.keys(updateData).length > 0) {
-                console.log(`🔄 Updating POI ${poiId} with image data:`, updateData);
-                await tx.poi.update({
-                  where: { id: poiId },
-                  data: updateData
-                });
-                console.log(`✅ Successfully updated POI with image data`);
-              } else {
-                console.log(`ℹ️ No image data to update for POI ${poiId}`);
-              }
-            }
-          } catch (imageError) {
-            console.error(`❌ Error in image download or update process:`, imageError);
-            // Continue with tour creation even if image download fails
-          }
+        // Instead of downloading images now, store the POI for later processing
+        if (poiId && poi.photos && poi.photos.length > 0) {
+          pois_to_update_with_images.push({ poi, poiId });
         }
         
         // Create TourPoi relationship with sequence number
@@ -565,9 +540,51 @@ export async function createTour({
         });
       }
       
-      return tour.id;
-    });
-  } catch (error: unknown) {
+      return tourId;
+    }, { timeout: 10000 }); // Increase timeout slightly to be safe
+
+    // AFTER transaction completes, process images in parallel
+    console.log(`📸 Transaction completed. Now processing ${pois_to_update_with_images.length} images outside transaction`);
+    
+    // Process images in parallel to save time
+    await Promise.all(pois_to_update_with_images.map(async ({ poi, poiId }) => {
+      try {
+        console.log(`🔍 Attempting to download and store image for POI: ${poi.name} (${poiId})`);
+        const imageResult = await downloadAndStorePOIImage(poi, poiId);
+        const thumbnailPath = imageResult.path;
+        const imageAttribution = imageResult.attribution;
+        console.log(`🖼️ Image download result:`, { thumbnailPath, imageAttribution });
+        
+        // If we have image data, update the POI
+        if (thumbnailPath || imageAttribution) {
+          console.log(`📝 Updating POI with image data`);
+          const updateData: any = {};
+          
+          if (thumbnailPath !== null) {
+            updateData.thumbnail_url = thumbnailPath;
+          }
+          
+          if (imageAttribution !== null) {
+            updateData.image_attribution = imageAttribution;
+          }
+          
+          if (Object.keys(updateData).length > 0) {
+            console.log(`🔄 Updating POI ${poiId} with image data:`, updateData);
+            await prisma.poi.update({
+              where: { id: poiId },
+              data: updateData
+            });
+            console.log(`✅ Successfully updated POI with image data`);
+          }
+        }
+      } catch (imageError) {
+        console.error(`❌ Error processing image for POI ${poiId}:`, imageError);
+        // Continue with other images if one fails
+      }
+    }));
+    
+    return tourId;
+  } catch (error) {
     console.error('Error creating tour:', error);
     
     // Provide more specific error messages
@@ -582,10 +599,8 @@ export async function createTour({
       throw new Error(`Invalid data format: ${error.message}`);
     } else {
       // Handle other errors
-      throw new Error(`Failed to save tour: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to create tour: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
   }
-
 }
 
