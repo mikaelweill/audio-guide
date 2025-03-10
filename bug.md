@@ -8,9 +8,9 @@
    - Allow users to provide a meaningful name before saving
 
 2. **Route Information Accuracy**
-   - Fix the total time ETA + distance for each tour
-   - Currently using our heuristic instead of actual Google Maps ETA
-   - Add realistic assumptions around walking/transit distances and times
+   - ~~Fix the total time ETA + distance for each tour~~
+   - ~~Currently using our heuristic instead of actual Google Maps ETA~~
+   - ~~Add realistic assumptions around walking/transit distances and times~~
 
 3. **Transportation Mode**
    - Fix transportation mode selection and implementation
@@ -38,4 +38,8 @@
 - **Fixed Tour Image Saving**: Fixed the tour image downloading and saving by moving long-running operations outside database transactions (May 11, 2024)
 - **Added Finish Button**: Added a "Finish" button that appears on the last stop of a tour and returns users to the homepage (May 11, 2024)
 - **Remove Test Features**: Removed the "Test Audio Guide" tab from the interface (May 10, 2024)
-- **Fix Google Places API Images (UI)**: Fixed image display in POI selection by using Google's getUrl() function (May 10, 2024) 
+- **Fix Google Places API Images (UI)**: Fixed image display in POI selection by using Google's getUrl() function (May 10, 2024)
+- **Fixed ETA Calculation**: Fixed the tour duration calculation and display across the application (May 10, 2024)
+   - Added proper travel time buffer for realistic estimations
+   - Fixed unit conversion issue between seconds and minutes
+   - Fixed inconsistent time formatting between tour creation and listing views 
