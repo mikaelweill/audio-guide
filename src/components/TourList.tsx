@@ -287,6 +287,21 @@ export default function TourList({ tours, loading }: TourListProps) {
     return url;
   };
 
+  // Format location data for display
+  const formatLocation = (location: any): string => {
+    if (!location) return 'Unknown';
+    
+    // If we have an address, use it
+    if (location.address) {
+      return location.address;
+    }
+    
+    // Fallback to coordinates
+    const lat = typeof location.lat === 'number' ? location.lat.toFixed(6) : '?';
+    const lng = typeof location.lng === 'number' ? location.lng.toFixed(6) : '?';
+    return `${lat}, ${lng}`;
+  };
+
   if (loading) {
     return (
       <div className="space-y-4 mt-6">
@@ -505,7 +520,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-700">Start Location</p>
-                    <p className="text-gray-600 text-sm">{tour.start_location.address || `${tour.start_location.lat.toFixed(6)}, ${tour.start_location.lng.toFixed(6)}`}</p>
+                    <p className="text-gray-600 text-sm">{formatLocation(tour.start_location)}</p>
                   </div>
                 </div>
                 
@@ -520,7 +535,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-700">End Location</p>
-                      <p className="text-gray-600 text-sm">{tour.end_location.address || `${tour.end_location.lat.toFixed(6)}, ${tour.end_location.lng.toFixed(6)}`}</p>
+                      <p className="text-gray-600 text-sm">{formatLocation(tour.end_location)}</p>
                     </div>
                   </div>
                 )}

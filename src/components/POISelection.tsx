@@ -77,11 +77,54 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
       return;
     }
     
+    // Log location data for selected POIs
+    console.log("📍 DEBUG LOCATION - POIs before tour route generation:", 
+      selectedPOIs.map(poi => {
+        const location = poi.geometry?.location;
+        const latValue = location?.lat;
+        const lngValue = location?.lng;
+        
+        return {
+          name: poi.name,
+          latType: typeof latValue,
+          lngType: typeof lngValue,
+          isLatFn: typeof latValue === 'function',
+          isLngFn: typeof lngValue === 'function',
+          lat: typeof latValue === 'function' ? 
+            (latValue as Function)() : latValue,
+          lng: typeof lngValue === 'function' ? 
+            (lngValue as Function)() : lngValue
+        };
+      })
+    );
+    
     setIsGenerating(true);
     setError(null);
     
     try {
       const { route, stats } = await generateTourRoute(selectedPOIs, tourPreferences);
+      
+      // Log location data for generated route
+      console.log("📍 DEBUG LOCATION - Generated route with location data:", 
+        route.map(poi => {
+          const location = poi.geometry?.location;
+          const latValue = location?.lat;
+          const lngValue = location?.lng;
+          
+          return {
+            name: poi.name,
+            latType: typeof latValue,
+            lngType: typeof lngValue,
+            isLatFn: typeof latValue === 'function',
+            isLngFn: typeof lngValue === 'function',
+            lat: typeof latValue === 'function' ? 
+              (latValue as Function)() : latValue,
+            lng: typeof lngValue === 'function' ? 
+              (lngValue as Function)() : lngValue
+          };
+        })
+      );
+      
       onGenerateTour(route, stats);
     } catch (err) {
       console.error('Error generating tour:', err);

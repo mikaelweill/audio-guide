@@ -228,6 +228,29 @@ export default function Home() {
             return preparedPhoto;
           }) || [];
           
+          // Check location properties before serializing
+          const location = poi.geometry?.location;
+          const latValue = location?.lat;
+          const lngValue = location?.lng;
+          
+          // Log details about the current POI's location
+          console.log(`📍 DEBUG LOCATION - Serializing POI "${poi.name}" location:`, {
+            locationObj: location,
+            latType: typeof latValue,
+            lngType: typeof lngValue,
+            isLatFn: typeof latValue === 'function',
+            isLngFn: typeof lngValue === 'function'
+          });
+          
+          // Extract location values properly
+          const extractedLat = typeof latValue === 'function' ? (latValue as Function)() : latValue;
+          const extractedLng = typeof lngValue === 'function' ? (lngValue as Function)() : lngValue;
+          
+          console.log(`   Location values for "${poi.name}":`, {
+            lat: extractedLat, 
+            lng: extractedLng
+          });
+          
           // Return a cleaned POI object
           return {
             place_id: poi.place_id,
@@ -236,13 +259,15 @@ export default function Home() {
             vicinity: poi.vicinity || '',
             geometry: {
               location: {
-                lat: poi.geometry.location.lat,
-                lng: poi.geometry.location.lng
+                lat: extractedLat,
+                lng: extractedLng
               }
             },
             photos: preparedPhotos,
             rating: poi.rating,
             user_ratings_total: poi.user_ratings_total,
+            // Keep track of whether this is a start/end point
+            is_start_or_end: poi.types.includes('starting_point') || poi.types.includes('end_point'),
             // Safely extract details
             details: poi.details ? {
               formatted_address: poi.details.formatted_address,

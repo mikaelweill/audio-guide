@@ -546,19 +546,48 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
     // Extract all tour data first (no async operations)
     const tourName = formData.tourName || `Tour near ${preferences.startLocation.address}`;
     
-    // Simplify and extract route data
-    const simplifiedRoute = tourRoute
-      .filter(poi => !poi.types.includes('starting_point') && !poi.types.includes('end_point'))
-      .map(poi => ({
+    // Extract route data keeping ALL POIs including start/end points
+    // Previously we were filtering out start/end points which caused maps to show incomplete routes
+    const simplifiedRoute = tourRoute.map(poi => {
+      // Special handling for start/end points to retain them in the saved tour
+      const isStartOrEnd = poi.types.includes('starting_point') || poi.types.includes('end_point');
+      
+      console.log(`Processing POI for saving: ${poi.name} (${isStartOrEnd ? 'start/end point' : 'regular POI'})`);
+      
+      return {
         place_id: poi.place_id,
         name: poi.name,
-        types: poi.types,
+        types: poi.types || [],
+        vicinity: poi.vicinity || '',
         geometry: poi.geometry,
-        vicinity: poi.vicinity,
-        rating: poi.rating,
-        photos: poi.photos,
-        details: poi.details
-      }));
+        rating: isStartOrEnd ? undefined : poi.rating,
+        photos: isStartOrEnd ? undefined : poi.photos,
+        details: isStartOrEnd ? undefined : poi.details
+      };
+    });
+    
+    // Log location data for the route being saved
+    console.log("📍 DEBUG LOCATION - Tour route data for saving:", 
+      simplifiedRoute.map(poi => {
+        const location = poi.geometry?.location;
+        const latValue = location?.lat;
+        const lngValue = location?.lng;
+        
+        return {
+          name: poi.name,
+          vicinity: poi.vicinity, // Log the address info stored in vicinity
+          isStartOrEnd: poi.types.includes('starting_point') || poi.types.includes('end_point'),
+          latType: typeof latValue,
+          lngType: typeof lngValue,
+          isLatFn: typeof latValue === 'function',
+          isLngFn: typeof lngValue === 'function',
+          lat: typeof latValue === 'function' ? 
+            (latValue as Function)() : latValue,
+          lng: typeof lngValue === 'function' ? 
+            (lngValue as Function)() : lngValue
+        };
+      })
+    );
     
     // Prepare the preferences in the expected format
     const apiPreferences = {

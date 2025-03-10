@@ -203,6 +203,28 @@ export async function discoverPOIs(
         presentationPOIs.map(poi => fetchPOIDetails(poi, placesService))
       );
       
+      // Log the POIs with their location data before returning
+      console.log("📍 DEBUG LOCATION - Discovered POIs with location data:", 
+        enhancedPOIs.map(poi => {
+          const location = poi.geometry?.location;
+          const latValue = location?.lat;
+          const lngValue = location?.lng;
+          
+          return {
+            name: poi.name,
+            location: location,
+            latType: typeof latValue,
+            lngType: typeof lngValue,
+            isLatFn: typeof latValue === 'function',
+            isLngFn: typeof lngValue === 'function',
+            lat: typeof latValue === 'function' ? 
+              (latValue as Function)() : latValue,
+            lng: typeof lngValue === 'function' ? 
+              (lngValue as Function)() : lngValue
+          };
+        })
+      );
+      
       return enhancedPOIs;
     } else {
       // Server-side or no Google Maps available
@@ -317,7 +339,9 @@ export async function generateTourRoute(
         place_id: 'start', 
         name: 'Starting Point', 
         vicinity: startLocation.address,
-        geometry: { location: startLocation.position },
+        geometry: { 
+          location: startLocation.position 
+        },
         types: ['starting_point']
       };
       
@@ -358,7 +382,9 @@ export async function generateTourRoute(
           place_id: 'end',
           name: 'End Point',
           vicinity: endLocation.address,
-          geometry: { location: endLocation.position },
+          geometry: { 
+            location: endLocation.position 
+          },
           types: ['end_point']
         });
       }
