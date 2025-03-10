@@ -1122,20 +1122,29 @@ export default function TourPage() {
               Previous
             </button>
             
-            <button
-              onClick={() => goToStop(currentStopIndex + 1)}
-              disabled={currentStopIndex === sortedPois.length - 1}
-              className={`flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                currentStopIndex === sortedPois.length - 1
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}
-            >
-              Next
-              <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+            {currentStopIndex === sortedPois.length - 1 ? (
+              // Finish button when on last stop
+              <button
+                onClick={() => router.push('/')}
+                className="flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-colors bg-green-600 text-white hover:bg-green-700"
+              >
+                Finish
+                <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+            ) : (
+              // Next button for all other stops
+              <button
+                onClick={() => goToStop(currentStopIndex + 1)}
+                className="flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-colors bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Next
+                <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       </div>
