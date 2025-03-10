@@ -5,7 +5,6 @@ import { useJsApiLoader, Libraries } from '@react-google-maps/api';
 import TourModal from '@/components/TourModal';
 import TourList, { Tour } from '@/components/TourList';
 import { toast } from 'react-hot-toast';
-import { createClient } from '@/utils/supabase/client';
 
 // Extract tour fetching logic to a separate client component
 function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[]) => void }) {
@@ -76,7 +75,7 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[]) => void 
   
   if (isLoading) {
     return (
-      <div className="w-full py-8" data-tour-loader="true">
+      <div className="w-full py-8">
         <div className="flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mr-3"></div>
           <p>Loading your tours...</p>
@@ -87,7 +86,7 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[]) => void 
   
   if (error) {
     return (
-      <div className="w-full py-6 px-4 bg-red-50 rounded-lg border border-red-200 mb-8" data-tour-loader="true">
+      <div className="w-full py-6 px-4 bg-red-50 rounded-lg border border-red-200 mb-8">
         <p className="text-red-600">{error}</p>
         <button 
           onClick={() => window.location.reload()}
@@ -99,7 +98,7 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[]) => void 
     );
   }
   
-  return <div data-tour-loader="true"></div>;
+  return null;
 }
 
 // Main Home component with simplified structure - no auth checks needed
@@ -212,6 +211,7 @@ export default function Home() {
     try {
       console.log(`🔊 HOME: Processing ${pois.length} POIs in parallel with individual Edge Function calls...`);
       
+      const { createClient } = require('@/utils/supabase/client');
       const supabase = createClient();
       const { data: authData } = await supabase.auth.getSession();
       const accessToken = authData.session?.access_token;
@@ -342,60 +342,6 @@ export default function Home() {
       toast.error("Error processing tour content");
     }
   };
-  
-  // Set up real-time subscription to tour changes
-  useEffect(() => {
-    // Initialize Supabase client
-    const supabase = createClient();
-    
-    // Fetch the user ID for filtering subscription events
-    const getUserId = async () => {
-      const { data } = await supabase.auth.getSession();
-      return data.session?.user.id;
-    };
-    
-    // Set up subscription
-    const setupSubscription = async () => {
-      const userId = await getUserId();
-      if (!userId) return;
-      
-      // Subscribe to tour table changes for this user only
-      const subscription = supabase
-        .channel('tour-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*', // Listen for all events (INSERT, UPDATE, DELETE)
-            schema: 'public',
-            table: 'Tour',
-            filter: `user_id=eq.${userId}` // Only listen to this user's tours
-          },
-          (payload) => {
-            console.log('🔄 REAL-TIME: Tour change detected:', payload);
-            
-            // Refresh the tour list to get the latest data
-            const tourLoader = document.querySelector('[data-tour-loader="true"]');
-            if (tourLoader) {
-              // @ts-ignore
-              tourLoader.loadTours?.();
-            }
-          }
-        )
-        .subscribe();
-      
-      // Return unsubscribe function
-      return () => {
-        subscription.unsubscribe();
-      };
-    };
-    
-    const unsubscribe = setupSubscription();
-    
-    // Cleanup subscription on component unmount
-    return () => {
-      unsubscribe?.then(unsub => unsub && unsub());
-    };
-  }, []);
   
   return (
     <div className="min-h-screen bg-gray-50">

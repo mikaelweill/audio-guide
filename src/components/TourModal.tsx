@@ -498,6 +498,15 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
       // REPLACED: Instead of using fetch to a non-existent API, call the function directly
       console.log('Calling discoverPOIs with maxResults limit of 3...');
       const pois = await discoverPOIs(apiPreferences, { maxResults: 3 });
+      
+      // Log POIs to check if they have website data
+      console.log('Discovered POIs:', pois.map(poi => ({
+        name: poi.name,
+        has_details: !!poi.details,
+        has_website: poi.details?.website ? true : false,
+        website_url: poi.details?.website
+      })));
+      
       setDiscoveredPOIs(pois);
       
       // Move to next phase
@@ -544,7 +553,8 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
         geometry: poi.geometry,
         vicinity: poi.vicinity,
         rating: poi.rating,
-        photos: poi.photos
+        photos: poi.photos,
+        details: poi.details
       }));
     
     // Prepare the preferences in the expected format

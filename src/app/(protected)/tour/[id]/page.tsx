@@ -3,7 +3,7 @@
 import { useState, useEffect, ReactNode, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Tour } from '@/components/TourList';
+import { Tour, TourPoi } from '@/components/TourList';
 import { dataCollectionService } from '@/services/audioGuide';
 
 // Debug logging
@@ -773,6 +773,23 @@ export default function TourPage() {
               </div>
               
               <p className="text-gray-600 mt-1">{currentStop.poi.formatted_address}</p>
+              
+              {/* Add website link if available */}
+              {currentStop.poi.website && (
+                <div className="mt-2">
+                  <a 
+                    href={currentStop.poi.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center text-blue-600 hover:text-blue-800"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    Visit Website
+                  </a>
+                </div>
+              )}
               
               {currentStop.poi.rating && (
                 <div className="flex items-center mt-2">

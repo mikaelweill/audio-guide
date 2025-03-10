@@ -20,7 +20,7 @@ declare global {
 }
 
 // Tour type definition
-interface TourPoi {
+export interface TourPoi {
   id: string;
   sequence_number: number;
   poi: {
@@ -31,6 +31,7 @@ interface TourPoi {
     types: string[];
     rating: number | null;
     photo_references: string[] | null;
+    website?: string | null;
   };
 }
 
