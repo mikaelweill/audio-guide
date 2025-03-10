@@ -520,9 +520,11 @@ export default function TourList({ tours, loading }: TourListProps) {
 
           {expandedTourId === tour.id && (
             <div className="border-t border-gray-200 p-4">
-              {/* Start and End Location Section */}
+              {/* Tour in Chronological Order: Start > Stops > End */}
+              
+              {/* Start Location Section */}
               <div className="mb-6 bg-gray-50 p-3 rounded-lg">
-                <div className="flex items-start mb-3">
+                <div className="flex items-start">
                   <div className="min-w-8 mt-1 mr-2">
                     <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -535,42 +537,10 @@ export default function TourList({ tours, loading }: TourListProps) {
                     <p className="text-gray-600 text-sm">{formatLocation(tour.start_location)}</p>
                   </div>
                 </div>
-                
-                {!tour.return_to_start && (
-                  <div className="flex items-start">
-                    <div className="min-w-8 mt-1 mr-2">
-                      <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">End Location</p>
-                      <p className="text-gray-600 text-sm">{formatLocation(tour.end_location)}</p>
-                    </div>
-                  </div>
-                )}
-                
-                {tour.return_to_start && (
-                  <div className="flex items-start">
-                    <div className="min-w-8 mt-1 mr-2">
-                      <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Return to Start</p>
-                      <p className="text-gray-600 text-sm">This tour returns to the starting point</p>
-                    </div>
-                  </div>
-                )}
               </div>
               
               {/* Tour Stops Section */}
-              <div className="space-y-4">
+              <div className="space-y-4 mb-6">
                 <h4 className="font-medium text-gray-700 flex items-center">
                   <svg className="w-5 h-5 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 22s-8-4.5-8-11.8a8 8 0 0 1 16 0c0 7.3-8 11.8-8 11.8z" />
@@ -611,6 +581,39 @@ export default function TourList({ tours, loading }: TourListProps) {
                       </div>
                     ))}
                 </div>
+              </div>
+              
+              {/* End Location Section */}
+              <div className="mb-6 bg-gray-50 p-3 rounded-lg">
+                {!tour.return_to_start ? (
+                  <div className="flex items-start">
+                    <div className="min-w-8 mt-1 mr-2">
+                      <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">End Location</p>
+                      <p className="text-gray-600 text-sm">{formatLocation(tour.end_location)}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start">
+                    <div className="min-w-8 mt-1 mr-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Return to Start</p>
+                      <p className="text-gray-600 text-sm">This tour returns to the starting point</p>
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="mt-6 flex flex-wrap gap-2 justify-between">
