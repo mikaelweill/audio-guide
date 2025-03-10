@@ -400,14 +400,20 @@ export async function generateTourRoute(
       
       // Adjust POI duration based on total tour preferences
       if (preferences.duration <= 60) {
-        // For shorter tours, less time at each POI
-        POI_VISIT_DURATION = 10; 
+        // For shorter tours, still give reasonable time at each POI
+        POI_VISIT_DURATION = 15; 
       } else if (preferences.duration >= 120) {
         // For longer tours, more time at each POI
-        POI_VISIT_DURATION = 20;
+        POI_VISIT_DURATION = 25;
       }
       
       const stats = calculateTourStats(tourRoute, distanceMatrix, POI_VISIT_DURATION);
+      
+      // Apply a realistic minimum tour duration (15 minutes) if the calculated one is too short
+      if (stats.totalTourDuration < 15 && stats.totalPOIs > 0) {
+        console.log(`🕒 DEBUG ETA: Calculated duration (${stats.totalTourDuration.toFixed(1)} min) is unrealistically short. Applying minimum of 15 minutes.`);
+        stats.totalTourDuration = 15;
+      }
       
       return { route: tourRoute, stats };
     } else {
@@ -463,6 +469,8 @@ function calculateTourStats(
   const distances: number[] = [];
   const times: number[] = [];
   
+  console.log(`🕒 DEBUG ETA: Calculating stats for ${tourRoute.length} points with ${poiVisitDuration} min per POI`);
+  
   // Calculate walking distance and time
   for (let i = 0; i < tourRoute.length - 1; i++) {
     const row = distanceMatrix.rows[i];
@@ -478,12 +486,18 @@ function calculateTourStats(
         const distanceKm = element.distance.value / 1000; // in km
         const durationMin = element.duration.value / 60; // in minutes
         
+        // Add a 20% buffer to travel times to account for real-world delays
+        const bufferedDuration = durationMin * 1.2;
+        
+        console.log(`🕒 DEBUG ETA: Segment ${i}: ${tourRoute[i].name} -> ${tourRoute[i+1].name}: ${durationMin.toFixed(1)} min (buffered: ${bufferedDuration.toFixed(1)} min), ${distanceKm.toFixed(2)} km`);
+        
         totalWalkingDistance += element.distance.value; // in meters
-        totalWalkingTime += element.duration.value; // in seconds
+        totalWalkingTime += element.duration.value * 1.2; // in seconds, with 20% buffer
         
         distances.push(distanceKm);
-        times.push(durationMin);
+        times.push(bufferedDuration);
       } else {
+        console.log(`🕒 DEBUG ETA: Segment ${i}: No valid distance/duration data found`);
         distances.push(0);
         times.push(0);
       }
@@ -494,7 +508,7 @@ function calculateTourStats(
   const totalVisitTime = totalPOIs * poiVisitDuration * 60; // in seconds
   const totalTourDuration = totalWalkingTime + totalVisitTime; // in seconds
   
-  return {
+  const result = {
     totalPOIs,
     totalWalkingDistance: totalWalkingDistance / 1000, // in km
     totalWalkingTime: totalWalkingTime / 60, // in minutes
@@ -503,6 +517,16 @@ function calculateTourStats(
     distances,
     times
   };
+  
+  console.log(`🕒 DEBUG ETA: Final stats:`, {
+    totalPOIs,
+    totalWalkingDistance: (totalWalkingDistance / 1000).toFixed(2) + ' km',
+    totalWalkingTime: (totalWalkingTime / 60).toFixed(1) + ' min',
+    totalVisitTime: (totalVisitTime / 60).toFixed(1) + ' min',
+    totalTourDuration: (totalTourDuration / 60).toFixed(1) + ' min',
+  });
+  
+  return result;
 }
 
 // Declare types for the Google Maps API

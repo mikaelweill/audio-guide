@@ -169,14 +169,26 @@ export default function TourList({ tours, loading }: TourListProps) {
     }
   };
 
-  const formatDuration = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
+  const formatDuration = (minutes: number) => {
+    console.log(`🕒 DEBUG ETA (TourList): Formatting duration from raw value: ${minutes} minutes`);
     
+    // Ensure we have a positive value
+    const positiveMinutes = Math.max(0, minutes);
+    
+    // Now treat input as minutes (not seconds)
+    const hours = Math.floor(positiveMinutes / 60);
+    const mins = Math.round(positiveMinutes % 60);
+    
+    let formattedResult = '';
     if (hours > 0) {
-      return `${hours}h ${minutes}m`;
+      formattedResult = `${hours}h ${mins}m`;
+    } else {
+      // Show exact minutes value
+      formattedResult = `${mins} min`;
     }
-    return `${minutes} min`;
+    
+    console.log(`🕒 DEBUG ETA (TourList): Formatted result: ${formattedResult} (from ${hours}h ${mins}m)`);
+    return formattedResult;
   };
 
   const formatDate = (dateString: string) => {

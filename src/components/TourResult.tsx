@@ -113,11 +113,18 @@ export default function TourResult({
   
   // Format duration
   const formatDuration = (minutes: number) => {
+    console.log(`🕒 DEBUG ETA: Formatting duration from raw value: ${minutes} minutes`);
+    
     const hours = Math.floor(minutes / 60);
     const mins = Math.round(minutes % 60);
     
-    if (hours === 0) return `${mins} min`;
-    return `${hours} hr ${mins} min`;
+    // Ensure a minimum display time if the value is very small but not zero
+    const formattedResult = hours === 0 
+      ? `${Math.max(mins, minutes > 0 ? 1 : 0)} min` 
+      : `${hours} hr ${mins} min`;
+      
+    console.log(`🕒 DEBUG ETA: Formatted result: ${formattedResult}`);
+    return formattedResult;
   };
   
   // Format distance

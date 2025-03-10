@@ -487,6 +487,16 @@ export async function createTour({
         }
       });
       
+      console.log(`🕒 DEBUG ETA: Saving tour with duration: ${stats.totalTourDuration} minutes`);
+      console.log(`🕒 DEBUG ETA: Complete stats being saved:`, {
+        walkingDistance: stats.totalWalkingDistance,
+        walkingTime: stats.totalWalkingTime,
+        visitTime: stats.totalVisitTime,
+        totalTime: stats.totalTourDuration,
+        poiCount: stats.totalPOIs,
+        transportMode: preferences.transportationMode
+      });
+      
       // 2. Save all POIs
       for (let i = 0; i < route.length; i++) {
         const poi = route[i];
