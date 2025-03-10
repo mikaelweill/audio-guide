@@ -32,6 +32,8 @@ export interface TourPoi {
     rating: number | null;
     photo_references: string[] | null;
     website?: string | null;
+    thumbnail_url?: string | null;
+    image_attribution?: string | null;
   };
 }
 

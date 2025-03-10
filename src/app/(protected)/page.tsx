@@ -199,11 +199,75 @@ export default function Home() {
         hasWebsites: tourData.route.some((poi: any) => poi.details?.website)
       });
       
-      // Save to database using the API
+      // Prepare POI data for serialization
+      const serializedTourData = {
+        ...tourData,
+        route: tourData.route.map((poi: any) => {
+          // Extract photo data, converting getUrl methods to actual URLs
+          const preparedPhotos = poi.photos?.map((photo: any) => {
+            const preparedPhoto: any = {
+              width: photo.width,
+              height: photo.height,
+              html_attributions: photo.html_attributions || []
+            };
+            
+            // If getUrl is available, store the actual URL
+            if (typeof photo.getUrl === 'function') {
+              try {
+                preparedPhoto.url = photo.getUrl({ maxWidth: 800 });
+              } catch (error) {
+                console.warn('Failed to get photo URL:', error);
+              }
+            }
+            
+            // Always include photo_reference if available
+            if (photo.photo_reference) {
+              preparedPhoto.photo_reference = photo.photo_reference;
+            }
+            
+            return preparedPhoto;
+          }) || [];
+          
+          // Return a cleaned POI object
+          return {
+            place_id: poi.place_id,
+            name: poi.name,
+            types: poi.types || [],
+            vicinity: poi.vicinity || '',
+            geometry: {
+              location: {
+                lat: poi.geometry.location.lat,
+                lng: poi.geometry.location.lng
+              }
+            },
+            photos: preparedPhotos,
+            rating: poi.rating,
+            user_ratings_total: poi.user_ratings_total,
+            // Safely extract details
+            details: poi.details ? {
+              formatted_address: poi.details.formatted_address,
+              formatted_phone_number: poi.details.formatted_phone_number,
+              website: poi.details.website,
+              price_level: poi.details.price_level,
+              // Handle opening_hours more safely
+              opening_hours: poi.details.opening_hours ? {
+                weekday_text: poi.details.opening_hours.weekday_text || [],
+                // Convert isOpen function to open_now value if possible
+                open_now: typeof poi.details.opening_hours.isOpen === 'function' 
+                  ? poi.details.opening_hours.isOpen()
+                  : poi.details.opening_hours.open_now,
+                periods: poi.details.opening_hours.periods || []
+              } : null
+            } : null
+          };
+        })
+      };
+      
+      // Save to database using the API with properly serialized data
       const response = await fetch('/api/tours', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tourData),
+        body: JSON.stringify(serializedTourData),
         credentials: 'include'
       });
       

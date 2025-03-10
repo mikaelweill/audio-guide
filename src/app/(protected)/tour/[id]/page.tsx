@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Tour, TourPoi } from '@/components/TourList';
 import { dataCollectionService } from '@/services/audioGuide';
+import { getImageUrl, getImageAttribution } from '@/utils/images';
+import POIImage from '@/components/POIImage';
 
 // Debug logging
 const PAGE_DEBUG = true;
@@ -821,7 +823,13 @@ export default function TourPage() {
             
             {/* Placeholder for POI Image */}
             <div className="h-64 bg-gray-300 flex items-center justify-center">
-              {currentStop.poi.photo_references && currentStop.poi.photo_references.length > 0 ? (
+              {currentStop.poi.thumbnail_url ? (
+                <POIImage 
+                  imagePath={currentStop.poi.thumbnail_url} 
+                  attribution={currentStop.poi.image_attribution || null}
+                  altText={currentStop.poi.name}
+                />
+              ) : currentStop.poi.photo_references && currentStop.poi.photo_references.length > 0 ? (
                 <img 
                   src={`https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${currentStop.poi.photo_references[0]}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`}
                   alt={currentStop.poi.name}
@@ -1008,7 +1016,7 @@ export default function TourPage() {
                                   <>
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7 7 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                     </svg>
                                     Show Transcript
                                   </>

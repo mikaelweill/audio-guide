@@ -23,6 +23,7 @@ model Poi {
   opening_hours       Json?
   google_maps_url     String?
   thumbnail_url       String?
+  image_attribution   String?
   photo_references    Json?
   last_updated_at     DateTime
   audio_generated_at  DateTime?

@@ -46,8 +46,23 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
 
   const recommendedCount = calculateRecommendedCount(tourPreferences.duration);
   
-  // Toggle POI selection
+  // Add a debug function to log photo details
+  const logPOIPhotoDetails = (poi: POI) => {
+    console.log(`📸 DEBUG: POI ${poi.name} photo data:`, 
+      poi.photos ? poi.photos.map(photo => ({
+        photo_reference: photo.photo_reference,
+        hasGetUrl: 'getUrl' in photo,
+        width: photo.width,
+        height: photo.height,
+        attributionsCount: photo.html_attributions?.length || 0
+      })) : 'No photos'
+    );
+  };
+  
   const togglePOISelection = (poi: POI) => {
+    // Log photo details for debugging
+    logPOIPhotoDetails(poi);
+    
     if (selectedPOIs.some(p => p.place_id === poi.place_id)) {
       setSelectedPOIs(selectedPOIs.filter(p => p.place_id !== poi.place_id));
     } else {
@@ -86,10 +101,36 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
     
     // Use the getUrl function provided by Google Places API instead of building URL manually
     try {
-      return photos[0].getUrl({ maxWidth: 400 });
+      if (photos[0].getUrl) {
+        return photos[0].getUrl({ maxWidth: 400 });
+      } else if (photos[0].photo_reference) {
+        // Fallback to manual URL using photo_reference
+        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+        return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${photos[0].photo_reference}&key=${apiKey}`;
+      } else {
+        return '/placeholder-poi.jpg';
+      }
     } catch (error) {
       console.error('Error getting photo URL:', error);
       return '/placeholder-poi.jpg';
+    }
+  };
+  
+  const handleSelectPOI = (poi: POI) => {
+    console.log(`📸 DEBUG: POI selected with photo data:`, 
+      poi.photos ? poi.photos.map(photo => ({
+        photo_reference: photo.photo_reference,
+        hasGetUrl: !!(photo.getUrl),
+        width: photo.width,
+        height: photo.height,
+        attributions: photo.html_attributions
+      })) : 'No photos'
+    );
+    
+    if (selectedPOIs.some(p => p.place_id === poi.place_id)) {
+      setSelectedPOIs(selectedPOIs.filter(p => p.place_id !== poi.place_id));
+    } else {
+      setSelectedPOIs([...selectedPOIs, poi]);
     }
   };
   
@@ -121,7 +162,7 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
             <div 
               key={poi.place_id}
               className={`border rounded-lg overflow-hidden cursor-pointer transition-all duration-200 ${
-                selectedPOIs.some(p => p.place_id === poi.place_id) 
+                selectedPOIs.some(p => p.place_id === poi.place_id)
                   ? 'border-blue-500 ring-2 ring-blue-200' 
                   : 'border-gray-200 hover:border-gray-300'
               }`}
