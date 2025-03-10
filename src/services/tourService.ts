@@ -550,6 +550,20 @@ export async function createTour({
     await Promise.all(pois_to_update_with_images.map(async ({ poi, poiId }) => {
       try {
         console.log(`🔍 Attempting to download and store image for POI: ${poi.name} (${poiId})`);
+        
+        // First, check if the POI already has an image in the database
+        const existingPoi = await prisma.poi.findUnique({
+          where: { id: poiId },
+          select: { thumbnail_url: true }
+        });
+        
+        // If POI already has an image, skip downloading
+        if (existingPoi?.thumbnail_url) {
+          console.log(`🖼️ POI ${poi.name} already has an image: ${existingPoi.thumbnail_url}`);
+          console.log(`⏭️ Skipping image download for POI: ${poi.name}`);
+          return; // Skip to the next POI
+        }
+        
         const imageResult = await downloadAndStorePOIImage(poi, poiId);
         const thumbnailPath = imageResult.path;
         const imageAttribution = imageResult.attribution;

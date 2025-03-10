@@ -24,7 +24,7 @@
    - Handle image attribution requirements
 
 5. **Tour Navigation Flow**
-   - Add a "Finish" button to the tour view that returns users to home page
+   - ~~Add a "Finish" button to the tour view that returns users to home page~~
    - Improve overall tour navigation experience
 
 ### Cleanup
@@ -35,5 +35,7 @@
 - Fix real-time updates for website data and images
 
 ## Completed Items
+- **Fixed Tour Image Saving**: Fixed the tour image downloading and saving by moving long-running operations outside database transactions (May 11, 2024)
+- **Added Finish Button**: Added a "Finish" button that appears on the last stop of a tour and returns users to the homepage (May 11, 2024)
 - **Remove Test Features**: Removed the "Test Audio Guide" tab from the interface (May 10, 2024)
 - **Fix Google Places API Images (UI)**: Fixed image display in POI selection by using Google's getUrl() function (May 10, 2024) 

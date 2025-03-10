@@ -314,13 +314,18 @@ export async function generateTourRoute(
       
       // Get distance matrix
       const distanceMatrix = await new Promise<google.maps.DistanceMatrixResponse>((resolve, reject) => {
+        // Ensure we're using the correct transportation mode
+        const travelMode = preferences.transportationMode === 'transit' 
+          ? window.google.maps.TravelMode.TRANSIT 
+          : window.google.maps.TravelMode.WALKING;
+          
+        console.log(`Using transportation mode: ${preferences.transportationMode} (${travelMode})`);
+        
         distanceMatrixService.getDistanceMatrix(
           {
             origins,
             destinations,
-            travelMode: preferences.transportationMode === 'transit' 
-              ? window.google.maps.TravelMode.TRANSIT 
-              : window.google.maps.TravelMode.WALKING,
+            travelMode: travelMode,
             unitSystem: window.google.maps.UnitSystem.METRIC
           },
           (response: google.maps.DistanceMatrixResponse | null, status: string) => {
@@ -390,7 +395,18 @@ export async function generateTourRoute(
       }
       
       // Calculate stats
-      const POI_VISIT_DURATION = 20; // minutes
+      // POI visit duration should be adaptive based on tour preferences
+      let POI_VISIT_DURATION = 15; // default 15 minutes per POI
+      
+      // Adjust POI duration based on total tour preferences
+      if (preferences.duration <= 60) {
+        // For shorter tours, less time at each POI
+        POI_VISIT_DURATION = 10; 
+      } else if (preferences.duration >= 120) {
+        // For longer tours, more time at each POI
+        POI_VISIT_DURATION = 20;
+      }
+      
       const stats = calculateTourStats(tourRoute, distanceMatrix, POI_VISIT_DURATION);
       
       return { route: tourRoute, stats };
@@ -444,15 +460,32 @@ function calculateTourStats(
 ): any {
   let totalWalkingDistance = 0;
   let totalWalkingTime = 0;
+  const distances: number[] = [];
+  const times: number[] = [];
   
   // Calculate walking distance and time
   for (let i = 0; i < tourRoute.length - 1; i++) {
     const row = distanceMatrix.rows[i];
     if (row && row.elements) {
+      // Fix: For each point in the route, we want the travel time to the next point
+      // The distance matrix is structured such that rows[i].elements[j] gives the travel
+      // from origins[i] to destinations[j]
+      // Since destinations are offset by 1 (they don't include start point but include end point),
+      // we need to look at element[i]
       const element = row.elements[i];
+      
       if (element && element.distance && element.duration) {
+        const distanceKm = element.distance.value / 1000; // in km
+        const durationMin = element.duration.value / 60; // in minutes
+        
         totalWalkingDistance += element.distance.value; // in meters
         totalWalkingTime += element.duration.value; // in seconds
+        
+        distances.push(distanceKm);
+        times.push(durationMin);
+      } else {
+        distances.push(0);
+        times.push(0);
       }
     }
   }
@@ -467,6 +500,8 @@ function calculateTourStats(
     totalWalkingTime: totalWalkingTime / 60, // in minutes
     totalVisitTime: totalVisitTime / 60, // in minutes
     totalTourDuration: totalTourDuration / 60, // in minutes
+    distances,
+    times
   };
 }
 
