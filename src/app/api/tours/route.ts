@@ -242,6 +242,7 @@ export async function POST(request: NextRequest) {
               types: poi.types || [],
               rating: poi.rating,
               photo_references: poi.photos ? poi.photos.map((photo: any) => photo.photo_reference) : [],
+              website: poi.details?.website || null,
               last_updated_at: now
             });
           
@@ -253,6 +254,21 @@ export async function POST(request: NextRequest) {
           }
         } else {
           poiId = existingPoi.id;
+          
+          // Check if we need to update the POI with new data
+          if (poi.details?.website) {
+            const { error: updateError } = await supabase
+              .from('Poi')
+              .update({
+                website: poi.details.website,
+                last_updated_at: now
+              })
+              .eq('id', poiId);
+              
+            if (updateError) {
+              console.error(`Tour API: Error updating POI website for ${poi.name}:`, updateError);
+            }
+          }
         }
         
         if (poiId) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useJsApiLoader, Libraries } from '@react-google-maps/api';
 import TourModal from '@/components/TourModal';
 import TourList, { Tour } from '@/components/TourList';
@@ -11,6 +11,7 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[]) => void 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tours, setTours] = useState<Tour[]>([]);
+  const subscriptionRef = useRef(null);
   
   // Simple fetch function made accessible
   const fetchTours = async () => {
@@ -38,6 +39,27 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[]) => void 
         console.log(`✅ TOUR LOADER: Loaded ${data.tours.length} tours`);
         setTours(data.tours);
         onToursLoaded(data.tours);
+        
+        // Simple subscription - set up only once
+        if (!subscriptionRef.current) {
+          console.log('🔌 Creating Supabase real-time subscription to Tour table');
+          const { createClient } = require('@/utils/supabase/client'); 
+          const supabase = createClient();
+          
+          // Enable realtime on the tours table
+          const channel = supabase.channel('tour-changes')
+            .on('postgres_changes', {
+              event: '*',
+              schema: 'public',
+              table: 'Tour'
+            }, (payload: { eventType: string }) => {
+              console.log(`🔄 Tour table changed (${payload.eventType}) - refreshing`);
+              fetchTours();
+            })
+            .subscribe();
+            
+          subscriptionRef.current = channel;
+        }
       } else {
         throw new Error('Invalid response format');
       }
@@ -64,6 +86,18 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[]) => void 
       if (loaderElement) {
         // @ts-ignore
         delete loaderElement.loadTours;
+      }
+      
+      // Clean up subscription
+      if (subscriptionRef.current) {
+        try {
+          const { createClient } = require('@/utils/supabase/client');
+          const supabase = createClient();
+          supabase.removeChannel(subscriptionRef.current);
+          console.log('Subscription cleaned up');
+        } catch (error) {
+          console.error('Error cleaning up subscription:', error);
+        }
       }
     };
   }, []);
@@ -159,7 +193,11 @@ export default function Home() {
   // New function to save tour data to database
   const saveTour = async (tourData: any) => {
     try {
-      console.log('💾 HOME: Saving tour to database...');
+      console.log('💾 HOME: Saving tour to database...', {
+        tourName: tourData.name,
+        numPOIs: tourData.route.length,
+        hasWebsites: tourData.route.some((poi: any) => poi.details?.website)
+      });
       
       // Save to database using the API
       const response = await fetch('/api/tours', {
@@ -188,6 +226,7 @@ export default function Home() {
       }
       
       console.log('✅ HOME: Tour saved successfully with ID:', data.tourId);
+      console.log('🔄 HOME: Check if realtime update is received automatically...');
       
       // If we have valid tour data with POIs, process them with Supabase
       if (tourData.route && tourData.route.length > 0) {
