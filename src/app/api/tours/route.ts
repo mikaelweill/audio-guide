@@ -61,6 +61,8 @@ export async function GET(request: NextRequest) {
         }
       });
       
+      console.log(`Tour API: Total tours found: ${totalCount}`);
+      
       // Then fetch the paginated tours
       const tours = await prisma.tour.findMany({
         where: {
@@ -83,17 +85,23 @@ export async function GET(request: NextRequest) {
         take: validLimit
       });
       
+      // Log individual tour data for debugging
       console.log(`Tour API: Found ${tours?.length || 0} tours out of ${totalCount} total with Prisma`);
+      console.log(`Tour API: Tour IDs returned for page ${validPage}:`, tours.map(tour => tour.id));
+      
+      const pagination = {
+        total: totalCount,
+        page: validPage,
+        limit: validLimit,
+        pages: Math.ceil(totalCount / validLimit)
+      };
+      
+      console.log('Tour API: Pagination info:', pagination);
       
       return NextResponse.json({ 
         success: true, 
         tours,
-        pagination: {
-          total: totalCount,
-          page: validPage,
-          limit: validLimit,
-          pages: Math.ceil(totalCount / validLimit)
-        }
+        pagination
       }, { status: 200 });
     } catch (prismaError) {
       console.error('Tour API: Error fetching tours with Prisma:', prismaError);
@@ -112,6 +120,7 @@ export async function GET(request: NextRequest) {
       }
       
       const totalCount = count || 0;
+      console.log(`Tour API: Total tours found with Supabase: ${totalCount}`);
       
       // Query tours for the user with pagination
       const { data: tours, error } = await supabase
@@ -155,17 +164,23 @@ export async function GET(request: NextRequest) {
         }, { status: 500 });
       }
       
+      // Log individual tour data for debugging
       console.log(`Tour API: Found ${tours?.length || 0} tours out of ${totalCount} total with Supabase`);
+      console.log(`Tour API: Tour IDs returned for page ${validPage}:`, tours.map(tour => tour.id));
+      
+      const pagination = {
+        total: totalCount,
+        page: validPage,
+        limit: validLimit,
+        pages: Math.ceil(totalCount / validLimit)
+      };
+      
+      console.log('Tour API: Pagination info:', pagination);
       
       return NextResponse.json({ 
         success: true, 
         tours,
-        pagination: {
-          total: totalCount,
-          page: validPage,
-          limit: validLimit,
-          pages: Math.ceil(totalCount / validLimit)
-        }
+        pagination
       }, { status: 200 });
     }
   } catch (error) {

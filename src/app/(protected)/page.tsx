@@ -7,22 +7,42 @@ import TourList, { Tour } from '@/components/TourList';
 import { toast } from 'react-hot-toast';
 
 // Extract tour fetching logic to a separate client component
-function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[], pagination?: { total: number, pages: number }) => void }) {
+function TourLoader({ 
+  onToursLoaded, 
+  currentPage, 
+  limit,
+  onLoadingChange
+}: { 
+  onToursLoaded: (tours: Tour[], pagination?: { total: number, pages: number }) => void;
+  currentPage: number;
+  limit: number;
+  onLoadingChange?: (isLoading: boolean) => void;
+}) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tours, setTours] = useState<Tour[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalTours, setTotalTours] = useState(0);
-  const [limit] = useState(6);
   const subscriptionRef = useRef(null);
   
-  const fetchTours = async (page = 1, limit = 6) => {
-    console.log(`🔄 TOUR LOADER: Fetching tours for page ${page} with limit ${limit}`);
+  // Notify parent about loading state changes
+  useEffect(() => {
+    if (onLoadingChange) {
+      onLoadingChange(isLoading);
+    }
+  }, [isLoading, onLoadingChange]);
+  
+  const fetchTours = async (page = currentPage, pageLimit = limit) => {
+    console.log(`🔄 TOUR LOADER: Fetching tours for page ${page} with limit ${pageLimit}`);
     setIsLoading(true);
     
+    // Notify parent component about loading state
+    if (onLoadingChange) {
+      onLoadingChange(true);
+    }
+    
     try {
-      const response = await fetch(`/api/tours?page=${page}&limit=${limit}`, {
+      const response = await fetch(`/api/tours?page=${page}&limit=${pageLimit}`, {
         credentials: 'include'
       });
       
@@ -35,7 +55,6 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[], paginati
       if (data.success && Array.isArray(data.tours)) {
         console.log(`✅ TOUR LOADER: Loaded ${data.tours.length} tours (page ${page} of ${data.pagination?.pages || 1})`);
         setTours(data.tours);
-        setCurrentPage(data.pagination?.page || page);
         setTotalPages(data.pagination?.pages || 1);
         setTotalTours(data.pagination?.total || data.tours.length);
         
@@ -57,7 +76,7 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[], paginati
               },
               (payload: any) => {
                 console.log('🔌 REALTIME: Tour change detected', payload);
-                fetchTours(currentPage, limit);
+                fetchTours();
               }
             )
             .subscribe();
@@ -73,11 +92,17 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[], paginati
       setError(err.message || 'Failed to load tours');
     } finally {
       setIsLoading(false);
+      
+      // Notify parent component about loading state
+      if (onLoadingChange) {
+        onLoadingChange(false);
+      }
     }
   };
   
-  // Load tours on mount
+  // Load tours whenever currentPage or limit changes (since they're now props)
   useEffect(() => {
+    console.log(`🔄 TOUR LOADER: Page changed to ${currentPage}, fetching new data`);
     fetchTours(currentPage, limit);
     
     // Clean up subscription on unmount
@@ -89,7 +114,7 @@ function TourLoader({ onToursLoaded }: { onToursLoaded: (tours: Tour[], paginati
         supabase.removeChannel(subscriptionRef.current);
       }
     };
-  }, [currentPage, limit]);
+  }, [currentPage, limit]); // Dependencies now come from props
   
   return null; // This component is just for data fetching
 }
@@ -232,6 +257,7 @@ export default function Home() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalTours, setTotalTours] = useState(0);
   const [toursPerPage] = useState(6);
+  const [isLoadingTours, setIsLoadingTours] = useState(false);
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -264,19 +290,23 @@ export default function Home() {
     // Your existing implementation
   };
 
-  // Handler for pagination
+  // Handler for pagination - now properly forces a re-fetch via props
   const handlePageChange = (newPage: number) => {
     console.log(`📄 HOME: Changing to page ${newPage}`);
     setCurrentPage(newPage);
   };
   
-  // Update the handleToursLoaded function
+  // Update the handleToursLoaded function with better debugging
   const handleToursLoaded = (loadedTours: Tour[], pagination?: { total: number, pages: number }) => {
-    console.log(`✅ HOME: ${loadedTours.length} tours loaded`);
+    console.log(`✅ HOME: ${loadedTours.length} tours loaded for page ${currentPage}`);
+    console.log('📊 Pagination data:', pagination);
+    
+    // Update state with the loaded tours
     setTours(loadedTours);
     
     // Update pagination information if provided
     if (pagination) {
+      console.log(`📄 Setting totalPages=${pagination.pages}, totalTours=${pagination.total}`);
       setTotalTours(pagination.total);
       setTotalPages(pagination.pages);
     }
@@ -314,8 +344,13 @@ export default function Home() {
       {/* Globe Styles */}
       <style dangerouslySetInnerHTML={{ __html: globeStyles }} />
       
-      {/* Tour data loader */}
-      <TourLoader onToursLoaded={handleToursLoaded} />
+      {/* Tour data loader with currentPage and limit props */}
+      <TourLoader 
+        onToursLoaded={handleToursLoaded} 
+        currentPage={currentPage} 
+        limit={toursPerPage} 
+        onLoadingChange={setIsLoadingTours}
+      />
       
       {/* Main container */}
       <div className="container mx-auto px-4 py-8 md:py-12">
@@ -409,18 +444,26 @@ export default function Home() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="bg-slate-900/60 rounded-lg border border-slate-800 p-4">
-                  <TourList tours={tours} loading={false} />
+                <div className="bg-slate-900/60 rounded-lg border border-slate-800 p-4 relative">
+                  {isLoadingTours && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 rounded-lg z-10">
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 border-4 border-t-indigo-500 border-r-transparent border-b-indigo-300 border-l-transparent rounded-full animate-spin mb-2"></div>
+                        <span className="text-indigo-300 text-sm">Loading tours...</span>
+                      </div>
+                    </div>
+                  )}
+                  <TourList tours={tours} loading={isLoadingTours} />
                 </div>
                 
-                {/* Pagination Controls */}
+                {/* Pagination Controls - Add loading indicator when changing pages */}
                 {totalPages > 1 && (
-                  <div className="flex justify-center space-x-2 mt-4">
+                  <div className="flex justify-center items-center space-x-2 mt-4">
                     <button
                       onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                      disabled={currentPage === 1}
+                      disabled={currentPage === 1 || isLoadingTours}
                       className={`px-3 py-1 rounded-md flex items-center 
-                        ${currentPage === 1 
+                        ${(currentPage === 1 || isLoadingTours) 
                           ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
                           : 'bg-slate-700 hover:bg-slate-600 text-white'}`}
                     >
@@ -429,15 +472,18 @@ export default function Home() {
                       </svg>
                     </button>
                     
-                    <div className="px-3 py-1 bg-slate-800 rounded-md text-white">
+                    <div className="px-3 py-1 bg-slate-800 rounded-md text-white flex items-center">
+                      {isLoadingTours ? (
+                        <div className="w-4 h-4 border-2 border-t-indigo-500 border-r-transparent border-b-indigo-300 border-l-transparent rounded-full animate-spin mr-2"></div>
+                      ) : null}
                       {currentPage} / {totalPages}
                     </div>
                     
                     <button
                       onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-                      disabled={currentPage === totalPages}
+                      disabled={currentPage === totalPages || isLoadingTours}
                       className={`px-3 py-1 rounded-md flex items-center
-                        ${currentPage === totalPages 
+                        ${(currentPage === totalPages || isLoadingTours)
                           ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
                           : 'bg-slate-700 hover:bg-slate-600 text-white'}`}
                     >
