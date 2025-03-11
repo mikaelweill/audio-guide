@@ -385,7 +385,13 @@ export default function TourPage() {
     
     try {
       // Show the transcript for this audio
+      console.log("Setting showTranscript to true");
       setShowTranscript(true);
+      
+      // Get the current POI ID for debugging
+      const currentPoiId = currentStop?.poi?.id || `poi-${currentStopIndex}`;
+      console.log("Current POI ID:", currentPoiId);
+      console.log("Audio data for this POI:", audioData[currentPoiId]);
       
       // Display spinner or loading state first
       setIsAudioLoading(true);
@@ -646,23 +652,23 @@ export default function TourPage() {
   
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen py-12 bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        <p className="mt-4 text-gray-600">Loading tour...</p>
+      <div className="flex flex-col items-center justify-center min-h-screen py-12 bg-slate-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-pink-500"></div>
+        <p className="mt-4 text-gray-300">Loading tour...</p>
       </div>
     );
   }
   
   if (error || !tour) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <div className="max-w-7xl mx-auto bg-white rounded-lg shadow p-6 my-6">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">Error Loading Tour</h1>
-          <p className="mb-4">{error || 'Tour not found'}</p>
+      <div className="min-h-screen bg-slate-950 p-4">
+        <div className="max-w-7xl mx-auto bg-slate-900 rounded-lg shadow-lg border border-purple-900/30 p-6 my-6">
+          <h1 className="text-2xl font-bold text-red-400 mb-4">Error Loading Tour</h1>
+          <p className="mb-4 text-gray-300">{error || 'Tour not found'}</p>
           <div className="flex space-x-4">
             <Link
               href="/"
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-gradient-to-r from-orange-500 to-pink-600 text-white rounded hover:opacity-90 transition-opacity"
             >
               Go Back Home
             </Link>
@@ -672,7 +678,7 @@ export default function TourPage() {
                 setLoading(true);
                 window.location.reload();
               }}
-              className="px-4 py-2 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors"
+              className="px-4 py-2 border border-pink-600 text-pink-400 rounded hover:bg-purple-900/20 transition-colors"
             >
               Try Again
             </button>
@@ -683,20 +689,20 @@ export default function TourPage() {
   }
   
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 pb-20">
       {/* Tour Header */}
-      <div className="bg-blue-600 text-white py-4">
+      <div className="bg-gradient-to-r from-purple-900 via-pink-800 to-orange-900 text-white py-4 shadow-md shadow-purple-900/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-2xl font-bold">{tour.name}</h1>
-              <p className="text-blue-100 mt-1">
+              <p className="text-pink-100 mt-1">
                 {tour.tourPois.length} stops • {(tour.total_distance).toFixed(1)} km • {formatDuration(tour.total_duration)}
               </p>
             </div>
             <Link
               href="/"
-              className="text-white hover:text-blue-200 transition-colors"
+              className="text-white hover:text-pink-200 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -710,17 +716,17 @@ export default function TourPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Audio Guide Generation Button - Parent level control */}
         {!isGeneratingAudio && Object.keys(audioData).length === 0 && (
-          <div className="bg-blue-50 p-4 rounded-lg shadow-sm mb-8">
+          <div className="bg-slate-900/80 p-4 rounded-lg shadow-lg border border-purple-900/30 mb-8">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center">
-                <svg className="w-5 h-5 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                <svg className="w-5 h-5 text-pink-500 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                   <path d="M18 3a1 1 0 00-1.447-.894L8.763 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-4.382l6.553 3.276A1 1 0 0018 15V3z"></path>
                 </svg>
-                <h3 className="font-semibold text-lg">Audio Tour Guides</h3>
+                <h3 className="font-semibold text-lg text-white">Audio Tour Guides</h3>
               </div>
               <button 
                 onClick={handleGenerateAudioGuides}
-                className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md font-medium text-sm flex items-center"
+                className="bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90 text-white py-2 px-4 rounded-md font-medium text-sm flex items-center shadow-md"
               >
                 <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
@@ -728,7 +734,7 @@ export default function TourPage() {
                 Generate Audio For All Stops
               </button>
             </div>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-400">
               Generate audio guides for all stops on this tour. This will create audio content you can listen to at each location.
             </p>
           </div>
@@ -736,34 +742,34 @@ export default function TourPage() {
         
         {/* Generation Progress Indicator */}
         {isGeneratingAudio && (
-          <div className="bg-blue-50 p-4 rounded-lg shadow-sm mb-8">
-            <h3 className="font-semibold text-lg mb-3 flex items-center">
-              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <div className="bg-slate-900/80 p-4 rounded-lg shadow-lg border border-purple-900/30 mb-8">
+            <h3 className="font-semibold text-lg mb-3 flex items-center text-white">
+              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-pink-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
               Generating Audio Guides
             </h3>
-            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+            <div className="w-full bg-slate-800 rounded-full h-2.5 mb-2">
               <div 
-                className="bg-blue-600 h-2.5 rounded-full transition-all" 
+                className="bg-gradient-to-r from-orange-500 via-pink-600 to-purple-600 h-2.5 rounded-full transition-all" 
                 style={{ width: `${generationProgress}%` }}
               ></div>
             </div>
-            <p className="text-sm text-gray-600">{currentGenerationStep}</p>
-            <p className="text-sm text-gray-500 mt-1">This may take a few minutes. Please don't close this page.</p>
+            <p className="text-sm text-pink-200">{currentGenerationStep}</p>
+            <p className="text-sm text-gray-400 mt-1">This may take a few minutes. Please don't close this page.</p>
           </div>
         )}
         
         {/* Progress Bar */}
         <div className="mb-8">
-          <div className="bg-gray-200 rounded-full h-2.5 mb-2">
+          <div className="bg-slate-800 rounded-full h-2.5 mb-2">
             <div 
-              className="bg-blue-600 h-2.5 rounded-full" 
+              className="bg-gradient-to-r from-orange-500 via-pink-600 to-purple-600 h-2.5 rounded-full" 
               style={{ width: `${(currentStopIndex / Math.max(1, tour.tourPois.length - 1)) * 100}%` }}
             ></div>
           </div>
-          <div className="flex justify-between text-sm text-gray-500">
+          <div className="flex justify-between text-sm text-gray-400">
             <span>Start</span>
             <span>Finish</span>
           </div>
@@ -771,18 +777,18 @@ export default function TourPage() {
         
         {/* Current Stop */}
         {currentStop && (
-          <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-            <div className="p-4 border-b border-gray-200">
+          <div className="bg-slate-900/80 rounded-lg shadow-lg border border-purple-900/30 overflow-hidden mb-6">
+            <div className="p-4 border-b border-purple-900/30">
               <div className="flex justify-between items-start">
-                <h2 className="text-xl font-semibold text-gray-900">
+                <h2 className="text-xl font-semibold text-white">
                   Stop {currentStopIndex + 1}: {currentStop.poi.name}
                 </h2>
-                <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                <span className="bg-purple-900/50 text-pink-300 text-xs font-medium px-2.5 py-0.5 rounded-full border border-purple-700/50">
                   {currentStopIndex + 1}/{sortedPois.length}
                 </span>
               </div>
               
-              <p className="text-gray-600 mt-1">{currentStop.poi.formatted_address}</p>
+              <p className="text-gray-400 mt-1">{currentStop.poi.formatted_address}</p>
               
               {/* Add website link if available */}
               {currentStop.poi.website && (
@@ -791,7 +797,7 @@ export default function TourPage() {
                     href={currentStop.poi.website}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center text-blue-600 hover:text-blue-800"
+                    className="inline-flex items-center text-pink-400 hover:text-pink-300"
                   >
                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -822,7 +828,7 @@ export default function TourPage() {
             </div>
             
             {/* Placeholder for POI Image */}
-            <div className="h-64 bg-gray-300 flex items-center justify-center">
+            <div className="h-64 bg-slate-800 flex items-center justify-center">
               {currentStop.poi.thumbnail_url ? (
                 <POIImage 
                   imagePath={currentStop.poi.thumbnail_url} 
@@ -836,7 +842,7 @@ export default function TourPage() {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg className="w-16 h-16 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               )}
@@ -844,8 +850,8 @@ export default function TourPage() {
             
             {/* Content Section */}
             <div className="p-4">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">About this location</h3>
-              <p className="text-gray-600 mb-4">
+              <h3 className="text-lg font-medium text-white mb-2">About this location</h3>
+              <p className="text-gray-300 mb-4">
                 {Object.keys(audioData).length > 0 ? 
                   "Audio guides for this location are ready to play below." : 
                   "Audio guide content for this location will be generated and displayed here."}
@@ -855,12 +861,12 @@ export default function TourPage() {
               {Object.keys(audioData).length > 0 ? (
                 <>
                   {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`] ? (
-                    <div className="bg-gray-100 p-4 rounded-lg mb-4">
+                    <div className="bg-slate-800/80 p-4 rounded-lg mb-4 shadow-md border border-purple-900/30">
                       <div className="flex flex-col space-y-4">
                         {/* Audio selection buttons */}
                         <div className="flex flex-wrap gap-2">
                           <button 
-                            className={`${currentAudioId === 'brief' ? 'bg-blue-600' : 'bg-blue-500 hover:bg-blue-600'} text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'brief' ? 'opacity-75 cursor-wait' : ''}`}
+                            className={`${currentAudioId === 'brief' ? 'bg-gradient-to-r from-orange-600 to-pink-700' : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90'} text-white py-2 px-3 rounded-md flex items-center justify-center ${isAudioLoading && currentAudioId === 'brief' ? 'opacity-75 cursor-wait' : ''} shadow-md`}
                             onClick={async () => {
                               setCurrentAudioId('brief');
                               const audioUrl = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.audioFiles?.coreAudioUrl;
@@ -892,7 +898,7 @@ export default function TourPage() {
                           </button>
                           
                           <button 
-                            className={`${currentAudioId === 'detailed' ? 'bg-blue-600' : 'bg-blue-500 hover:bg-blue-600'} text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'detailed' ? 'opacity-75 cursor-wait' : ''}`}
+                            className={`${currentAudioId === 'detailed' ? 'bg-gradient-to-r from-orange-600 to-pink-700' : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90'} text-white py-2 px-3 rounded-md flex items-center justify-center ${isAudioLoading && currentAudioId === 'detailed' ? 'opacity-75 cursor-wait' : ''} shadow-md`}
                             onClick={async () => {
                               setCurrentAudioId('detailed');
                               const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.secondaryAudioUrl;
@@ -924,7 +930,7 @@ export default function TourPage() {
                           </button>
                           
                           <button 
-                            className={`${currentAudioId === 'in-depth' ? 'bg-blue-600' : 'bg-blue-500 hover:bg-blue-600'} text-white py-2 px-3 rounded flex items-center justify-center ${isAudioLoading && currentAudioId === 'in-depth' ? 'opacity-75 cursor-wait' : ''}`}
+                            className={`${currentAudioId === 'in-depth' ? 'bg-gradient-to-r from-orange-600 to-pink-700' : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90'} text-white py-2 px-3 rounded-md flex items-center justify-center ${isAudioLoading && currentAudioId === 'in-depth' ? 'opacity-75 cursor-wait' : ''} shadow-md`}
                             onClick={async () => {
                               setCurrentAudioId('in-depth');
                               const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.tertiaryAudioUrl;
@@ -958,12 +964,12 @@ export default function TourPage() {
                         
                         {/* Audio player controls */}
                         {activeAudioUrl && (
-                          <div className="mt-4 bg-white p-3 rounded-lg shadow-sm">
+                          <div className="mt-4 bg-slate-800 p-3 rounded-lg shadow-md border border-purple-900/30">
                             {/* Play/Pause button and time indicator */}
                             <div className="flex items-center justify-between mb-2">
                               <button 
                                 onClick={togglePlayPause} 
-                                className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full"
+                                className="bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90 text-white p-2 rounded-full shadow-md"
                                 disabled={isAudioLoading}
                               >
                                 {isAudioLoading ? (
@@ -981,7 +987,7 @@ export default function TourPage() {
                                   </svg>
                                 )}
                               </button>
-                              <div className="text-sm font-medium text-gray-700">
+                              <div className="text-sm font-medium text-gray-300">
                                 {formatTime(currentTime)} / {formatTime(duration)}
                               </div>
                             </div>
@@ -994,7 +1000,7 @@ export default function TourPage() {
                                 max={duration || 0}
                                 value={currentTime}
                                 onChange={handleSeek}
-                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-pink-500"
                                 disabled={!duration || isAudioLoading}
                               />
                             </div>
@@ -1002,8 +1008,11 @@ export default function TourPage() {
                             {/* Transcript toggle button */}
                             <div className="flex justify-end">
                               <button
-                                onClick={() => setShowTranscript(!showTranscript)}
-                                className="text-xs flex items-center text-blue-600 hover:text-blue-800"
+                                onClick={() => {
+                                  console.log("Toggle transcript clicked, current state:", showTranscript);
+                                  setShowTranscript(!showTranscript);
+                                }}
+                                className="text-xs flex items-center px-2 py-1 rounded bg-slate-700 text-pink-400 hover:text-pink-300 hover:bg-slate-600 transition-colors"
                               >
                                 {showTranscript ? (
                                   <>
@@ -1028,38 +1037,38 @@ export default function TourPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-gray-100 p-4 rounded-lg flex items-center justify-between mb-4">
+                    <div className="bg-slate-800/80 p-4 rounded-lg flex items-center justify-between mb-4 border border-purple-900/30 shadow-md">
                       <div className="flex items-center">
-                        <button className="bg-blue-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
+                        <button className="bg-pink-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                         </button>
                         <div>
-                          <p className="font-medium text-gray-800">Audio Guide</p>
-                          <p className="text-sm text-gray-500">Generate audio guides using the button at the top</p>
+                          <p className="font-medium text-white">Audio Guide</p>
+                          <p className="text-sm text-gray-300">Generate audio guides using the button at the top</p>
                         </div>
                       </div>
-                      <div className="text-gray-500">--:--</div>
+                      <div className="text-gray-300">--:--</div>
                     </div>
                   )}
                 </>
               ) : (
-                <div className="bg-gray-100 p-4 rounded-lg flex items-center justify-between mb-4">
+                <div className="bg-slate-800/80 p-4 rounded-lg flex items-center justify-between mb-4 border border-purple-900/30 shadow-md">
                   <div className="flex items-center">
-                    <button className="bg-blue-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
+                    <button className="bg-pink-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </button>
                     <div>
-                      <p className="font-medium text-gray-800">Audio Guide</p>
-                      <p className="text-sm text-gray-500">Generate audio guides using the button at the top</p>
+                      <p className="font-medium text-white">Audio Guide</p>
+                      <p className="text-sm text-gray-300">Generate audio guides using the button at the top</p>
                     </div>
                   </div>
-                  <div className="text-gray-500">--:--</div>
+                  <div className="text-gray-300">--:--</div>
                 </div>
               )}
               
@@ -1068,7 +1077,7 @@ export default function TourPage() {
                 href={getGoogleMapsUrl(currentStop.poi)}
                 target="_blank"
                 rel="noreferrer"
-                className="text-blue-600 hover:text-blue-800 inline-flex items-center mb-4"
+                className="text-pink-400 hover:text-pink-300 inline-flex items-center mb-4"
               >
                 <svg className="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
@@ -1081,89 +1090,90 @@ export default function TourPage() {
         
         {/* Transcript display */}
         {showTranscript && currentAudioId && activeAudioUrl && audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.content && (
-          <div className="mt-4 bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500">
+          <div className="mt-4 bg-slate-800 p-4 rounded-lg shadow-md border-l-4 border-pink-500">
             <div className="flex justify-between items-center mb-3">
               <div className="flex items-center">
-                <h4 className="text-sm font-medium text-gray-900">Transcript</h4>
+                <h4 className="text-sm font-medium text-white">Transcript</h4>
                 {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.language && (
-                  <span className="ml-2 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-full">
+                  <span className="ml-2 px-2 py-0.5 bg-purple-900/50 text-pink-300 text-xs font-medium rounded-full border border-purple-700/50">
                     {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`].language.toUpperCase()}
                   </span>
                 )}
                 
                 {/* Show translation status */}
                 {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.translationInProgress && (
-                  <span className="ml-2 px-2 py-0.5 bg-amber-50 text-amber-600 text-xs font-medium rounded-full flex items-center">
-                    <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <span className="ml-2 px-2 py-0.5 bg-amber-900/40 text-amber-300 text-xs font-medium rounded-full flex items-center border border-amber-700/50">
+                    <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-amber-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Translating to your language...
+                    Translating...
                   </span>
                 )}
               </div>
-              <span className="text-xs text-gray-500">
-                {currentAudioId === 'brief' ? 'Brief Overview' : 
-                 currentAudioId === 'detailed' ? 'Detailed Guide' : 
-                 'In-Depth Exploration'}
-              </span>
+              
+              <button
+                onClick={() => setShowTranscript(false)}
+                className="text-gray-400 hover:text-pink-400"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
             </div>
-            <div className="prose prose-sm max-h-60 overflow-y-auto text-gray-600">
-              {currentAudioId === 'brief' && (
-                <p>{audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.content?.brief || 'No transcript available.'}</p>
-              )}
-              {currentAudioId === 'detailed' && (
-                <p>{audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.content?.detailed || 'No transcript available.'}</p>
-              )}
-              {currentAudioId === 'in-depth' && (
-                <p>{audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.content?.complete || 'No transcript available.'}</p>
-              )}
+            
+            <div className="prose prose-sm max-w-none text-gray-300 prose-headings:text-pink-300 prose-strong:text-pink-200 prose-a:text-pink-400">
+              {(() => {
+                const poiData = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`];
+                const content = poiData?.content;
+                
+                // Check if content exists
+                if (!content) return "No transcript available.";
+                
+                // Try multiple possible property names for content
+                if (currentAudioId === 'brief') {
+                  return content.core || content.brief || content.summary || "No brief transcript available.";
+                } else if (currentAudioId === 'detailed') {
+                  return content.secondary || content.detailed || content.medium || "No detailed transcript available.";
+                } else {
+                  return content.tertiary || content.in_depth || content.indepth || content.complete || "No in-depth transcript available.";
+                }
+              })()}
             </div>
           </div>
         )}
         
         {/* Navigation Controls */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between">
-            <button
-              onClick={() => goToStop(currentStopIndex - 1)}
-              disabled={currentStopIndex === 0}
-              className={`flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                currentStopIndex === 0 
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Previous
-            </button>
-            
-            {currentStopIndex === sortedPois.length - 1 ? (
-              // Finish button when on last stop
-              <button
-                onClick={() => router.push('/')}
-                className="flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-colors bg-green-600 text-white hover:bg-green-700"
-              >
-                Finish
-                <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </button>
-            ) : (
-              // Next button for all other stops
-              <button
-                onClick={() => goToStop(currentStopIndex + 1)}
-                className="flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-colors bg-blue-600 text-white hover:bg-blue-700"
-              >
-                Next
-                <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            )}
-          </div>
+        <div className="flex justify-between mt-8">
+          <button
+            onClick={() => goToStop(currentStopIndex - 1)}
+            className={`flex items-center px-4 py-2 rounded-md ${
+              currentStopIndex > 0 
+                ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white hover:opacity-90 shadow-md' 
+                : 'bg-slate-800 text-gray-500 cursor-not-allowed'
+            }`}
+            disabled={currentStopIndex === 0}
+          >
+            <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Previous Stop
+          </button>
+          
+          <button
+            onClick={() => goToStop(currentStopIndex + 1)}
+            className={`flex items-center px-4 py-2 rounded-md ${
+              currentStopIndex < sortedPois.length - 1 
+                ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white hover:opacity-90 shadow-md' 
+                : 'bg-slate-800 text-gray-500 cursor-not-allowed'
+            }`}
+            disabled={currentStopIndex === sortedPois.length - 1}
+          >
+            Next Stop
+            <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>
