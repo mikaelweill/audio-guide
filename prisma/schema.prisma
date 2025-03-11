@@ -34,6 +34,7 @@ model Poi {
   detailed_audio_path String?
   detailed_transcript String?
   tourPois            TourPoi[]
+  translations        Translation[]
 }
 
 model Tour {
@@ -75,4 +76,18 @@ model User {
   email      String   @unique
   created_at DateTime @default(now())
   tours      Tour[]
+}
+
+model Translation {
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  poi_id          String
+  content_type    String
+  language_code   String
+  translated_text String
+  audio_path      String?
+  created_at      DateTime @default(now()) @db.Timestamptz
+  updated_at      DateTime @updatedAt @db.Timestamptz
+  poi             Poi      @relation(fields: [poi_id], references: [id], onDelete: Cascade)
+
+  @@unique([poi_id, content_type, language_code])
 }
