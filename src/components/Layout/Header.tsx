@@ -47,10 +47,10 @@ export default function Header() {
   // For login page or loading state, show minimal header
   if (isLoginPage) {
     return (
-      <header className="bg-white shadow-md">
+      <header className="bg-slate-900 border-b border-slate-800">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center py-4">
-            <Link href="/" className="text-xl font-bold text-blue-600">
+            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-500">
               Audio Guide
             </Link>
           </div>
@@ -62,13 +62,16 @@ export default function Header() {
   // Show loading state while checking auth
   if (isLoading) {
     return (
-      <header className="bg-white shadow-md">
+      <header className="bg-slate-900 border-b border-slate-800">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center py-4">
-            <Link href="/" className="text-xl font-bold text-blue-600">
+            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-500">
               Audio Guide
             </Link>
-            <span className="text-sm text-gray-500">Loading...</span>
+            <div className="flex items-center">
+              <div className="h-4 w-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mr-2"></div>
+              <span className="text-sm text-gray-400">Loading...</span>
+            </div>
           </div>
         </div>
       </header>
@@ -78,15 +81,15 @@ export default function Header() {
   // For logged out users, show simplified header with login link
   if (!user) {
     return (
-      <header className="bg-white shadow-md">
+      <header className="bg-slate-900 border-b border-slate-800">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center py-4">
-            <Link href="/" className="text-xl font-bold text-blue-600">
+            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-500">
               Audio Guide
             </Link>
             <Link 
               href="/login"
-              className="transition duration-150 ease-in-out text-gray-600 hover:text-blue-500"
+              className="transition duration-150 ease-in-out text-gray-300 hover:text-indigo-400"
             >
               Sign In
             </Link>
@@ -98,23 +101,23 @@ export default function Header() {
 
   // For authenticated users, show full header
   return (
-    <header className="bg-white shadow-md">
+    <header className="bg-slate-900 border-b border-slate-800 backdrop-blur-sm bg-opacity-90 sticky top-0 z-30">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center py-4">
           <div className="flex items-center">
-            <Link href="/" className="text-xl font-bold text-blue-600">
+            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-500">
               Audio Guide
             </Link>
             {user && (
-              <span className="ml-4 text-sm text-gray-600">
-                Welcome, {user.email?.split('@')[0]}
+              <span className="ml-4 text-sm text-gray-300">
+                Welcome, <span className="text-indigo-300">{user.email?.split('@')[0]}</span>
               </span>
             )}
           </div>
           
           {/* Mobile menu button */}
           <button 
-            className="md:hidden p-2" 
+            className="md:hidden p-2 text-gray-300 hover:text-indigo-400 focus:outline-none" 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -130,10 +133,10 @@ export default function Header() {
           <nav className="hidden md:flex items-center space-x-6">
             {/* Language indicator */}
             <div 
-              className="flex items-center text-gray-600"
+              className="flex items-center text-gray-300 bg-slate-800/60 px-3 py-1.5 rounded-md border border-slate-700"
               title="Current language"
             >
-              <span className="text-xl mr-1">{LANGUAGE_FLAGS[language]}</span>
+              <span className="text-lg mr-1">{LANGUAGE_FLAGS[language]}</span>
               <span className="text-sm font-medium">{language.toUpperCase()}</span>
             </div>
             
@@ -145,8 +148,13 @@ export default function Header() {
             </NavLink>
             <button
               onClick={handleSignOut}
-              className="transition duration-150 ease-in-out text-gray-600 hover:text-blue-500"
+              className="transition duration-150 ease-in-out text-gray-300 hover:text-red-400 flex items-center"
             >
+              <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
               Sign Out
             </button>
           </nav>
@@ -154,13 +162,13 @@ export default function Header() {
         
         {/* Mobile navigation */}
         {isMenuOpen && (
-          <div className="md:hidden py-4">
+          <div className="md:hidden py-4 border-t border-slate-800">
             <nav className="flex flex-col space-y-4">
               {/* Language indicator for mobile */}
               <div
-                className="flex items-center px-4 py-2 text-gray-600"
+                className="flex items-center px-4 py-2 text-gray-300 bg-slate-800/60 rounded-md"
               >
-                <span className="text-xl mr-2">{LANGUAGE_FLAGS[language]}</span>
+                <span className="text-lg mr-2">{LANGUAGE_FLAGS[language]}</span>
                 <span>Language: {language.toUpperCase()}</span>
               </div>
               
@@ -172,8 +180,13 @@ export default function Header() {
               </MobileNavLink>
               <button
                 onClick={handleSignOut}
-                className="block px-4 py-2 rounded-md text-gray-600 hover:bg-gray-50 hover:text-blue-500 text-left"
+                className="flex items-center w-full px-4 py-2 rounded-md text-gray-300 hover:bg-slate-800/60 hover:text-red-400 text-left"
               >
+                <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
                 Sign Out
               </button>
             </nav>
@@ -190,8 +203,8 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
       href={href} 
       className={`transition duration-150 ease-in-out ${
         active 
-          ? 'text-blue-600 font-medium' 
-          : 'text-gray-600 hover:text-blue-500'
+          ? 'text-indigo-400 font-medium' 
+          : 'text-gray-300 hover:text-indigo-400'
       }`}
     >
       {children}
@@ -205,8 +218,8 @@ function MobileNavLink({ href, active, children }: { href: string; active: boole
       href={href} 
       className={`block px-4 py-2 rounded-md ${
         active 
-          ? 'bg-blue-50 text-blue-600 font-medium' 
-          : 'text-gray-600 hover:bg-gray-50 hover:text-blue-500'
+          ? 'bg-indigo-900/30 text-indigo-400 font-medium border border-indigo-800/30' 
+          : 'text-gray-300 hover:bg-slate-800/60 hover:text-indigo-400'
       }`}
     >
       {children}

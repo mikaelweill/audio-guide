@@ -27,9 +27,9 @@ export default function ProtectedLayout({
   // Show loading state
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        <p className="ml-2">Loading authentication...</p>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white">
+        <div className="w-16 h-16 border-4 border-t-indigo-500 border-r-transparent border-b-indigo-300 border-l-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-300">Loading your experience...</p>
       </div>
     );
   }
