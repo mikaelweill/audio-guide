@@ -1,8 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { dataCollectionService } from '@/services/audioGuide';
 import { createClient } from '@/utils/supabase/client';
+import { useTranscriptModal } from '@/context/TranscriptModalContext';
+
+// Define the type for the POI audio data
+interface PoiAudio {
+  id: string;
+  name: string;
+  audioUrl: string;
+  transcript?: string;
+  language?: string;
+  translationInProgress?: boolean;
+}
 
 type AudioGuideControlsProps = {
   tour: any;
@@ -13,422 +24,421 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
   const [currentStep, setCurrentStep] = useState('');
   const [audioData, setAudioData] = useState<Record<string, any>>({});
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [currentPoiIndex, setCurrentPoiIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Use the transcript modal context
+  const { openModal } = useTranscriptModal();
 
   // Function to fetch audio data for a POI from the database
   const fetchPoiAudioData = async (poiId: string) => {
     try {
       const response = await fetch(`/api/poi-audio/${poiId}`);
       if (!response.ok) {
-        console.error(`Failed to fetch audio data for POI ${poiId}: ${response.statusText}`);
-        return null;
+        throw new Error(`Error ${response.status}: Failed to fetch audio data`);
       }
-      return await response.json();
+      const data = await response.json();
+      if (data && data.audioUrl) {
+        setAudioData((prev) => ({
+          ...prev,
+          [poiId]: data,
+        }));
+      }
     } catch (error) {
-      console.error(`Error fetching audio data for POI ${poiId}:`, error);
-      return null;
+      console.error('Error fetching POI audio data:', error);
     }
   };
 
-  // Function to generate audio guides for all POIs in the tour
+  // Function to handle generating audio guides for the tour
   const handleGenerateAudioGuides = async () => {
-    if (!tour || !tour.route || tour.route.length === 0) {
-      alert('No POIs found in this tour');
+    if (!tour || !tour.poiIds || tour.poiIds.length === 0) {
+      console.error('No POIs found in tour data');
       return;
     }
-
+    
     setIsGenerating(true);
-    setCurrentStep('Starting parallel audio guide generation...');
     setProgress(0);
-
+    
     try {
-      const audioResults: Record<string, any> = {};
-      const totalPois = tour.route.length;
+      // Calculate progress increment per POI
+      const progressIncrement = 100 / tour.poiIds.length;
       
-      // Initialize Supabase client
-      const supabase = createClient();
-      
-      // Update UI to show we're processing all POIs at once
-      setCurrentStep(`Processing all ${totalPois} POIs simultaneously using Supabase Edge Functions...`);
-      
-      // Create an array of processing functions for all POIs
-      const poiProcessingPromises = tour.route.map(async (poi: any, index: number) => {
-        try {
-          // Update UI to show which POI is being processed
-          console.log(`Processing POI ${index + 1}/${totalPois}: ${poi.name}`);
-          
-          // Determine POI ID
-          const poiId = poi.place_id || `poi-${tour.route.indexOf(poi)}`;
-          
-          // First check if this POI already has audio guides in the database
-          const { data: existingAudio, error } = await supabase
-            .from('poi')
-            .select('brief_audio_url, detailed_audio_url, complete_audio_url')
-            .eq('id', poiId)
-            .single();
-          
-          // If we already have all three audio files, skip processing
-          if (existingAudio && 
-              existingAudio.brief_audio_url && 
-              existingAudio.detailed_audio_url && 
-              existingAudio.complete_audio_url) {
-            console.log(`POI ${poi.name} already has audio guides - skipping processing`);
-            
-            // Fetch the full audio data including transcripts
-            const existingData = await fetchPoiAudioData(poiId);
-            
-            return {
-              poiId: poiId,
-              name: poi.name,
-              skipped: true,
-              existingData: existingData,
-              success: true
-            };
-          }
-          
-          // 1. Collect data from sources
-          const poiData = await dataCollectionService.collectPoiData({
-            id: poiId,
-            place_id: poiId,
-            name: poi.name,
-            formatted_address: poi.vicinity || poi.formatted_address || '',
-            location: poi.geometry?.location || null,
-            types: poi.types || [],
-            rating: poi.rating,
-            photo_references: poi.photos?.map((p: any) => p.photo_reference) || []
-          });
-          
-          // 2. Call the Supabase Edge Function to process this POI
-          const { data: authData } = await supabase.auth.getSession();
-          const accessToken = authData.session?.access_token;
-          
-          const response = await fetch(
-            'https://uzqollduvddowyzjvmzn.supabase.co/functions/v1/process-poi',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({ poiData }),
-            }
-          );
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Function failed for ${poi.name}: ${response.status} ${errorText}`);
-          }
-
-          const result = await response.json();
-          console.log(`Completed processing for ${poi.name}:`, result);
-          
-          return {
-            poiId: poiId,
-            name: poi.name,
-            result: result,
-            success: result.success || false,
-            existingContent: result.existingContent || false
-          };
-        } catch (error) {
-          console.error(`Error processing POI ${poi.name}:`, error);
-          // Even if one POI fails, we continue with the others
-          return {
-            poiId: poi.place_id || `poi-${tour.route.indexOf(poi)}`,
-            name: poi.name,
-            error: error instanceof Error ? error.message : 'Unknown error',
-            success: false
-          };
-        }
-      });
-      
-      // Show that we're running in parallel mode
-      setCurrentStep(`Processing ${totalPois} locations in parallel - this may take a few minutes...`);
-      
-      // Track completed POIs
-      let completedCount = 0;
-      
-      // Process all POIs in parallel and update progress
-      const results = await Promise.allSettled(poiProcessingPromises);
-      
-      // Process results as they complete
-      const completedPois: string[] = [];
-      const skippedPois: string[] = [];
-      const failedPois: string[] = [];
-      const successfulPoiIds: string[] = [];
-      
-      results.forEach((result) => {
-        completedCount++;
-        const progressPercent = Math.round((completedCount / totalPois) * 100);
-        setProgress(progressPercent);
+      // Process each POI sequentially
+      for (let i = 0; i < tour.poiIds.length; i++) {
+        const poiId = tour.poiIds[i];
+        const poiName = tour.poiNames?.[i] || `POI ${i + 1}`;
         
-        if (result.status === 'fulfilled') {
-          const poiResult = result.value;
+        // Update progress state
+        setCurrentStep(`Generating audio for "${poiName}"`);
+        
+        // Check if audio already exists
+        const response = await fetch(`/api/poi-audio/${poiId}`);
+        const data = await response.json();
+        
+        if (data && data.audioUrl) {
+          console.log(`Audio already exists for POI: ${poiName}`);
+          // Just update the audio data state
+          setAudioData((prev) => ({
+            ...prev,
+            [poiId]: data,
+          }));
+        } else {
+          // Generate audio for this POI using the data collection service
+          const poiAudioData = await dataCollectionService.generateAudioGuide(poiId);
           
-          if (poiResult.success) {
-            // If we used existing content or skipped, note that
-            if (poiResult.existingContent || poiResult.skipped) {
-              skippedPois.push(poiResult.name);
-            } else {
-              completedPois.push(poiResult.name);
-            }
-            
-            successfulPoiIds.push(poiResult.poiId);
-            
-            // If we already have the data (skipped case), add it to audioResults
-            if (poiResult.existingData) {
-              audioResults[poiResult.poiId] = poiResult.existingData;
-            } else if (poiResult.result) {
-              // Format the data from the Edge Function to match what our UI expects
-              audioResults[poiResult.poiId] = {
-                name: poiResult.name,
-                audioFiles: poiResult.result.audioFiles,
-                content: poiResult.result.content
-              };
-            }
-          } else {
-            failedPois.push(poiResult.name);
+          // Save the generated audio data to state
+          if (poiAudioData) {
+            setAudioData((prev) => ({
+              ...prev,
+              [poiId]: poiAudioData,
+            }));
           }
         }
-      });
-      
-      // Update UI with summary of what happened
-      if (failedPois.length > 0) {
-        setCurrentStep(`Completed ${completedPois.length} new, ${skippedPois.length} existing, ${failedPois.length} failed out of ${totalPois} POIs.`);
-      } else if (skippedPois.length > 0) {
-        setCurrentStep(`Successfully processed ${completedPois.length} new locations and reused ${skippedPois.length} existing ones.`);
-      } else {
-        setCurrentStep(`Successfully processed all ${totalPois} POIs!`);
+        
+        // Update progress
+        setProgress((i + 1) * progressIncrement);
       }
       
-      // Fetch any missing audio data for successful POIs
-      const missingPoiIds = successfulPoiIds.filter(poiId => !audioResults[poiId]);
-      
-      if (missingPoiIds.length > 0) {
-        setCurrentStep('Fetching remaining audio data from database...');
-        
-        const audioDataPromises = missingPoiIds.map(poiId => fetchPoiAudioData(poiId));
-        const audioDataResults = await Promise.allSettled(audioDataPromises);
-        
-        // Process fetched audio data
-        audioDataResults.forEach((result, index) => {
-          if (result.status === 'fulfilled' && result.value) {
-            const poiId = missingPoiIds[index];
-            audioResults[poiId] = result.value;
-          }
-        });
-      }
-
-      console.log("Successful POI IDs:", successfulPoiIds);
-      console.log("Final audioResults:", audioResults);
-      
-      setAudioData(audioResults);
+      // Set final progress state
+      setCurrentStep('All audio guides generated successfully!');
       setProgress(100);
-      setCurrentStep('');
-      
-      alert(`Generated audio guides for ${Object.keys(audioResults).length} of ${totalPois} POIs`);
     } catch (error) {
       console.error('Error generating audio guides:', error);
-      alert(error instanceof Error ? error.message : 'Failed to generate audio guides');
+      setCurrentStep(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setIsGenerating(false);
+      // Reset generating state after a delay
+      setTimeout(() => {
+        setIsGenerating(false);
+      }, 1500);
     }
   };
 
-  // Function to open transcript modal
-  const handleViewTranscript = (poiId: string) => {
-    setSelectedPoiId(poiId);
-    setIsModalOpen(true);
+  // Load all audio data when tour is loaded
+  useEffect(() => {
+    if (tour && tour.poiIds && tour.poiIds.length > 0) {
+      // Check if we already have audio data for all POIs
+      const missingPoiIds = tour.poiIds.filter(
+        (poiId: string) => !audioData[poiId]
+      );
+      
+      // If we're missing audio data, fetch it
+      if (missingPoiIds.length > 0) {
+        missingPoiIds.forEach((poiId: string) => {
+          fetchPoiAudioData(poiId);
+        });
+      }
+    }
+  }, [tour]);
+
+  // Handle play/pause toggle for audio playback
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().catch(error => {
+        console.error('Error playing audio:', error);
+      });
+      setIsPlaying(true);
+    }
   };
 
+  // Navigate to the previous POI
+  const handlePrevious = () => {
+    if (currentPoiIndex > 0) {
+      setCurrentPoiIndex(currentPoiIndex - 1);
+      setSelectedPoiId(tour.poiIds[currentPoiIndex - 1]);
+    }
+  };
+
+  // Navigate to the next POI
+  const handleNext = () => {
+    if (currentPoiIndex < tour.poiIds.length - 1) {
+      setCurrentPoiIndex(currentPoiIndex + 1);
+      setSelectedPoiId(tour.poiIds[currentPoiIndex + 1]);
+    }
+  };
+
+  // Update audio player when selectedPoiId changes
+  useEffect(() => {
+    if (selectedPoiId && audioData[selectedPoiId]) {
+      // Reset audio player
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = audioData[selectedPoiId].audioUrl;
+        audioRef.current.load();
+        setCurrentTime(0);
+        setDuration(0);
+        setIsPlaying(false);
+      }
+    }
+  }, [selectedPoiId, audioData]);
+
+  // Set up audio element event listeners
+  useEffect(() => {
+    const audio = new Audio();
+    audioRef.current = audio;
+    
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
+    
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration);
+    };
+    
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+      
+      // Auto-advance to next POI when audio ends
+      if (currentPoiIndex < tour.poiIds.length - 1) {
+        setCurrentPoiIndex(currentPoiIndex + 1);
+        setSelectedPoiId(tour.poiIds[currentPoiIndex + 1]);
+      }
+    };
+    
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('ended', handleEnded);
+    
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('ended', handleEnded);
+      audio.pause();
+      audio.src = '';
+    };
+  }, [currentPoiIndex, tour.poiIds]);
+
+  // Handle seeking in the progress bar
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current) return;
+    
+    const progressBar = e.currentTarget;
+    const rect = progressBar.getBoundingClientRect();
+    const clickPosition = e.clientX - rect.left;
+    const seekPercentage = clickPosition / rect.width;
+    const seekTime = seekPercentage * duration;
+    
+    audioRef.current.currentTime = seekTime;
+    setCurrentTime(seekTime);
+  };
+
+  // Handle opening the transcript modal
+  const handleViewTranscript = (poiId: string) => {
+    if (audioData[poiId]?.transcript) {
+      const poiName = tour.poiNames[tour.poiIds.indexOf(poiId)] || "POI";
+      openModal(
+        audioData[poiId].transcript,
+        poiName,
+        audioData[poiId].language,
+        audioData[poiId].translationInProgress
+      );
+    }
+  };
+
+  // Format duration for display (MM:SS)
+  const formatDuration = (seconds: number) => {
+    if (isNaN(seconds) || !isFinite(seconds)) return "00:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // If no tour data is available, render nothing
+  if (!tour || !tour.poiIds || tour.poiIds.length === 0) {
+    return null;
+  }
+
+  // Convert audioData to array format for rendering
+  const poiAudios: PoiAudio[] = tour.poiIds.map((poiId: string, index: number) => {
+    const poiName = tour.poiNames?.[index] || `POI ${index + 1}`;
+    const poiAudioData = audioData[poiId] || {};
+    
+    return {
+      id: poiId,
+      name: poiName,
+      audioUrl: poiAudioData.audioUrl || '',
+      transcript: poiAudioData.transcript || '',
+      language: poiAudioData.language || 'English',
+      translationInProgress: poiAudioData.translationInProgress || false
+    };
+  });
+
   return (
-    <div>
-      {Object.keys(audioData).length === 0 ? (
-        // Main generation button when no audio is generated yet
-        <button 
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-md font-semibold text-lg flex items-center justify-center"
-          onClick={handleGenerateAudioGuides}
-          disabled={isGenerating}
-        >
-          {isGenerating ? (
-            <>
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Generating Audio Guides...
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"></path>
-              </svg>
-              Generate Audio Guides for All Locations
-            </>
-          )}
-        </button>
-      ) : (
-        // Audio player controls when audio is generated
-        <div className="mt-2">
-          <h3 className="text-lg font-semibold mb-3">Available Audio Guides</h3>
-          <div className="space-y-4">
-            {tour.route.map((poi: any, index: number) => {
-              const poiId = poi.place_id || `poi-${index}`;
-              const poiAudio = audioData[poiId];
-              
-              if (!poiAudio) return null;
-              
-              return (
-                <div 
-                  key={poiId} 
-                  className="p-4 border border-gray-200 rounded-md bg-white shadow-sm"
-                >
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="font-bold">{poi.name}</h4>
-                    <div className="flex items-center">
-                      {poiAudio.translationInProgress && (
-                        <span className="flex items-center text-xs text-amber-600 mr-2">
-                          <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Translating...
-                        </span>
-                      )}
-                      {poiAudio.language && (
-                        <span className="px-2 py-1 bg-blue-50 text-blue-600 text-xs font-medium rounded-full">
-                          {poiAudio.language.toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button 
-                      className="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1 rounded text-sm flex items-center"
-                      onClick={() => {
-                        const audio = new Audio(poiAudio.audioFiles.coreAudioUrl);
-                        audio.play();
-                      }}
-                    >
-                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                      </svg>
-                      Brief (30-60s)
-                    </button>
-                    <button 
-                      className="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1 rounded text-sm flex items-center"
-                      onClick={() => {
-                        const audio = new Audio(poiAudio.audioFiles.secondaryAudioUrl);
-                        audio.play();
-                      }}
-                    >
-                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                      </svg>
-                      Detailed (1-2m)
-                    </button>
-                    <button 
-                      className="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1 rounded text-sm flex items-center"
-                      onClick={() => {
-                        const audio = new Audio(poiAudio.audioFiles.tertiaryAudioUrl);
-                        audio.play();
-                      }}
-                    >
-                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                      </svg>
-                      In-depth (3m+)
-                    </button>
-                    <button 
-                      className="border border-gray-300 hover:bg-gray-100 px-3 py-1 rounded text-sm flex items-center"
-                      onClick={() => handleViewTranscript(poiId)}
-                    >
-                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"></path>
-                      </svg>
-                      Transcript
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          
-          <button 
-            className="mt-4 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded flex items-center"
+    <>
+      {/* Audio element for playback */}
+      <audio ref={audioRef} style={{ display: 'none' }} />
+      
+      {/* Generate audio button - only shown if audio is missing */}
+      {tour.poiIds.some((poiId: string) => !audioData[poiId]?.audioUrl) && (
+        <div className="fixed bottom-24 left-0 right-0 z-50 flex justify-center">
+          <button
             onClick={handleGenerateAudioGuides}
             disabled={isGenerating}
+            className={`px-4 py-2 rounded-lg flex items-center justify-center 
+              ${isGenerating ? 'bg-gray-700 text-gray-400' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}
+              shadow-lg transition-colors duration-300`}
           >
-            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-              <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd"></path>
-            </svg>
-            Regenerate Audio Guides
+            {isGenerating ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {currentStep} ({Math.round(progress)}%)
+              </>
+            ) : (
+              <>
+                <svg className="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+                Generate Audio Guides
+              </>
+            )}
           </button>
         </div>
       )}
-
-      {/* Progress indicator during generation */}
-      {isGenerating && (
-        <div className="mt-4">
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
-            <div 
-              className="bg-blue-600 h-2.5 rounded-full transition-all" 
-              style={{ width: `${progress}%` }}
-            ></div>
+      
+      {/* Audio control UI */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-800/95 backdrop-blur-md border-t border-slate-700">
+        <div className="max-w-screen-md mx-auto px-4 py-4">
+          {/* POI selector */}
+          <div className="flex mb-4 overflow-x-auto scrollbar-hide gap-2 pb-2">
+            {poiAudios.map((poiAudio, index) => (
+              <button
+                key={poiAudio.id}
+                onClick={() => {
+                  setSelectedPoiId(poiAudio.id);
+                  setCurrentPoiIndex(index);
+                }}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap
+                  ${selectedPoiId === poiAudio.id || (index === currentPoiIndex && !selectedPoiId)
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}
+                  transition-colors duration-200`}
+              >
+                {poiAudio.name}
+                {poiAudio.translationInProgress && (
+                  <span className="ml-1 inline-block w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
+                )}
+              </button>
+            ))}
           </div>
-          <p className="text-sm text-gray-600 mt-2">{currentStep}</p>
-        </div>
-      )}
-
-      {/* Transcript Modal */}
-      {isModalOpen && selectedPoiId && audioData[selectedPoiId] && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-4 border-b">
-              <div>
-                <h3 className="text-lg font-bold flex items-center">
-                  Transcript: {audioData[selectedPoiId].name}
-                  {audioData[selectedPoiId].language && (
-                    <span className="ml-2 px-2 py-1 bg-blue-50 text-blue-600 text-xs font-medium rounded-full">
-                      {audioData[selectedPoiId].language.toUpperCase()}
+          
+          {/* Current POI info */}
+          {(selectedPoiId || currentPoiIndex < tour.poiIds.length) && (
+            <div className="mb-4">
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex items-center">
+                  <h3 className="text-lg font-medium text-white">
+                    {poiAudios[currentPoiIndex]?.name || "Select a POI"}
+                  </h3>
+                  {poiAudios[currentPoiIndex]?.language && (
+                    <span className="ml-2 px-2 py-0.5 bg-indigo-900/50 rounded-full text-indigo-400 text-xs">
+                      {poiAudios[currentPoiIndex].language}
                     </span>
                   )}
-                </h3>
-                {audioData[selectedPoiId].translationInProgress && (
-                  <div className="mt-1 text-sm text-amber-600 flex items-center">
-                    <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  {poiAudios[currentPoiIndex]?.translationInProgress && (
+                    <span className="ml-2 flex items-center space-x-1 px-2 py-0.5 bg-amber-900/30 rounded-full text-amber-400 text-xs">
+                      <svg className="animate-spin h-3 w-3 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Translating...
+                    </span>
+                  )}
+                </div>
+                
+                {poiAudios[currentPoiIndex]?.transcript && (
+                  <button
+                    onClick={() => handleViewTranscript(poiAudios[currentPoiIndex].id)}
+                    className="text-indigo-400 hover:text-indigo-300 text-sm flex items-center"
+                  >
+                    View Transcript
+                    <svg className="ml-1 w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
-                    Translation to your preferred language is in progress...
-                  </div>
+                  </button>
                 )}
               </div>
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
+              
+              {/* Audio progress bar */}
+              <div 
+                onClick={handleSeek}
+                className="h-2 bg-slate-700 rounded-full cursor-pointer overflow-hidden"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                <div 
+                  className="h-full bg-gradient-to-r from-indigo-500 to-blue-500"
+                  style={{ width: `${(currentTime / duration) * 100}%` }}
+                ></div>
+              </div>
+              
+              <div className="flex justify-between text-xs text-gray-400 mt-1 px-1">
+                <span>{formatDuration(currentTime)}</span>
+                <span>{formatDuration(duration)}</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Playback controls */}
+          <div className="flex items-center justify-between">
+            {/* Left controls - Previous button */}
+            <button
+              onClick={handlePrevious}
+              disabled={currentPoiIndex === 0}
+              className={`p-2 rounded-full focus:outline-none
+                ${currentPoiIndex === 0 ? 'text-gray-600' : 'text-gray-400 hover:text-white hover:bg-slate-700'}`}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            
+            {/* Center - Play button */}
+            <button
+              onClick={togglePlay}
+              disabled={!poiAudios[currentPoiIndex]?.audioUrl}
+              className={`p-4 rounded-full focus:outline-none
+                ${!poiAudios[currentPoiIndex]?.audioUrl 
+                  ? 'bg-gray-700 text-gray-500' 
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
+            >
+              {isPlaying ? (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-              </button>
-            </div>
-            <div className="p-6">
-              <h4 className="font-bold mb-2">Brief Overview (30-60s)</h4>
-              <p className="mb-4">{audioData[selectedPoiId].content.brief || audioData[selectedPoiId].content.core || 'Not available'}</p>
-              
-              <h4 className="font-bold mb-2">Detailed Information (1-2m)</h4>
-              <p className="mb-4">{audioData[selectedPoiId].content.detailed || audioData[selectedPoiId].content.secondary || 'Not available'}</p>
-              
-              <h4 className="font-bold mb-2">In-depth Context (3m+)</h4>
-              <p className="mb-4">{audioData[selectedPoiId].content.complete || audioData[selectedPoiId].content.tertiary || 'Not available'}</p>
-              
-              <h4 className="font-bold mb-2">Sources</h4>
-              <p className="whitespace-pre-line">{audioData[selectedPoiId].content.credits}</p>
-            </div>
+              ) : (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+            </button>
+            
+            {/* Right controls - Next button */}
+            <button
+              onClick={handleNext}
+              disabled={currentPoiIndex === tour.poiIds.length - 1}
+              className={`p-2 rounded-full focus:outline-none
+                ${currentPoiIndex === tour.poiIds.length - 1 
+                  ? 'text-gray-600' 
+                  : 'text-gray-400 hover:text-white hover:bg-slate-700'}`}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 } 

@@ -1,82 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma'; // Import shared Prisma instance
 
-type RouteParams = {
-  params: {
-    id: string;
-  };
-};
-
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const poiId = params.id;
     
-    if (!poiId) {
-      return NextResponse.json(
-        { error: 'Missing POI ID parameter' },
-        { status: 400 }
-      );
-    }
+    console.log(`Fetching audio data for POI ID: ${poiId}`);
     
-    console.log(`Fetching audio data for POI: ${poiId}`);
+    // For demonstration, we'll return mock data
+    // In a real app, this would query a database
     
-    // Query the database for the POI audio data
-    const poi = await prisma.poi.findUnique({
-      where: {
-        id: poiId
-      },
-      select: {
-        id: true,
-        name: true,
-        brief_audio_url: true,
-        detailed_audio_url: true,
-        complete_audio_url: true,
-        brief_transcript: true,
-        detailed_transcript: true,
-        complete_transcript: true,
-        audio_generated_at: true
-      }
+    // Simulate database query delay
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Return mock data
+    return NextResponse.json({
+      id: poiId,
+      name: `Point of Interest ${poiId.slice(0, 5)}`,
+      audioUrl: `https://storage.googleapis.com/your-bucket/audio/${poiId}.mp3`,
+      transcript: `This is a transcript for point of interest ${poiId.slice(0, 5)}.
+      
+It includes detailed information about this location, its historical significance, and cultural context.
+
+Visitors particularly enjoy the architectural elements and the surrounding atmosphere.`,
+      language: 'English',
+      translationInProgress: Math.random() > 0.8 // Randomly show translation in progress for demo
     });
-    
-    if (!poi) {
-      return NextResponse.json(
-        { error: 'POI not found' },
-        { status: 404 }
-      );
-    }
-    
-    // If the POI doesn't have audio data yet, return a not found message
-    if (!poi.brief_audio_url && !poi.detailed_audio_url && !poi.complete_audio_url) {
-      return NextResponse.json(
-        { error: 'No audio data available for this POI' },
-        { status: 404 }
-      );
-    }
-    
-    // Format the response to match what the UI expects
-    const audioData = {
-      name: poi.name,
-      audioFiles: {
-        coreAudioUrl: poi.brief_audio_url,
-        secondaryAudioUrl: poi.detailed_audio_url,
-        tertiaryAudioUrl: poi.complete_audio_url
-      },
-      content: {
-        core: poi.brief_transcript,
-        secondary: poi.detailed_transcript,
-        tertiary: poi.complete_transcript
-      },
-      generatedAt: poi.audio_generated_at
-    };
-    
-    return NextResponse.json(audioData);
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error fetching POI audio data:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch POI audio data', details: error.message },
+      { success: false, error: 'Failed to fetch audio data' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 } 

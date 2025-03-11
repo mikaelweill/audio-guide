@@ -11,6 +11,18 @@ export async function GET(request: NextRequest) {
   try {
     console.log('Tour API: Processing GET request');
     
+    // Parse pagination parameters from query string
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '10');
+    
+    // Validate pagination parameters
+    const validPage = page > 0 ? page : 1;
+    const validLimit = limit > 0 && limit <= 50 ? limit : 10;
+    const skip = (validPage - 1) * validLimit;
+    
+    console.log(`Tour API: Pagination parameters - page: ${validPage}, limit: ${validLimit}, skip: ${skip}`);
+    
     // Get the user session using our server client
     console.log('Tour API: Creating Supabase client');
     const supabase = await createServerClient();
@@ -41,6 +53,15 @@ export async function GET(request: NextRequest) {
     // Try using Prisma instead of Supabase direct query
     try {
       console.log('Tour API: Attempting to fetch tours with Prisma');
+      
+      // First, get the total count for pagination
+      const totalCount = await prisma.tour.count({
+        where: {
+          user_id: userId
+        }
+      });
+      
+      // Then fetch the paginated tours
       const tours = await prisma.tour.findMany({
         where: {
           user_id: userId
@@ -57,14 +78,22 @@ export async function GET(request: NextRequest) {
         },
         orderBy: {
           created_at: 'desc'
-        }
+        },
+        skip,
+        take: validLimit
       });
       
-      console.log(`Tour API: Found ${tours?.length || 0} tours with Prisma`);
+      console.log(`Tour API: Found ${tours?.length || 0} tours out of ${totalCount} total with Prisma`);
       
       return NextResponse.json({ 
         success: true, 
-        tours
+        tours,
+        pagination: {
+          total: totalCount,
+          page: validPage,
+          limit: validLimit,
+          pages: Math.ceil(totalCount / validLimit)
+        }
       }, { status: 200 });
     } catch (prismaError) {
       console.error('Tour API: Error fetching tours with Prisma:', prismaError);
@@ -72,7 +101,19 @@ export async function GET(request: NextRequest) {
       // Fallback to Supabase query if Prisma fails
       console.log('Tour API: Falling back to Supabase query');
       
-      // Query tours for the user
+      // First get the count for pagination
+      const { count, error: countError } = await supabase
+        .from('Tour')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId);
+        
+      if (countError) {
+        console.error('Tour API: Error getting count with Supabase:', countError);
+      }
+      
+      const totalCount = count || 0;
+      
+      // Query tours for the user with pagination
       const { data: tours, error } = await supabase
         .from('Tour')
         .select(`
@@ -103,7 +144,8 @@ export async function GET(request: NextRequest) {
           )
         `)
         .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(skip, skip + validLimit - 1);
       
       if (error) {
         console.error('Tour API: Error fetching tours with Supabase:', error);
@@ -113,11 +155,17 @@ export async function GET(request: NextRequest) {
         }, { status: 500 });
       }
       
-      console.log(`Tour API: Found ${tours?.length || 0} tours with Supabase`);
+      console.log(`Tour API: Found ${tours?.length || 0} tours out of ${totalCount} total with Supabase`);
       
       return NextResponse.json({ 
         success: true, 
-        tours
+        tours,
+        pagination: {
+          total: totalCount,
+          page: validPage,
+          limit: validLimit,
+          pages: Math.ceil(totalCount / validLimit)
+        }
       }, { status: 200 });
     }
   } catch (error) {
