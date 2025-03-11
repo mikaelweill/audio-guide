@@ -318,10 +318,10 @@ export default function TourList({ tours, loading }: TourListProps) {
     return (
       <div className="space-y-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="bg-slate-800/60 p-6 rounded-lg animate-pulse border border-slate-700">
-            <div className="h-6 bg-slate-700 rounded w-3/4 mb-4"></div>
-            <div className="h-4 bg-slate-700 rounded w-1/2 mb-2"></div>
-            <div className="h-4 bg-slate-700 rounded w-1/4"></div>
+          <div key={i} className="bg-slate-900/60 p-6 rounded-lg animate-pulse border border-purple-900/50">
+            <div className="h-6 bg-slate-800 rounded w-3/4 mb-4"></div>
+            <div className="h-4 bg-slate-800 rounded w-1/2 mb-2"></div>
+            <div className="h-4 bg-slate-800 rounded w-1/4"></div>
           </div>
         ))}
       </div>
@@ -330,9 +330,9 @@ export default function TourList({ tours, loading }: TourListProps) {
 
   if (tours.length === 0) {
     return (
-      <div className="bg-slate-800/60 p-8 rounded-lg text-center border border-slate-700">
-        <h3 className="text-lg font-medium text-gray-200 mb-2">No tours yet</h3>
-        <p className="text-gray-400 mb-4">Create your first personalized tour to see it here!</p>
+      <div className="bg-slate-900/60 p-8 rounded-lg text-center border border-purple-900/50">
+        <h3 className="text-lg font-medium text-white mb-2">No tours yet</h3>
+        <p className="text-purple-100/80 mb-4">Create your first personalized tour to see it here!</p>
       </div>
     );
   }
@@ -342,20 +342,20 @@ export default function TourList({ tours, loading }: TourListProps) {
       {tours.map((tour) => (
         <div 
           key={tour.id} 
-          className="bg-slate-800/60 border border-slate-700 rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-all relative group"
+          className="bg-slate-900/60 border border-purple-900/50 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all relative group backdrop-blur-sm"
         >
           {/* Subtle accent border at the top of the card */}
-          <div className="h-1 bg-gradient-to-r from-indigo-500 to-blue-500"></div>
+          <div className="h-1 bg-gradient-to-r from-orange-500 via-pink-500 to-purple-500"></div>
           
           {/* Centered confirmation dialog with dark overlay */}
           {showDeleteConfirm === tour.id && (
             <div className="absolute inset-0 flex items-center justify-center z-20 backdrop-blur-sm bg-slate-900/80">
-              <div className="bg-slate-800 border border-slate-700 rounded-md shadow-lg py-3 px-4 text-sm z-30 relative max-w-[220px]">
+              <div className="bg-slate-900 border border-purple-900/50 rounded-md shadow-lg py-3 px-4 text-sm z-30 relative max-w-[220px]">
                 <p className="text-gray-100 mb-3 text-center font-medium">Delete this tour?</p>
                 <div className="flex justify-center space-x-3">
                   <button
                     onClick={cancelDelete}
-                    className="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-gray-200 rounded transition-colors"
+                    className="px-3 py-1 text-xs bg-slate-800/70 hover:bg-slate-700/70 text-gray-200 rounded transition-colors"
                     disabled={isDeleting}
                   >
                     Cancel
@@ -390,7 +390,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                     type="text"
                     value={newTourName}
                     onChange={(e) => setNewTourName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-white"
+                    className="w-full px-3 py-2 bg-slate-800 border border-purple-900/50 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-white"
                     placeholder="Tour name"
                     autoFocus
                     onKeyDown={(e) => {
@@ -405,7 +405,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                     <button
                       onClick={() => saveTourName(tour.id)}
                       disabled={isRenaming}
-                      className="text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded-md text-sm font-medium flex items-center"
+                      className="text-white bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 px-3 py-1 rounded-md text-sm font-medium flex items-center shadow-sm shadow-orange-900/20"
                     >
                       {isRenaming ? (
                         <>
@@ -422,7 +422,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                     <button
                       onClick={cancelRenaming}
                       disabled={isRenaming}
-                      className="text-gray-200 bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md text-sm font-medium"
+                      className="text-gray-200 bg-slate-800/70 hover:bg-slate-700/70 px-3 py-1 rounded-md text-sm font-medium"
                     >
                       Cancel
                     </button>
@@ -431,7 +431,7 @@ export default function TourList({ tours, loading }: TourListProps) {
               ) : (
                 <div className="flex flex-1 items-center mr-2 group">
                   <h3 
-                    className="text-lg font-medium text-gray-100 hover:text-indigo-400 cursor-pointer"
+                    className="text-lg font-medium text-white hover:text-orange-400 cursor-pointer"
                     onClick={() => toggleExpand(tour.id)}
                   >
                     {tour.name}
@@ -441,7 +441,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                       e.stopPropagation(); // Prevent expanding/collapsing when clicking edit
                       startRenaming(tour.id, tour.name);
                     }}
-                    className="ml-2 p-1 text-gray-400 hover:text-indigo-400 hover:bg-slate-700 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                    className="ml-2 p-1 text-gray-400 hover:text-orange-400 hover:bg-slate-800/70 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                     title="Rename tour"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -453,7 +453,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                       e.stopPropagation(); // Prevent expanding/collapsing when clicking delete
                       confirmDelete(tour.id);
                     }}
-                    className="ml-1 p-1 text-gray-400 hover:text-red-400 hover:bg-slate-700 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                    className="ml-1 p-1 text-gray-400 hover:text-red-400 hover:bg-slate-800/70 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                     title="Delete tour"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -465,7 +465,7 @@ export default function TourList({ tours, loading }: TourListProps) {
               <div className="text-gray-400">
                 <svg 
                   xmlns="http://www.w3.org/2000/svg" 
-                  className={`h-5 w-5 transition-transform hover:text-indigo-400 ${expandedTourId === tour.id ? 'transform rotate-180' : ''}`} 
+                  className={`h-5 w-5 transition-transform hover:text-orange-400 ${expandedTourId === tour.id ? 'transform rotate-180' : ''}`} 
                   fill="none" 
                   viewBox="0 0 24 24" 
                   stroke="currentColor"
@@ -478,12 +478,12 @@ export default function TourList({ tours, loading }: TourListProps) {
             </div>
             
             {tour.description && (
-              <p className="text-gray-400 text-sm mb-2 line-clamp-2">{tour.description}</p>
+              <p className="text-purple-100/80 text-sm mb-2 line-clamp-2">{tour.description}</p>
             )}
             
-            <div className="flex flex-wrap gap-2 items-center mt-3 text-sm text-gray-400">
+            <div className="flex flex-wrap gap-2 items-center mt-3 text-sm text-purple-100/80">
               <div className="flex items-center">
-                <svg className="w-4 h-4 mr-1 text-indigo-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-4 h-4 mr-1 text-orange-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                   <line x1="16" y1="2" x2="16" y2="6"></line>
                   <line x1="8" y1="2" x2="8" y2="6"></line>
@@ -493,7 +493,7 @@ export default function TourList({ tours, loading }: TourListProps) {
               </div>
               
               <div className="flex items-center ml-3">
-                <svg className="w-4 h-4 mr-1 text-indigo-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-4 h-4 mr-1 text-orange-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2c-3.87 0 -7 3.13 -7 7c0 5.25 7 13 7 13s7 -7.75 7 -13c0 -3.87 -3.13 -7 -7 -7z" />
                   <path d="M12 9m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0" />
                 </svg>
@@ -501,7 +501,7 @@ export default function TourList({ tours, loading }: TourListProps) {
               </div>
               
               <div className="flex items-center ml-3">
-                <svg className="w-4 h-4 mr-1 text-indigo-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-4 h-4 mr-1 text-orange-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
                   <polyline points="12 6 12 12 16 14"></polyline>
                 </svg>
@@ -509,12 +509,12 @@ export default function TourList({ tours, loading }: TourListProps) {
               </div>
               
               <div className="flex items-center ml-3">
-                <span className="text-indigo-400 mr-1">{getTransportIcon(tour.transportation_mode)}</span>
+                <span className="text-orange-400 mr-1">{getTransportIcon(tour.transportation_mode)}</span>
                 <span className="capitalize">{tour.transportation_mode}</span>
               </div>
               
               <div className="flex items-center ml-3">
-                <span className="text-xs px-2 py-1 bg-indigo-900/40 text-indigo-300 rounded-full border border-indigo-700/30">
+                <span className="text-xs px-2 py-1 bg-orange-900/30 text-orange-300 rounded-full border border-orange-700/30">
                   {tour.tourPois?.length || 0} stops
                 </span>
               </div>
@@ -522,14 +522,14 @@ export default function TourList({ tours, loading }: TourListProps) {
           </div>
 
           {expandedTourId === tour.id && (
-            <div className="border-t border-slate-700 p-4">
+            <div className="border-t border-purple-900/50 p-4">
               {/* Tour in Chronological Order: Start > Stops > End */}
               
               {/* Start Location Section */}
-              <div className="mb-6 bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
+              <div className="mb-6 bg-slate-900/60 p-3 rounded-lg border border-purple-900/30">
                 <div className="flex items-start">
                   <div className="min-w-8 mt-1 mr-2">
-                    <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-white">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
                       </svg>
@@ -537,7 +537,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-300">Start Location</p>
-                    <p className="text-gray-400 text-sm">{formatLocation(tour.start_location)}</p>
+                    <p className="text-purple-100/80 text-sm">{formatLocation(tour.start_location)}</p>
                   </div>
                 </div>
               </div>
@@ -545,7 +545,7 @@ export default function TourList({ tours, loading }: TourListProps) {
               {/* Tour Stops Section */}
               <div className="space-y-4 mb-6">
                 <h4 className="font-medium text-gray-300 flex items-center">
-                  <svg className="w-5 h-5 mr-1 text-indigo-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="w-5 h-5 mr-1 text-orange-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 22s-8-4.5-8-11.8a8 8 0 0 1 16 0c0 7.3-8 11.8-8 11.8z" />
                     <circle cx="12" cy="10" r="3" />
                   </svg>
@@ -555,13 +555,13 @@ export default function TourList({ tours, loading }: TourListProps) {
                   {tour.tourPois
                     .sort((a, b) => a.sequence_number - b.sequence_number)
                     .map((tourPoi) => (
-                      <div key={tourPoi.id} className="flex items-start p-2 hover:bg-slate-700/30 rounded-md transition-colors">
-                        <div className="bg-indigo-900/60 text-indigo-300 rounded-full w-6 h-6 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0 border border-indigo-700/50">
+                      <div key={tourPoi.id} className="flex items-start p-2 hover:bg-slate-800/50 rounded-md transition-colors">
+                        <div className="bg-pink-900/40 text-pink-300 rounded-full w-6 h-6 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0 border border-pink-700/30">
                           {tourPoi.sequence_number + 1}
                         </div>
                         <div>
-                          <h5 className="text-gray-200 font-medium">{tourPoi.poi.name}</h5>
-                          <p className="text-gray-400 text-sm">{tourPoi.poi.formatted_address}</p>
+                          <h5 className="text-white font-medium">{tourPoi.poi.name}</h5>
+                          <p className="text-purple-100/80 text-sm">{tourPoi.poi.formatted_address}</p>
                           {tourPoi.poi.rating && (
                             <div className="flex items-center mt-1">
                               <div className="flex">
@@ -587,11 +587,11 @@ export default function TourList({ tours, loading }: TourListProps) {
               </div>
               
               {/* End Location Section */}
-              <div className="mb-6 bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
+              <div className="mb-6 bg-slate-900/60 p-3 rounded-lg border border-purple-900/30">
                 {!tour.return_to_start ? (
                   <div className="flex items-start">
                     <div className="min-w-8 mt-1 mr-2">
-                      <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
                         </svg>
@@ -599,13 +599,13 @@ export default function TourList({ tours, loading }: TourListProps) {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-300">End Location</p>
-                      <p className="text-gray-400 text-sm">{formatLocation(tour.end_location)}</p>
+                      <p className="text-purple-100/80 text-sm">{formatLocation(tour.end_location)}</p>
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-start">
                     <div className="min-w-8 mt-1 mr-2">
-                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
                         </svg>
@@ -613,7 +613,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-300">Return to Start</p>
-                      <p className="text-gray-400 text-sm">This tour returns to the starting point</p>
+                      <p className="text-purple-100/80 text-sm">This tour returns to the starting point</p>
                     </div>
                   </div>
                 )}
@@ -625,7 +625,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                     href={getGoogleMapsUrl(tour)} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="text-indigo-300 hover:text-indigo-200 text-sm font-medium inline-flex items-center bg-indigo-900/30 hover:bg-indigo-900/50 px-3 py-2 rounded-md transition-colors border border-indigo-800/30"
+                    className="text-orange-300 hover:text-orange-200 text-sm font-medium inline-flex items-center bg-orange-900/30 hover:bg-orange-900/50 px-3 py-2 rounded-md transition-colors border border-orange-800/30"
                   >
                     <svg className="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
@@ -638,7 +638,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                       e.stopPropagation();
                       startRenaming(tour.id, tour.name);
                     }}
-                    className="text-gray-300 hover:text-gray-200 text-sm font-medium inline-flex items-center bg-slate-700/50 hover:bg-slate-700/70 px-3 py-2 rounded-md transition-colors cursor-pointer"
+                    className="text-gray-300 hover:text-gray-200 text-sm font-medium inline-flex items-center bg-slate-800/70 hover:bg-slate-700/70 px-3 py-2 rounded-md transition-colors cursor-pointer"
                   >
                     <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -662,7 +662,7 @@ export default function TourList({ tours, loading }: TourListProps) {
 
                 <Link
                   href={`/tour/${tour.id}`}
-                  className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-md px-4 py-2 text-sm font-medium transition-all flex items-center shadow-md hover:shadow-indigo-600/20"
+                  className="bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white rounded-md px-4 py-2 text-sm font-medium transition-all flex items-center shadow-lg shadow-orange-900/30"
                   onClick={() => {
                     logNav(`Navigating to tour: ${tour.id}`);
                     logNav(`Current URL: ${window.location.href}`);

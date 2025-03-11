@@ -50,7 +50,7 @@ export default function Header() {
       <header className="bg-slate-900 border-b border-slate-800">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center py-4">
-            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-500">
+            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500">
               Audio Guide
             </Link>
           </div>
@@ -65,11 +65,11 @@ export default function Header() {
       <header className="bg-slate-900 border-b border-slate-800">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center py-4">
-            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-500">
+            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500">
               Audio Guide
             </Link>
             <div className="flex items-center">
-              <div className="h-4 w-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mr-2"></div>
+              <div className="h-4 w-4 rounded-full border-2 border-pink-500 border-t-transparent animate-spin mr-2"></div>
               <span className="text-sm text-gray-400">Loading...</span>
             </div>
           </div>
@@ -84,12 +84,12 @@ export default function Header() {
       <header className="bg-slate-900 border-b border-slate-800">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center py-4">
-            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-500">
+            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500">
               Audio Guide
             </Link>
             <Link 
               href="/login"
-              className="transition duration-150 ease-in-out text-gray-300 hover:text-indigo-400"
+              className="transition duration-150 ease-in-out text-gray-300 hover:text-pink-400"
             >
               Sign In
             </Link>
@@ -101,23 +101,23 @@ export default function Header() {
 
   // For authenticated users, show full header
   return (
-    <header className="bg-slate-900 border-b border-slate-800 backdrop-blur-sm bg-opacity-90 sticky top-0 z-30">
+    <header className="bg-slate-950 border-b border-purple-900/50 backdrop-blur-sm bg-opacity-95 sticky top-0 z-30 shadow-md shadow-purple-900/10">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center py-4">
           <div className="flex items-center">
-            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-500">
+            <Link href="/" className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500">
               Audio Guide
             </Link>
             {user && (
-              <span className="ml-4 text-sm text-gray-300">
-                Welcome, <span className="text-indigo-300">{user.email?.split('@')[0]}</span>
+              <span className="ml-4 text-sm text-gray-200">
+                Welcome, <span className="text-pink-300 font-medium">{user.email?.split('@')[0]}</span>
               </span>
             )}
           </div>
           
           {/* Mobile menu button */}
           <button 
-            className="md:hidden p-2 text-gray-300 hover:text-indigo-400 focus:outline-none" 
+            className="md:hidden p-2 text-white hover:text-pink-400 focus:outline-none" 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -130,10 +130,10 @@ export default function Header() {
           </button>
           
           {/* Desktop navigation */}
-          <nav className="hidden md:flex items-center space-x-6">
+          <nav className="hidden md:flex items-center space-x-4">
             {/* Language indicator */}
             <div 
-              className="flex items-center text-gray-300 bg-slate-800/60 px-3 py-1.5 rounded-md border border-slate-700"
+              className="flex items-center text-white bg-slate-800 px-3 py-1.5 rounded-md border-2 border-purple-900/50 shadow-sm"
               title="Current language"
             >
               <span className="text-lg mr-1">{LANGUAGE_FLAGS[language]}</span>
@@ -148,7 +148,7 @@ export default function Header() {
             </NavLink>
             <button
               onClick={handleSignOut}
-              className="transition duration-150 ease-in-out text-gray-300 hover:text-red-400 flex items-center"
+              className="transition bg-slate-800 hover:bg-red-900/40 px-4 py-1.5 rounded-md text-white hover:text-white flex items-center border border-red-900/30 shadow-sm"
             >
               <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -162,11 +162,11 @@ export default function Header() {
         
         {/* Mobile navigation */}
         {isMenuOpen && (
-          <div className="md:hidden py-4 border-t border-slate-800">
+          <div className="md:hidden py-4 border-t border-purple-900/50">
             <nav className="flex flex-col space-y-4">
               {/* Language indicator for mobile */}
               <div
-                className="flex items-center px-4 py-2 text-gray-300 bg-slate-800/60 rounded-md"
+                className="flex items-center px-4 py-2 text-white bg-slate-800 rounded-md border-2 border-purple-900/40 shadow-sm"
               >
                 <span className="text-lg mr-2">{LANGUAGE_FLAGS[language]}</span>
                 <span>Language: {language.toUpperCase()}</span>
@@ -180,7 +180,7 @@ export default function Header() {
               </MobileNavLink>
               <button
                 onClick={handleSignOut}
-                className="flex items-center w-full px-4 py-2 rounded-md text-gray-300 hover:bg-slate-800/60 hover:text-red-400 text-left"
+                className="flex items-center w-full px-4 py-2 rounded-md text-white bg-slate-800 hover:bg-red-900/40 hover:text-white text-left border border-red-900/30"
               >
                 <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -201,10 +201,10 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
   return (
     <Link 
       href={href} 
-      className={`transition duration-150 ease-in-out ${
+      className={`transition duration-150 ease-in-out px-4 py-1.5 rounded-md border ${
         active 
-          ? 'text-indigo-400 font-medium' 
-          : 'text-gray-300 hover:text-indigo-400'
+          ? 'bg-purple-900/50 text-white font-medium border-purple-500/50' 
+          : 'text-white hover:bg-slate-800 border-slate-800 hover:border-pink-500/50'
       }`}
     >
       {children}
@@ -216,10 +216,10 @@ function MobileNavLink({ href, active, children }: { href: string; active: boole
   return (
     <Link 
       href={href} 
-      className={`block px-4 py-2 rounded-md ${
+      className={`block px-4 py-2 rounded-md border ${
         active 
-          ? 'bg-indigo-900/30 text-indigo-400 font-medium border border-indigo-800/30' 
-          : 'text-gray-300 hover:bg-slate-800/60 hover:text-indigo-400'
+          ? 'bg-purple-900/50 text-white font-medium border-purple-500/50' 
+          : 'text-white bg-slate-800 hover:bg-slate-700 border-slate-700 hover:border-pink-500/50'
       }`}
     >
       {children}
