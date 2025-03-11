@@ -283,7 +283,25 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
                   key={poiId} 
                   className="p-4 border border-gray-200 rounded-md bg-white shadow-sm"
                 >
-                  <h4 className="font-bold mb-2">{poi.name}</h4>
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-bold">{poi.name}</h4>
+                    <div className="flex items-center">
+                      {poiAudio.translationInProgress && (
+                        <span className="flex items-center text-xs text-amber-600 mr-2">
+                          <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Translating...
+                        </span>
+                      )}
+                      {poiAudio.language && (
+                        <span className="px-2 py-1 bg-blue-50 text-blue-600 text-xs font-medium rounded-full">
+                          {poiAudio.language.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     <button 
                       className="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1 rounded text-sm flex items-center"
@@ -367,9 +385,25 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center p-4 border-b">
-              <h3 className="text-lg font-bold">
-                Transcript: {audioData[selectedPoiId].name}
-              </h3>
+              <div>
+                <h3 className="text-lg font-bold flex items-center">
+                  Transcript: {audioData[selectedPoiId].name}
+                  {audioData[selectedPoiId].language && (
+                    <span className="ml-2 px-2 py-1 bg-blue-50 text-blue-600 text-xs font-medium rounded-full">
+                      {audioData[selectedPoiId].language.toUpperCase()}
+                    </span>
+                  )}
+                </h3>
+                {audioData[selectedPoiId].translationInProgress && (
+                  <div className="mt-1 text-sm text-amber-600 flex items-center">
+                    <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Translation to your preferred language is in progress...
+                  </div>
+                )}
+              </div>
               <button 
                 onClick={() => setIsModalOpen(false)}
                 className="text-gray-500 hover:text-gray-700"
@@ -381,13 +415,13 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
             </div>
             <div className="p-6">
               <h4 className="font-bold mb-2">Brief Overview (30-60s)</h4>
-              <p className="mb-4">{audioData[selectedPoiId].content.core}</p>
+              <p className="mb-4">{audioData[selectedPoiId].content.brief || audioData[selectedPoiId].content.core || 'Not available'}</p>
               
               <h4 className="font-bold mb-2">Detailed Information (1-2m)</h4>
-              <p className="mb-4">{audioData[selectedPoiId].content.secondary}</p>
+              <p className="mb-4">{audioData[selectedPoiId].content.detailed || audioData[selectedPoiId].content.secondary || 'Not available'}</p>
               
               <h4 className="font-bold mb-2">In-depth Context (3m+)</h4>
-              <p className="mb-4">{audioData[selectedPoiId].content.tertiary}</p>
+              <p className="mb-4">{audioData[selectedPoiId].content.complete || audioData[selectedPoiId].content.tertiary || 'Not available'}</p>
               
               <h4 className="font-bold mb-2">Sources</h4>
               <p className="whitespace-pre-line">{audioData[selectedPoiId].content.credits}</p>
