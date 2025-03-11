@@ -129,14 +129,13 @@ export default function Header() {
           {/* Desktop navigation */}
           <nav className="hidden md:flex items-center space-x-6">
             {/* Language indicator */}
-            <Link 
-              href="/profile"
-              className="flex items-center text-gray-600 hover:text-blue-500"
-              title="Change language"
+            <div 
+              className="flex items-center text-gray-600"
+              title="Current language"
             >
               <span className="text-xl mr-1">{LANGUAGE_FLAGS[language]}</span>
               <span className="text-sm font-medium">{language.toUpperCase()}</span>
-            </Link>
+            </div>
             
             <NavLink href="/" active={pathname === '/'}>
               Home
@@ -158,13 +157,12 @@ export default function Header() {
           <div className="md:hidden py-4">
             <nav className="flex flex-col space-y-4">
               {/* Language indicator for mobile */}
-              <Link
-                href="/profile"
-                className="flex items-center px-4 py-2 rounded-md text-gray-600 hover:bg-gray-50 hover:text-blue-500"
+              <div
+                className="flex items-center px-4 py-2 text-gray-600"
               >
                 <span className="text-xl mr-2">{LANGUAGE_FLAGS[language]}</span>
                 <span>Language: {language.toUpperCase()}</span>
-              </Link>
+              </div>
               
               <MobileNavLink href="/" active={pathname === '/'}>
                 Home
