@@ -72,10 +72,11 @@ model TourPoi {
 }
 
 model User {
-  id         String   @id
-  email      String   @unique
-  created_at DateTime @default(now())
-  tours      Tour[]
+  id                 String   @id
+  email              String   @unique
+  created_at         DateTime @default(now())
+  preferred_language String   @default("en")
+  tours              Tour[]
 }
 
 model Translation {

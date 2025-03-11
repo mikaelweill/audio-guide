@@ -4,11 +4,22 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useLanguage } from '@/context/LanguageContext';
+
+// Language flag icons
+const LANGUAGE_FLAGS: Record<string, string> = {
+  'en': '🇺🇸',
+  'es': '🇪🇸',
+  'fr': '🇫🇷',
+  'de': '🇩🇪',
+  'ja': '🇯🇵'
+};
 
 export default function Header() {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { user, signOut, isLoading, isAuthenticated } = useAuth();
+  const { language } = useLanguage();
   const showDebug = process.env.NODE_ENV === 'development';
   
   // Add debugging to check auth state
@@ -116,7 +127,17 @@ export default function Header() {
           </button>
           
           {/* Desktop navigation */}
-          <nav className="hidden md:flex space-x-8">
+          <nav className="hidden md:flex items-center space-x-6">
+            {/* Language indicator */}
+            <Link 
+              href="/profile"
+              className="flex items-center text-gray-600 hover:text-blue-500"
+              title="Change language"
+            >
+              <span className="text-xl mr-1">{LANGUAGE_FLAGS[language]}</span>
+              <span className="text-sm font-medium">{language.toUpperCase()}</span>
+            </Link>
+            
             <NavLink href="/" active={pathname === '/'}>
               Home
             </NavLink>
@@ -136,6 +157,15 @@ export default function Header() {
         {isMenuOpen && (
           <div className="md:hidden py-4">
             <nav className="flex flex-col space-y-4">
+              {/* Language indicator for mobile */}
+              <Link
+                href="/profile"
+                className="flex items-center px-4 py-2 rounded-md text-gray-600 hover:bg-gray-50 hover:text-blue-500"
+              >
+                <span className="text-xl mr-2">{LANGUAGE_FLAGS[language]}</span>
+                <span>Language: {language.toUpperCase()}</span>
+              </Link>
+              
               <MobileNavLink href="/" active={pathname === '/'}>
                 Home
               </MobileNavLink>
