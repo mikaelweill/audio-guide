@@ -194,6 +194,9 @@ export default function TourPage() {
   const [duration, setDuration] = useState(0);
   const [activeAudioUrl, setActiveAudioUrl] = useState<string | null>(null);
   
+  // Add playback speed state
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  
   // Add this state variable to track the visible transcript
   const [showTranscript, setShowTranscript] = useState(false);
   
@@ -627,6 +630,9 @@ export default function TourPage() {
         setIsAudioLoading(false);
         clearTimeout(loadingTimeout);
         
+        // Set the playback rate from state
+        audio.playbackRate = playbackSpeed;
+        
         // Auto-play when ready
         audio.play().catch(error => {
           console.error(`Failed to auto-play audio ${label}:`, error);
@@ -690,7 +696,7 @@ export default function TourPage() {
       setIsPlaying(false);
       alert(`Error setting up audio playback: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, [audioElement, isAudioLoading, currentStopIndex, setAudioData]);
+  }, [audioElement, isAudioLoading, currentStopIndex, setAudioData, playbackSpeed]);
   
   // Make these control functions memoized callbacks
   const togglePlayPause = useCallback(() => {
@@ -761,6 +767,15 @@ export default function TourPage() {
       logPage('Current POI data:', currentStop.poi);
     }
   }, [tour, currentStopIndex]);
+  
+  // Add this function to handle playback speed changes
+  const handleSpeedChange = useCallback((speed: number) => {
+    setPlaybackSpeed(speed);
+    if (audioElement) {
+      audioElement.playbackRate = speed;
+      console.log(`Playback speed changed to ${speed}x`);
+    }
+  }, [audioElement]);
   
   if (loading) {
     return (
@@ -1099,6 +1114,36 @@ export default function TourPage() {
                                 />
                               </div>
                               
+                              {/* Simplified playback speed control */}
+                              <div className="flex items-center justify-end mb-3">
+                                <div className="flex items-center">
+                                  <div className="flex items-center mr-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                                    </svg>
+                                    <span className="text-xs text-gray-400">Speed</span>
+                                  </div>
+                                  
+                                  {/* Compact slider for playback speed */}
+                                  <div className="w-20 mx-2">
+                                    <input
+                                      type="range"
+                                      min="0.25"
+                                      max="3"
+                                      step="0.05"
+                                      value={playbackSpeed}
+                                      onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
+                                      className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                    />
+                                  </div>
+                                  
+                                  {/* Display current speed value */}
+                                  <div className="min-w-[45px] px-2 py-0.5 text-center text-xs font-medium rounded-md bg-slate-700 text-pink-300">
+                                    {playbackSpeed.toFixed(2)}x
+                                  </div>
+                                </div>
+                              </div>
+                              
                               {/* Transcript toggle button */}
                               <div className="flex justify-end">
                                 <button
@@ -1135,7 +1180,7 @@ export default function TourPage() {
                         <div className="flex items-center">
                           <button className="bg-pink-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3-2a1 1 0 000-1.664z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           </button>
@@ -1153,7 +1198,7 @@ export default function TourPage() {
                     <div className="flex items-center">
                       <button className="bg-pink-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3-2a1 1 0 000-1.664z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </button>
