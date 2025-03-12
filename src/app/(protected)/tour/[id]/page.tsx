@@ -7,7 +7,9 @@ import { Tour, TourPoi } from '@/components/TourList';
 import { dataCollectionService } from '@/services/audioGuide';
 import { getImageUrl, getImageAttribution } from '@/utils/images';
 import POIImage from '@/components/POIImage';
-import { useRTVIClient } from '@pipecat-ai/client-react';
+import { useRTVIClient, RTVIClientProvider, RTVIClientAudio } from '@pipecat-ai/client-react';
+import { RTVIClient } from '@pipecat-ai/client-js';
+import { DailyTransport } from '@pipecat-ai/daily-transport';
 
 // Debug logging
 const PAGE_DEBUG = true;
@@ -16,6 +18,24 @@ const logPage = (...args: any[]) => {
     console.log(`📄 TOUR PAGE [${new Date().toISOString().split('T')[1].split('.')[0]}]:`, ...args);
   }
 };
+
+// Initialize client
+const client = new RTVIClient({
+  transport: new DailyTransport(),
+  params: {
+    baseUrl: 'https://server-damp-log-5089.fly.dev',
+    requestData: {
+      apiKey: process.env.VOICE_AGENT_API_KEY,
+      voice: 'cCIUSv3TlEi0E3OFQkzf',
+      messages: [
+        {
+          role: 'system',
+          content: 'Hello, how are you?'
+        }
+      ]
+    }
+  }
+})
 
 // VoiceAgentButton component
 function VoiceAgentButton() {
@@ -754,496 +774,499 @@ export default function TourPage() {
   }
   
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 pb-20">
-      {/* Tour Header */}
-      <div className="bg-gradient-to-r from-purple-900 via-pink-800 to-orange-900 text-white py-4 shadow-md shadow-purple-900/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold">{tour.name}</h1>
-              <p className="text-pink-100 mt-1">
-                {tour.tourPois.length} stops • {(tour.total_distance).toFixed(1)} km • {formatDuration(tour.total_duration)}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <VoiceAgentButton />
-              <Link
-                href="/"
-                className="text-white hover:text-pink-200 transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </Link>
+    <RTVIClientProvider client={client}>
+      <RTVIClientAudio />
+      <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 pb-20">
+        {/* Tour Header */}
+        <div className="bg-gradient-to-r from-purple-900 via-pink-800 to-orange-900 text-white py-4 shadow-md shadow-purple-900/20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-2xl font-bold">{tour.name}</h1>
+                <p className="text-pink-100 mt-1">
+                  {tour.tourPois.length} stops • {(tour.total_distance).toFixed(1)} km • {formatDuration(tour.total_duration)}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <VoiceAgentButton />
+                <Link
+                  href="/"
+                  className="text-white hover:text-pink-200 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Audio Guide Generation Button - Parent level control */}
-        {!isGeneratingAudio && Object.keys(audioData).length === 0 && (
-          <div className="bg-slate-900/80 p-4 rounded-lg shadow-lg border border-purple-900/30 mb-8">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center">
-                <svg className="w-5 h-5 text-pink-500 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M18 3a1 1 0 00-1.447-.894L8.763 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-4.382l6.553 3.276A1 1 0 0018 15V3z"></path>
-                </svg>
-                <h3 className="font-semibold text-lg text-white">Audio Tour Guides</h3>
-              </div>
-              <button 
-                onClick={handleGenerateAudioGuides}
-                className="bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90 text-white py-2 px-4 rounded-md font-medium text-sm flex items-center shadow-md"
-              >
-                <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                </svg>
-                Generate Audio For All Stops
-              </button>
-            </div>
-            <p className="text-sm text-gray-400">
-              Generate audio guides for all stops on this tour. This will create audio content you can listen to at each location.
-            </p>
-          </div>
-        )}
         
-        {/* Generation Progress Indicator */}
-        {isGeneratingAudio && (
-          <div className="bg-slate-900/80 p-4 rounded-lg shadow-lg border border-purple-900/30 mb-8">
-            <h3 className="font-semibold text-lg mb-3 flex items-center text-white">
-              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-pink-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Generating Audio Guides
-            </h3>
-            <div className="w-full bg-slate-800 rounded-full h-2.5 mb-2">
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Audio Guide Generation Button - Parent level control */}
+          {!isGeneratingAudio && Object.keys(audioData).length === 0 && (
+            <div className="bg-slate-900/80 p-4 rounded-lg shadow-lg border border-purple-900/30 mb-8">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center">
+                  <svg className="w-5 h-5 text-pink-500 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M18 3a1 1 0 00-1.447-.894L8.763 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-4.382l6.553 3.276A1 1 0 0018 15V3z"></path>
+                  </svg>
+                  <h3 className="font-semibold text-lg text-white">Audio Tour Guides</h3>
+                </div>
+                <button 
+                  onClick={handleGenerateAudioGuides}
+                  className="bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90 text-white py-2 px-4 rounded-md font-medium text-sm flex items-center shadow-md"
+                >
+                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                  </svg>
+                  Generate Audio For All Stops
+                </button>
+              </div>
+              <p className="text-sm text-gray-400">
+                Generate audio guides for all stops on this tour. This will create audio content you can listen to at each location.
+              </p>
+            </div>
+          )}
+          
+          {/* Generation Progress Indicator */}
+          {isGeneratingAudio && (
+            <div className="bg-slate-900/80 p-4 rounded-lg shadow-lg border border-purple-900/30 mb-8">
+              <h3 className="font-semibold text-lg mb-3 flex items-center text-white">
+                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-pink-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Generating Audio Guides
+              </h3>
+              <div className="w-full bg-slate-800 rounded-full h-2.5 mb-2">
+                <div 
+                  className="bg-gradient-to-r from-orange-500 via-pink-600 to-purple-600 h-2.5 rounded-full transition-all" 
+                  style={{ width: `${generationProgress}%` }}
+                ></div>
+              </div>
+              <p className="text-sm text-pink-200">{currentGenerationStep}</p>
+              <p className="text-sm text-gray-400 mt-1">This may take a few minutes. Please don't close this page.</p>
+            </div>
+          )}
+          
+          {/* Progress Bar */}
+          <div className="mb-8">
+            <div className="bg-slate-800 rounded-full h-2.5 mb-2">
               <div 
-                className="bg-gradient-to-r from-orange-500 via-pink-600 to-purple-600 h-2.5 rounded-full transition-all" 
-                style={{ width: `${generationProgress}%` }}
+                className="bg-gradient-to-r from-orange-500 via-pink-600 to-purple-600 h-2.5 rounded-full" 
+                style={{ width: `${(currentStopIndex / Math.max(1, tour.tourPois.length - 1)) * 100}%` }}
               ></div>
             </div>
-            <p className="text-sm text-pink-200">{currentGenerationStep}</p>
-            <p className="text-sm text-gray-400 mt-1">This may take a few minutes. Please don't close this page.</p>
+            <div className="flex justify-between text-sm text-gray-400">
+              <span>Start</span>
+              <span>Finish</span>
+            </div>
           </div>
-        )}
-        
-        {/* Progress Bar */}
-        <div className="mb-8">
-          <div className="bg-slate-800 rounded-full h-2.5 mb-2">
-            <div 
-              className="bg-gradient-to-r from-orange-500 via-pink-600 to-purple-600 h-2.5 rounded-full" 
-              style={{ width: `${(currentStopIndex / Math.max(1, tour.tourPois.length - 1)) * 100}%` }}
-            ></div>
-          </div>
-          <div className="flex justify-between text-sm text-gray-400">
-            <span>Start</span>
-            <span>Finish</span>
-          </div>
-        </div>
-        
-        {/* Current Stop */}
-        {currentStop && (
-          <div className="bg-slate-900/80 rounded-lg shadow-lg border border-purple-900/30 overflow-hidden mb-6">
-            <div className="p-4 border-b border-purple-900/30">
-              <div className="flex justify-between items-start">
-                <h2 className="text-xl font-semibold text-white">
-                  Stop {currentStopIndex + 1}: {currentStop.poi.name}
-                </h2>
-                <span className="bg-purple-900/50 text-pink-300 text-xs font-medium px-2.5 py-0.5 rounded-full border border-purple-700/50">
-                  {currentStopIndex + 1}/{sortedPois.length}
-                </span>
+          
+          {/* Current Stop */}
+          {currentStop && (
+            <div className="bg-slate-900/80 rounded-lg shadow-lg border border-purple-900/30 overflow-hidden mb-6">
+              <div className="p-4 border-b border-purple-900/30">
+                <div className="flex justify-between items-start">
+                  <h2 className="text-xl font-semibold text-white">
+                    Stop {currentStopIndex + 1}: {currentStop.poi.name}
+                  </h2>
+                  <span className="bg-purple-900/50 text-pink-300 text-xs font-medium px-2.5 py-0.5 rounded-full border border-purple-700/50">
+                    {currentStopIndex + 1}/{sortedPois.length}
+                  </span>
+                </div>
+                
+                <p className="text-gray-400 mt-1">{currentStop.poi.formatted_address}</p>
+                
+                {/* Add website link if available */}
+                {currentStop.poi.website && (
+                  <div className="mt-2">
+                    <a 
+                      href={currentStop.poi.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center text-pink-400 hover:text-pink-300"
+                    >
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      Visit Website
+                    </a>
+                  </div>
+                )}
+                
+                {currentStop.poi.rating && (
+                  <div className="flex items-center mt-2">
+                    <div className="flex">
+                      {[...Array(5)].map((_, i) => (
+                        <svg 
+                          key={i}
+                          className={`w-4 h-4 ${i < Math.round(currentStop.poi.rating || 0) ? 'text-yellow-400' : 'text-gray-300'}`}
+                          xmlns="http://www.w3.org/2000/svg" 
+                          viewBox="0 0 20 20" 
+                          fill="currentColor"
+                        >
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ))}
+                    </div>
+                    <span className="text-gray-500 ml-1">{currentStop.poi.rating}</span>
+                  </div>
+                )}
               </div>
               
-              <p className="text-gray-400 mt-1">{currentStop.poi.formatted_address}</p>
+              {/* Placeholder for POI Image */}
+              <div className="h-64 bg-slate-800 flex items-center justify-center">
+                {currentStop.poi.thumbnail_url ? (
+                  <POIImage 
+                    imagePath={currentStop.poi.thumbnail_url} 
+                    attribution={currentStop.poi.image_attribution || null}
+                    altText={currentStop.poi.name}
+                  />
+                ) : currentStop.poi.photo_references && currentStop.poi.photo_references.length > 0 ? (
+                  <img 
+                    src={`https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${currentStop.poi.photo_references[0]}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`}
+                    alt={currentStop.poi.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <svg className="w-16 h-16 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                )}
+              </div>
               
-              {/* Add website link if available */}
-              {currentStop.poi.website && (
-                <div className="mt-2">
-                  <a 
-                    href={currentStop.poi.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center text-pink-400 hover:text-pink-300"
-                  >
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    Visit Website
-                  </a>
-                </div>
-              )}
-              
-              {currentStop.poi.rating && (
-                <div className="flex items-center mt-2">
-                  <div className="flex">
-                    {[...Array(5)].map((_, i) => (
-                      <svg 
-                        key={i}
-                        className={`w-4 h-4 ${i < Math.round(currentStop.poi.rating || 0) ? 'text-yellow-400' : 'text-gray-300'}`}
-                        xmlns="http://www.w3.org/2000/svg" 
-                        viewBox="0 0 20 20" 
-                        fill="currentColor"
-                      >
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                    ))}
-                  </div>
-                  <span className="text-gray-500 ml-1">{currentStop.poi.rating}</span>
-                </div>
-              )}
-            </div>
-            
-            {/* Placeholder for POI Image */}
-            <div className="h-64 bg-slate-800 flex items-center justify-center">
-              {currentStop.poi.thumbnail_url ? (
-                <POIImage 
-                  imagePath={currentStop.poi.thumbnail_url} 
-                  attribution={currentStop.poi.image_attribution || null}
-                  altText={currentStop.poi.name}
-                />
-              ) : currentStop.poi.photo_references && currentStop.poi.photo_references.length > 0 ? (
-                <img 
-                  src={`https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${currentStop.poi.photo_references[0]}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`}
-                  alt={currentStop.poi.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <svg className="w-16 h-16 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              )}
-            </div>
-            
-            {/* Content Section */}
-            <div className="p-4">
-              <h3 className="text-lg font-medium text-white mb-2">About this location</h3>
-              <p className="text-gray-300 mb-4">
-                {Object.keys(audioData).length > 0 ? 
-                  "Audio guides for this location are ready to play below." : 
-                  "Audio guide content for this location will be generated and displayed here."}
-              </p>
-              
-              {/* Enhanced Audio Player Section */}
-              {Object.keys(audioData).length > 0 ? (
-                <>
-                  {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`] ? (
-                    <div className="bg-slate-800/80 p-4 rounded-lg mb-4 shadow-md border border-purple-900/30">
-                      <div className="flex flex-col space-y-4">
-                        {/* Audio selection buttons */}
-                        <div className="flex flex-wrap gap-2">
-                          <button 
-                            className={`${currentAudioId === 'brief' ? 'bg-gradient-to-r from-orange-600 to-pink-700' : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90'} text-white py-2 px-3 rounded-md flex items-center justify-center ${isAudioLoading && currentAudioId === 'brief' ? 'opacity-75 cursor-wait' : ''} shadow-md`}
-                            onClick={async () => {
-                              setCurrentAudioId('brief');
-                              const audioUrl = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.audioFiles?.coreAudioUrl;
-                              console.log("Brief audio URL:", audioUrl);
-                              if (!audioUrl) {
-                                alert("No brief audio available. Try regenerating the audio guides.");
-                                return;
-                              }
-                              await playAudio(audioUrl, "Brief Overview");
-                            }}
-                            disabled={isAudioLoading}
-                          >
-                            {isAudioLoading && currentAudioId === 'brief' ? (
-                              <>
-                                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Loading...
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                                </svg>
-                                Brief Overview (30-60s)
-                              </>
-                            )}
-                          </button>
-                          
-                          <button 
-                            className={`${currentAudioId === 'detailed' ? 'bg-gradient-to-r from-orange-600 to-pink-700' : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90'} text-white py-2 px-3 rounded-md flex items-center justify-center ${isAudioLoading && currentAudioId === 'detailed' ? 'opacity-75 cursor-wait' : ''} shadow-md`}
-                            onClick={async () => {
-                              setCurrentAudioId('detailed');
-                              const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.secondaryAudioUrl;
-                              console.log("Detailed audio URL:", audioUrl);
-                              if (!audioUrl) {
-                                alert("No detailed audio available. Try regenerating the audio guides.");
-                                return;
-                              }
-                              await playAudio(audioUrl, "Detailed Guide");
-                            }}
-                            disabled={isAudioLoading}
-                          >
-                            {isAudioLoading && currentAudioId === 'detailed' ? (
-                              <>
-                                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Loading...
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                                </svg>
-                                Detailed Guide (1-2 min)
-                              </>
-                            )}
-                          </button>
-                          
-                          <button 
-                            className={`${currentAudioId === 'in-depth' ? 'bg-gradient-to-r from-orange-600 to-pink-700' : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90'} text-white py-2 px-3 rounded-md flex items-center justify-center ${isAudioLoading && currentAudioId === 'in-depth' ? 'opacity-75 cursor-wait' : ''} shadow-md`}
-                            onClick={async () => {
-                              setCurrentAudioId('in-depth');
-                              const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.tertiaryAudioUrl;
-                              console.log("In-depth audio URL:", audioUrl);
-                              if (!audioUrl) {
-                                alert("No in-depth audio available. Try regenerating the audio guides.");
-                                return;
-                              }
-                              await playAudio(audioUrl, "In-Depth Exploration");
-                            }}
-                            disabled={isAudioLoading}
-                          >
-                            {isAudioLoading && currentAudioId === 'in-depth' ? (
-                              <>
-                                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Loading...
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                                </svg>
-                                In-Depth Exploration (3+ min)
-                              </>
-                            )}
-                          </button>
-                        </div>
-                        
-                        {/* Audio player controls */}
-                        {activeAudioUrl && (
-                          <div className="mt-4 bg-slate-800 p-3 rounded-lg shadow-md border border-purple-900/30">
-                            {/* Play/Pause button and time indicator */}
-                            <div className="flex items-center justify-between mb-2">
-                              <button 
-                                onClick={togglePlayPause} 
-                                className="bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90 text-white p-2 rounded-full shadow-md"
-                                disabled={isAudioLoading}
-                              >
-                                {isAudioLoading ? (
-                                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              {/* Content Section */}
+              <div className="p-4">
+                <h3 className="text-lg font-medium text-white mb-2">About this location</h3>
+                <p className="text-gray-300 mb-4">
+                  {Object.keys(audioData).length > 0 ? 
+                    "Audio guides for this location are ready to play below." : 
+                    "Audio guide content for this location will be generated and displayed here."}
+                </p>
+                
+                {/* Enhanced Audio Player Section */}
+                {Object.keys(audioData).length > 0 ? (
+                  <>
+                    {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`] ? (
+                      <div className="bg-slate-800/80 p-4 rounded-lg mb-4 shadow-md border border-purple-900/30">
+                        <div className="flex flex-col space-y-4">
+                          {/* Audio selection buttons */}
+                          <div className="flex flex-wrap gap-2">
+                            <button 
+                              className={`${currentAudioId === 'brief' ? 'bg-gradient-to-r from-orange-600 to-pink-700' : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90'} text-white py-2 px-3 rounded-md flex items-center justify-center ${isAudioLoading && currentAudioId === 'brief' ? 'opacity-75 cursor-wait' : ''} shadow-md`}
+                              onClick={async () => {
+                                setCurrentAudioId('brief');
+                                const audioUrl = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.audioFiles?.coreAudioUrl;
+                                console.log("Brief audio URL:", audioUrl);
+                                if (!audioUrl) {
+                                  alert("No brief audio available. Try regenerating the audio guides.");
+                                  return;
+                                }
+                                await playAudio(audioUrl, "Brief Overview");
+                              }}
+                              disabled={isAudioLoading}
+                            >
+                              {isAudioLoading && currentAudioId === 'brief' ? (
+                                <>
+                                  <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                   </svg>
-                                ) : isPlaying ? (
-                                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                  Loading...
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
                                   </svg>
-                                ) : (
-                                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                                  Brief Overview (30-60s)
+                                </>
+                              )}
+                            </button>
+                            
+                            <button 
+                              className={`${currentAudioId === 'detailed' ? 'bg-gradient-to-r from-orange-600 to-pink-700' : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90'} text-white py-2 px-3 rounded-md flex items-center justify-center ${isAudioLoading && currentAudioId === 'detailed' ? 'opacity-75 cursor-wait' : ''} shadow-md`}
+                              onClick={async () => {
+                                setCurrentAudioId('detailed');
+                                const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.secondaryAudioUrl;
+                                console.log("Detailed audio URL:", audioUrl);
+                                if (!audioUrl) {
+                                  alert("No detailed audio available. Try regenerating the audio guides.");
+                                  return;
+                                }
+                                await playAudio(audioUrl, "Detailed Guide");
+                              }}
+                              disabled={isAudioLoading}
+                            >
+                              {isAudioLoading && currentAudioId === 'detailed' ? (
+                                <>
+                                  <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                   </svg>
-                                )}
-                              </button>
-                              <div className="text-sm font-medium text-gray-300">
-                                {formatTime(currentTime)} / {formatTime(duration)}
+                                  Loading...
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                                  </svg>
+                                  Detailed Guide (1-2 min)
+                                </>
+                              )}
+                            </button>
+                            
+                            <button 
+                              className={`${currentAudioId === 'in-depth' ? 'bg-gradient-to-r from-orange-600 to-pink-700' : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90'} text-white py-2 px-3 rounded-md flex items-center justify-center ${isAudioLoading && currentAudioId === 'in-depth' ? 'opacity-75 cursor-wait' : ''} shadow-md`}
+                              onClick={async () => {
+                                setCurrentAudioId('in-depth');
+                                const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.tertiaryAudioUrl;
+                                console.log("In-depth audio URL:", audioUrl);
+                                if (!audioUrl) {
+                                  alert("No in-depth audio available. Try regenerating the audio guides.");
+                                  return;
+                                }
+                                await playAudio(audioUrl, "In-Depth Exploration");
+                              }}
+                              disabled={isAudioLoading}
+                            >
+                              {isAudioLoading && currentAudioId === 'in-depth' ? (
+                                <>
+                                  <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Loading...
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                                  </svg>
+                                  In-Depth Exploration (3+ min)
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          
+                          {/* Audio player controls */}
+                          {activeAudioUrl && (
+                            <div className="mt-4 bg-slate-800 p-3 rounded-lg shadow-md border border-purple-900/30">
+                              {/* Play/Pause button and time indicator */}
+                              <div className="flex items-center justify-between mb-2">
+                                <button 
+                                  onClick={togglePlayPause} 
+                                  className="bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90 text-white p-2 rounded-full shadow-md"
+                                  disabled={isAudioLoading}
+                                >
+                                  {isAudioLoading ? (
+                                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                  ) : isPlaying ? (
+                                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                                    </svg>
+                                  )}
+                                </button>
+                                <div className="text-sm font-medium text-gray-300">
+                                  {formatTime(currentTime)} / {formatTime(duration)}
+                                </div>
+                              </div>
+                              
+                              {/* Scrubber (progress bar) */}
+                              <div className="w-full mb-3">
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max={duration || 0}
+                                  value={currentTime}
+                                  onChange={handleSeek}
+                                  className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                  disabled={!duration || isAudioLoading}
+                                />
+                              </div>
+                              
+                              {/* Transcript toggle button */}
+                              <div className="flex justify-end">
+                                <button
+                                  onClick={() => {
+                                    console.log("Toggle transcript clicked, current state:", showTranscript);
+                                    setShowTranscript(!showTranscript);
+                                  }}
+                                  className="text-xs flex items-center px-2 py-1 rounded bg-slate-700 text-pink-400 hover:text-pink-300 hover:bg-slate-600 transition-colors"
+                                >
+                                  {showTranscript ? (
+                                    <>
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.542 7 7 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                      </svg>
+                                      Hide Transcript
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7 7 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                      </svg>
+                                      Show Transcript
+                                    </>
+                                  )}
+                                </button>
                               </div>
                             </div>
-                            
-                            {/* Scrubber (progress bar) */}
-                            <div className="w-full mb-3">
-                              <input
-                                type="range"
-                                min="0"
-                                max={duration || 0}
-                                value={currentTime}
-                                onChange={handleSeek}
-                                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                                disabled={!duration || isAudioLoading}
-                              />
-                            </div>
-                            
-                            {/* Transcript toggle button */}
-                            <div className="flex justify-end">
-                              <button
-                                onClick={() => {
-                                  console.log("Toggle transcript clicked, current state:", showTranscript);
-                                  setShowTranscript(!showTranscript);
-                                }}
-                                className="text-xs flex items-center px-2 py-1 rounded bg-slate-700 text-pink-400 hover:text-pink-300 hover:bg-slate-600 transition-colors"
-                              >
-                                {showTranscript ? (
-                                  <>
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.542 7 7 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                    Hide Transcript
-                                  </>
-                                ) : (
-                                  <>
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7 7 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                    Show Transcript
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-slate-800/80 p-4 rounded-lg flex items-center justify-between mb-4 border border-purple-900/30 shadow-md">
-                      <div className="flex items-center">
-                        <button className="bg-pink-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <div>
-                          <p className="font-medium text-white">Audio Guide</p>
-                          <p className="text-sm text-gray-300">Generate audio guides using the button at the top</p>
+                          )}
                         </div>
                       </div>
-                      <div className="text-gray-300">--:--</div>
+                    ) : (
+                      <div className="bg-slate-800/80 p-4 rounded-lg flex items-center justify-between mb-4 border border-purple-900/30 shadow-md">
+                        <div className="flex items-center">
+                          <button className="bg-pink-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </button>
+                          <div>
+                            <p className="font-medium text-white">Audio Guide</p>
+                            <p className="text-sm text-gray-300">Generate audio guides using the button at the top</p>
+                          </div>
+                        </div>
+                        <div className="text-gray-300">--:--</div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="bg-slate-800/80 p-4 rounded-lg flex items-center justify-between mb-4 border border-purple-900/30 shadow-md">
+                    <div className="flex items-center">
+                      <button className="bg-pink-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                      <div>
+                        <p className="font-medium text-white">Audio Guide</p>
+                        <p className="text-sm text-gray-300">Generate audio guides using the button at the top</p>
+                      </div>
                     </div>
-                  )}
-                </>
-              ) : (
-                <div className="bg-slate-800/80 p-4 rounded-lg flex items-center justify-between mb-4 border border-purple-900/30 shadow-md">
-                  <div className="flex items-center">
-                    <button className="bg-pink-500 text-white rounded-full p-2 mr-3 opacity-50 cursor-not-allowed">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </button>
-                    <div>
-                      <p className="font-medium text-white">Audio Guide</p>
-                      <p className="text-sm text-gray-300">Generate audio guides using the button at the top</p>
-                    </div>
+                    <div className="text-gray-300">--:--</div>
                   </div>
-                  <div className="text-gray-300">--:--</div>
-                </div>
-              )}
-              
-              {/* Google Maps Link */}
-              <a 
-                href={getGoogleMapsUrl(currentStop.poi)}
-                target="_blank"
-                rel="noreferrer"
-                className="text-pink-400 hover:text-pink-300 inline-flex items-center mb-4"
-              >
-                <svg className="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-                </svg>
-                View in Google Maps
-              </a>
-            </div>
-          </div>
-        )}
-        
-        {/* Transcript display */}
-        {showTranscript && currentAudioId && activeAudioUrl && audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.content && (
-          <div className="mt-4 bg-slate-800 p-4 rounded-lg shadow-md border-l-4 border-pink-500">
-            <div className="flex justify-between items-center mb-3">
-              <div className="flex items-center">
-                <h4 className="text-sm font-medium text-white">Transcript</h4>
-                {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.language && (
-                  <span className="ml-2 px-2 py-0.5 bg-purple-900/50 text-pink-300 text-xs font-medium rounded-full border border-purple-700/50">
-                    {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`].language.toUpperCase()}
-                  </span>
                 )}
                 
-                {/* Show translation status */}
-                {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.translationInProgress && (
-                  <span className="ml-2 px-2 py-0.5 bg-amber-900/40 text-amber-300 text-xs font-medium rounded-full flex items-center border border-amber-700/50">
-                    <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-amber-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Translating...
-                  </span>
-                )}
+                {/* Google Maps Link */}
+                <a 
+                  href={getGoogleMapsUrl(currentStop.poi)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-pink-400 hover:text-pink-300 inline-flex items-center mb-4"
+                >
+                  <svg className="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                  </svg>
+                  View in Google Maps
+                </a>
+              </div>
+            </div>
+          )}
+          
+          {/* Transcript display */}
+          {showTranscript && currentAudioId && activeAudioUrl && audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.content && (
+            <div className="mt-4 bg-slate-800 p-4 rounded-lg shadow-md border-l-4 border-pink-500">
+              <div className="flex justify-between items-center mb-3">
+                <div className="flex items-center">
+                  <h4 className="text-sm font-medium text-white">Transcript</h4>
+                  {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.language && (
+                    <span className="ml-2 px-2 py-0.5 bg-purple-900/50 text-pink-300 text-xs font-medium rounded-full border border-purple-700/50">
+                      {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`].language.toUpperCase()}
+                    </span>
+                  )}
+                  
+                  {/* Show translation status */}
+                  {audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.translationInProgress && (
+                    <span className="ml-2 px-2 py-0.5 bg-amber-900/40 text-amber-300 text-xs font-medium rounded-full flex items-center border border-amber-700/50">
+                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-amber-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Translating...
+                    </span>
+                  )}
+                </div>
+                
+                <button
+                  onClick={() => setShowTranscript(false)}
+                  className="text-gray-400 hover:text-pink-400"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
               </div>
               
-              <button
-                onClick={() => setShowTranscript(false)}
-                className="text-gray-400 hover:text-pink-400"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
+              <div className="prose prose-sm max-w-none text-gray-300 prose-headings:text-pink-300 prose-strong:text-pink-200 prose-a:text-pink-400">
+                {(() => {
+                  const poiData = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`];
+                  const content = poiData?.content;
+                  
+                  // Check if content exists
+                  if (!content) return "No transcript available.";
+                  
+                  // Try multiple possible property names for content
+                  if (currentAudioId === 'brief') {
+                    return content.core || content.brief || content.summary || "No brief transcript available.";
+                  } else if (currentAudioId === 'detailed') {
+                    return content.secondary || content.detailed || content.medium || "No detailed transcript available.";
+                  } else {
+                    return content.tertiary || content.in_depth || content.indepth || content.complete || "No in-depth transcript available.";
+                  }
+                })()}
+              </div>
             </div>
-            
-            <div className="prose prose-sm max-w-none text-gray-300 prose-headings:text-pink-300 prose-strong:text-pink-200 prose-a:text-pink-400">
-              {(() => {
-                const poiData = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`];
-                const content = poiData?.content;
-                
-                // Check if content exists
-                if (!content) return "No transcript available.";
-                
-                // Try multiple possible property names for content
-                if (currentAudioId === 'brief') {
-                  return content.core || content.brief || content.summary || "No brief transcript available.";
-                } else if (currentAudioId === 'detailed') {
-                  return content.secondary || content.detailed || content.medium || "No detailed transcript available.";
-                } else {
-                  return content.tertiary || content.in_depth || content.indepth || content.complete || "No in-depth transcript available.";
-                }
-              })()}
-            </div>
-          </div>
-        )}
-        
-        {/* Navigation Controls */}
-        <div className="flex justify-between mt-8">
-          <button
-            onClick={() => goToStop(currentStopIndex - 1)}
-            className={`flex items-center px-4 py-2 rounded-md ${
-              currentStopIndex > 0 
-                ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white hover:opacity-90 shadow-md' 
-                : 'bg-slate-800 text-gray-500 cursor-not-allowed'
-            }`}
-            disabled={currentStopIndex === 0}
-          >
-            <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Previous Stop
-          </button>
+          )}
           
-          <button
-            onClick={() => goToStop(currentStopIndex + 1)}
-            className={`flex items-center px-4 py-2 rounded-md ${
-              currentStopIndex < sortedPois.length - 1 
-                ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white hover:opacity-90 shadow-md' 
-                : 'bg-slate-800 text-gray-500 cursor-not-allowed'
-            }`}
-            disabled={currentStopIndex === sortedPois.length - 1}
-          >
-            Next Stop
-            <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+          {/* Navigation Controls */}
+          <div className="flex justify-between mt-8">
+            <button
+              onClick={() => goToStop(currentStopIndex - 1)}
+              className={`flex items-center px-4 py-2 rounded-md ${
+                currentStopIndex > 0 
+                  ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white hover:opacity-90 shadow-md' 
+                  : 'bg-slate-800 text-gray-500 cursor-not-allowed'
+              }`}
+              disabled={currentStopIndex === 0}
+            >
+              <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Previous Stop
+            </button>
+            
+            <button
+              onClick={() => goToStop(currentStopIndex + 1)}
+              className={`flex items-center px-4 py-2 rounded-md ${
+                currentStopIndex < sortedPois.length - 1 
+                  ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white hover:opacity-90 shadow-md' 
+                  : 'bg-slate-800 text-gray-500 cursor-not-allowed'
+              }`}
+              disabled={currentStopIndex === sortedPois.length - 1}
+            >
+              Next Stop
+              <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </RTVIClientProvider>
   );
 } 
