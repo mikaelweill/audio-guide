@@ -5,14 +5,34 @@ import { useJsApiLoader, Libraries } from '@react-google-maps/api';
 import TourModal from '@/components/TourModal';
 import TourList, { Tour } from '@/components/TourList';
 import { toast } from 'react-hot-toast';
+import { RTVIClientProvider, RTVIClientAudio } from '@pipecat-ai/client-react';
+import { RTVIClient } from '@pipecat-ai/client-js';
+import { DailyTransport } from '@pipecat-ai/daily-transport';
+import { useRTVIClient } from '@pipecat-ai/client-react';
 
+const client = new RTVIClient({
+  transport: new DailyTransport(),
+  params: {
+    baseUrl: 'https://server-damp-log-5089.fly.dev',
+    requestData: {
+      apiKey: process.env.VOICE_AGENT_API_KEY,
+      voice: 'cCIUSv3TlEi0E3OFQkzf',
+      messages: [
+        {
+          role: 'system',
+          content: 'Hello, how are you?'
+        }
+      ]
+    }
+  }
+})
 // Extract tour fetching logic to a separate client component
-function TourLoader({ 
-  onToursLoaded, 
-  currentPage, 
+function TourLoader({
+  onToursLoaded,
+  currentPage,
   limit,
   onLoadingChange
-}: { 
+}: {
   onToursLoaded: (tours: Tour[], pagination?: { total: number, pages: number }) => void;
   currentPage: number;
   limit: number;
@@ -24,63 +44,63 @@ function TourLoader({
   const [totalPages, setTotalPages] = useState(1);
   const [totalTours, setTotalTours] = useState(0);
   const subscriptionRef = useRef(null);
-  
+
   // Notify parent about loading state changes
   useEffect(() => {
     if (onLoadingChange) {
       onLoadingChange(isLoading);
     }
   }, [isLoading, onLoadingChange]);
-  
+
   const fetchTours = async (page = currentPage, pageLimit = limit) => {
     console.log(`🔄 TOUR LOADER: Fetching tours for page ${page} with limit ${pageLimit}`);
     setIsLoading(true);
-    
+
     // Notify parent component about loading state
     if (onLoadingChange) {
       onLoadingChange(true);
     }
-    
+
     try {
       const response = await fetch(`/api/tours?page=${page}&limit=${pageLimit}`, {
         credentials: 'include'
       });
-      
+
       if (!response.ok) {
         throw new Error(`Error ${response.status}: Failed to load tours`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data.success && Array.isArray(data.tours)) {
         console.log(`✅ TOUR LOADER: Loaded ${data.tours.length} tours (page ${page} of ${data.pagination?.pages || 1})`);
         setTours(data.tours);
         setTotalPages(data.pagination?.pages || 1);
         setTotalTours(data.pagination?.total || data.tours.length);
-        
+
         // Pass both tours and pagination data
         onToursLoaded(data.tours, data.pagination);
-        
+
         // Enable realtime subscription if not already set up
         if (!subscriptionRef.current) {
-          const { createClient } = require('@/utils/supabase/client'); 
+          const { createClient } = require('@/utils/supabase/client');
           const supabase = createClient();
-          
+
           const channel = supabase.channel('tour-changes')
             .on(
               'postgres_changes',
               {
-              event: '*',
-              schema: 'public',
+                event: '*',
+                schema: 'public',
                 table: 'Tour',
               },
               (payload: any) => {
                 console.log('🔌 REALTIME: Tour change detected', payload);
-              fetchTours();
+                fetchTours();
               }
             )
             .subscribe();
-            
+
           subscriptionRef.current = channel;
         }
       } else {
@@ -92,30 +112,30 @@ function TourLoader({
       setError(err.message || 'Failed to load tours');
     } finally {
       setIsLoading(false);
-      
+
       // Notify parent component about loading state
       if (onLoadingChange) {
         onLoadingChange(false);
       }
     }
   };
-  
+
   // Load tours whenever currentPage or limit changes (since they're now props)
   useEffect(() => {
     console.log(`🔄 TOUR LOADER: Page changed to ${currentPage}, fetching new data`);
     fetchTours(currentPage, limit);
-    
+
     // Clean up subscription on unmount
     return () => {
       if (subscriptionRef.current) {
         console.log('🔌 Cleaning up Supabase real-time subscription');
-          const { createClient } = require('@/utils/supabase/client');
-          const supabase = createClient();
-          supabase.removeChannel(subscriptionRef.current);
+        const { createClient } = require('@/utils/supabase/client');
+        const supabase = createClient();
+        supabase.removeChannel(subscriptionRef.current);
       }
     };
   }, [currentPage, limit]); // Dependencies now come from props
-  
+
   return null; // This component is just for data fetching
 }
 
@@ -248,9 +268,73 @@ const globeStyles = `
   }
 `;
 
+// VoiceAgentButton component
+function VoiceAgentButton() {
+  const [connecting, setConnecting] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const client = useRTVIClient();
+  
+  const handleConnect = async () => {
+    if (!client) {
+      console.error('RTVIClient not available');
+      return;
+    }
+    
+    try {
+      setConnecting(true);
+      await client.connect();
+      setConnected(true);
+      console.log('Connected to voice agent');
+    } catch (error) {
+      console.error('Failed to connect to voice agent:', error);
+    } finally {
+      setConnecting(false);
+    }
+  };
+  
+  return (
+    <button
+      onClick={handleConnect}
+      disabled={connecting || connected}
+      className={`px-4 py-2 rounded-full font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
+        connected 
+          ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+          : connecting
+            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+            : 'bg-purple-600/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30'
+      }`}
+    >
+      {connected ? (
+        <>
+          <span className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+          </span>
+          Connected to voice agent
+        </>
+      ) : connecting ? (
+        <>
+          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Connecting...
+        </>
+      ) : (
+        <>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+          </svg>
+          Connect to voice agent
+        </>
+      )}
+    </button>
+  );
+}
+
 export default function Home() {
   console.log('🏠 HOME: Component rendering');
-  
+
   // Tours state
   const [tours, setTours] = useState<Tour[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -258,13 +342,13 @@ export default function Home() {
   const [totalTours, setTotalTours] = useState(0);
   const [toursPerPage] = useState(6);
   const [isLoadingTours, setIsLoadingTours] = useState(false);
-  
+
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
+
   // Navigation state
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | undefined>(undefined);
-  
+
   // Google Maps API state
   const libraries = ['places'];
   const { isLoaded, loadError } = useJsApiLoader({
@@ -277,12 +361,12 @@ export default function Home() {
     console.log('🔍 HOME: Opening tour creation modal');
     setIsModalOpen(true);
   };
-  
+
   const closeModal = () => {
     console.log('🔍 HOME: Closing tour creation modal');
     setIsModalOpen(false);
   };
-  
+
   // Function to save a new tour
   const saveTour = async (tourData: any) => {
     try {
@@ -291,7 +375,7 @@ export default function Home() {
         numPOIs: tourData.route.length,
         hasWebsites: tourData.route.some((poi: any) => poi.details?.website)
       });
-      
+
       // Prepare POI data for serialization
       const serializedTourData = {
         ...tourData,
@@ -303,7 +387,7 @@ export default function Home() {
               height: photo.height,
               html_attributions: photo.html_attributions || []
             };
-            
+
             // If getUrl is available, store the actual URL
             if (typeof photo.getUrl === 'function') {
               try {
@@ -312,20 +396,20 @@ export default function Home() {
                 console.warn('Failed to get photo URL:', error);
               }
             }
-            
+
             // Always include photo_reference if available
             if (photo.photo_reference) {
               preparedPhoto.photo_reference = photo.photo_reference;
             }
-            
+
             return preparedPhoto;
           }) || [];
-          
+
           // Check location properties before serializing
           const location = poi.geometry?.location;
           const latValue = location?.lat;
           const lngValue = location?.lng;
-          
+
           // Log details about the current POI's location
           console.log(`📍 DEBUG LOCATION - Serializing POI "${poi.name}" location:`, {
             locationObj: location,
@@ -334,16 +418,16 @@ export default function Home() {
             isLatFn: typeof latValue === 'function',
             isLngFn: typeof lngValue === 'function'
           });
-          
+
           // Extract location values properly
           const extractedLat = typeof latValue === 'function' ? (latValue as Function)() : latValue;
           const extractedLng = typeof lngValue === 'function' ? (lngValue as Function)() : lngValue;
-          
+
           console.log(`   Location values for "${poi.name}":`, {
-            lat: extractedLat, 
+            lat: extractedLat,
             lng: extractedLng
           });
-          
+
           // Return a cleaned POI object
           return {
             place_id: poi.place_id,
@@ -371,7 +455,7 @@ export default function Home() {
               opening_hours: poi.details.opening_hours ? {
                 weekday_text: poi.details.opening_hours.weekday_text || [],
                 // Convert isOpen function to open_now value if possible
-                open_now: typeof poi.details.opening_hours.isOpen === 'function' 
+                open_now: typeof poi.details.opening_hours.isOpen === 'function'
                   ? poi.details.opening_hours.isOpen()
                   : poi.details.opening_hours.open_now,
                 periods: poi.details.opening_hours.periods || []
@@ -380,7 +464,7 @@ export default function Home() {
           };
         })
       };
-      
+
       // Save to database using the API with properly serialized data
       const response = await fetch('/api/tours', {
         method: 'POST',
@@ -388,12 +472,12 @@ export default function Home() {
         body: JSON.stringify(serializedTourData),
         credentials: 'include'
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Server error: ${response.status} - ${errorText}`);
       }
-      
+
       // Parse and validate response
       const responseText = await response.text();
       let data;
@@ -402,45 +486,45 @@ export default function Home() {
       } catch (parseError) {
         throw new Error(`Invalid response from server: ${response.status}`);
       }
-      
+
       if (!data.success) {
         throw new Error(data.error || 'Failed to save tour');
       }
-      
+
       console.log('✅ HOME: Tour saved successfully with ID:', data.tourId);
       toast.success('Tour saved successfully!');
-      
+
       // If we have valid tour data with POIs, process them with Edge Function
       if (tourData.route && tourData.route.length > 0) {
         processPOIsWithSupabase(tourData.route, data.tourId);
       }
-      
+
       // Force reload tours data
       setTimeout(() => {
         window.location.reload();
       }, 1000);
-      
+
     } catch (error) {
       console.error('❌ HOME: Error saving tour:', error);
       toast.error(`Failed to save tour: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
-  
+
   // Process POIs with Supabase Edge Function
   const processPOIsWithSupabase = async (pois: any[], tourId: string) => {
     try {
       console.log(`🔊 HOME: Processing ${pois.length} POIs with Supabase Edge Function...`);
-      
+
       const { createClient } = require('@/utils/supabase/client');
       const supabase = createClient();
       const { data: authData } = await supabase.auth.getSession();
       const accessToken = authData.session?.access_token;
-      
+
       if (accessToken && pois.length > 0) {
         // Process all POIs in parallel
         const poisToProcess = pois.filter(poi => !poi.types?.includes('starting_point') && !poi.types?.includes('end_point'));
         console.log(`🎯 Processing ${poisToProcess.length} POIs in parallel`);
-        
+
         // First, fetch Wikipedia & Wikivoyage content for each POI
         const poisWithExtracts = await Promise.all(
           poisToProcess.map(async (poi) => {
@@ -448,7 +532,7 @@ export default function Home() {
               // Get Wikipedia extract if available
               const wikipediaResponse = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(poi.name)}`);
               const wikipediaData = wikipediaResponse.ok ? await wikipediaResponse.json() : null;
-              
+
               return {
                 ...poi,
                 extraData: {
@@ -471,12 +555,12 @@ export default function Home() {
             }
           })
         );
-        
+
         // Create an array of promises (one for each POI)
         const processingPromises = poisWithExtracts.map(poi => {
           console.log(`Creating promise for POI: ${poi.name} (place_id: ${poi.place_id})`);
           console.log(`Wikipedia extract length: ${poi.extraData?.wikipedia?.extract?.length || 0} characters`);
-          
+
           return fetch(
             'https://uzqollduvddowyzjvmzn.supabase.co/functions/v1/process-poi',
             {
@@ -485,7 +569,7 @@ export default function Home() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${accessToken}`,
               },
-              body: JSON.stringify({ 
+              body: JSON.stringify({
                 poiData: {
                   place_id: poi.place_id,
                   tour_id: tourId,
@@ -501,32 +585,32 @@ export default function Home() {
               }),
             }
           )
-          .then(async response => {
-            console.log(`🎙️ POI ${poi.name} response status:`, response.status);
-            if (response.ok) {
-              const result = await response.json();
-              console.log(`✅ POI ${poi.name} succeeded:`, result);
-              return { poi, success: true, result };
-            } else {
-              const errorText = await response.text();
-              console.error(`❌ POI ${poi.name} failed:`, errorText);
-              return { poi, success: false, error: errorText };
-            }
-          })
-          .catch(error => {
-            console.error(`❌ Error processing POI ${poi.name}:`, error);
-            return { poi, success: false, error };
-          });
+            .then(async response => {
+              console.log(`🎙️ POI ${poi.name} response status:`, response.status);
+              if (response.ok) {
+                const result = await response.json();
+                console.log(`✅ POI ${poi.name} succeeded:`, result);
+                return { poi, success: true, result };
+              } else {
+                const errorText = await response.text();
+                console.error(`❌ POI ${poi.name} failed:`, errorText);
+                return { poi, success: false, error: errorText };
+              }
+            })
+            .catch(error => {
+              console.error(`❌ Error processing POI ${poi.name}:`, error);
+              return { poi, success: false, error };
+            });
         });
-        
+
         // Wait for all POIs to be processed in parallel
         console.log(`Waiting for all ${processingPromises.length} POIs to complete processing...`);
         const results = await Promise.all(processingPromises);
-        
+
         // Report summary
         const successCount = results.filter(r => r.success).length;
         console.log(`✅ Successfully processed ${successCount} of ${results.length} POIs`);
-        
+
         if (successCount > 0) {
           toast.success(`Generated audio for ${successCount} points of interest`);
         } else if (results.length > 0) {
@@ -540,21 +624,21 @@ export default function Home() {
       toast.error("Error processing tour content");
     }
   };
-  
+
   // Handler for pagination - now properly forces a re-fetch via props
   const handlePageChange = (newPage: number) => {
     console.log(`📄 HOME: Changing to page ${newPage}`);
     setCurrentPage(newPage);
   };
-  
+
   // Update the handleToursLoaded function with better debugging
   const handleToursLoaded = (loadedTours: Tour[], pagination?: { total: number, pages: number }) => {
     console.log(`✅ HOME: ${loadedTours.length} tours loaded for page ${currentPage}`);
     console.log('📊 Pagination data:', pagination);
-    
+
     // Update state with the loaded tours
     setTours(loadedTours);
-    
+
     // Update pagination information if provided
     if (pagination) {
       console.log(`📄 Setting totalPages=${pagination.pages}, totalTours=${pagination.total}`);
@@ -562,212 +646,216 @@ export default function Home() {
       setTotalPages(pagination.pages);
     }
   };
-  
+
   // Get user's current location when component mounts
   useEffect(() => {
     const requestUserLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          });
-        },
-        (error) => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setUserLocation({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+            });
+          },
+          (error) => {
             console.error('Geolocation error:', error);
             // User declined to share location or other error
             console.log('Could not access your location');
-        }
-      );
-    } else {
+          }
+        );
+      } else {
         // Browser doesn't support geolocation
         console.log('Geolocation is not supported by your browser');
-    }
+      }
     };
-  
+
     // Request location when component mounts
-      requestUserLocation();
+    requestUserLocation();
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950/40 to-navy-950 relative overflow-hidden">
-      {/* Globe Styles */}
-      <style dangerouslySetInnerHTML={{ __html: globeStyles }} />
-      
-      {/* Subtle stars background */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute h-1 w-1 bg-white/70 rounded-full top-[10%] left-[15%] animate-pulse" style={{ animationDuration: '3s' }}></div>
-        <div className="absolute h-1 w-1 bg-white/60 rounded-full top-[20%] left-[40%] animate-pulse" style={{ animationDuration: '4s' }}></div>
-        <div className="absolute h-1 w-1 bg-white/60 rounded-full top-[15%] left-[70%] animate-pulse" style={{ animationDuration: '5s' }}></div>
-        <div className="absolute h-1 w-1 bg-white/70 rounded-full top-[60%] left-[85%] animate-pulse" style={{ animationDuration: '4s' }}></div>
-        <div className="absolute h-1 w-1 bg-white/60 rounded-full top-[80%] left-[20%] animate-pulse" style={{ animationDuration: '3s' }}></div>
-        <div className="absolute h-[2px] w-[2px] bg-white/80 rounded-full top-[35%] left-[55%] animate-pulse" style={{ animationDuration: '2s' }}></div>
-        <div className="absolute h-[2px] w-[2px] bg-white/80 rounded-full top-[75%] left-[65%] animate-pulse" style={{ animationDuration: '6s' }}></div>
-      </div>
-      
-      <div className="absolute top-1/2 left-1/2 w-[800px] h-[800px] -translate-x-1/2 -translate-y-1/2 bg-gradient-radial from-purple-900/5 to-transparent opacity-30"></div>
-      
-      {/* Tour data loader with currentPage and limit props */}
-      <TourLoader 
-        onToursLoaded={handleToursLoaded} 
-        currentPage={currentPage} 
-        limit={toursPerPage} 
-        onLoadingChange={setIsLoadingTours}
-      />
-      
-      {/* Main container */}
-      <div className="container mx-auto px-4 py-8 md:py-12 relative z-10">
-        {/* Hero Section with Globe */}
-        <div className="relative overflow-hidden rounded-2xl bg-slate-900/80 shadow-xl mb-12 border border-purple-900/50 backdrop-blur-sm">
-          <div className="p-6 md:p-12 relative z-10">
-            <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
-              <div className="lg:w-1/2 text-center lg:text-left">
-                <h1 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">
-                  <span className="block text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-500">
-                    Audio Travel Guides
-                  </span>
-                </h1>
-                
-                <p className="text-lg max-w-xl mx-auto lg:mx-0 mb-8 text-purple-100/90">
-                  Explore the world through intelligent voice guides in your preferred language.
-                </p>
-                
-                <button 
-                  onClick={openModal}
-                  className="px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 rounded-lg 
+    <RTVIClientProvider client={client}>
+      <RTVIClientAudio />
+      <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950/40 to-navy-950 relative overflow-hidden">
+        {/* Globe Styles */}
+        <style dangerouslySetInnerHTML={{ __html: globeStyles }} />
+
+        {/* Subtle stars background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute h-1 w-1 bg-white/70 rounded-full top-[10%] left-[15%] animate-pulse" style={{ animationDuration: '3s' }}></div>
+          <div className="absolute h-1 w-1 bg-white/60 rounded-full top-[20%] left-[40%] animate-pulse" style={{ animationDuration: '4s' }}></div>
+          <div className="absolute h-1 w-1 bg-white/60 rounded-full top-[15%] left-[70%] animate-pulse" style={{ animationDuration: '5s' }}></div>
+          <div className="absolute h-1 w-1 bg-white/70 rounded-full top-[60%] left-[85%] animate-pulse" style={{ animationDuration: '4s' }}></div>
+          <div className="absolute h-1 w-1 bg-white/60 rounded-full top-[80%] left-[20%] animate-pulse" style={{ animationDuration: '3s' }}></div>
+          <div className="absolute h-[2px] w-[2px] bg-white/80 rounded-full top-[35%] left-[55%] animate-pulse" style={{ animationDuration: '2s' }}></div>
+          <div className="absolute h-[2px] w-[2px] bg-white/80 rounded-full top-[75%] left-[65%] animate-pulse" style={{ animationDuration: '6s' }}></div>
+        </div>
+
+        <div className="absolute top-1/2 left-1/2 w-[800px] h-[800px] -translate-x-1/2 -translate-y-1/2 bg-gradient-radial from-purple-900/5 to-transparent opacity-30"></div>
+
+        {/* Tour data loader with currentPage and limit props */}
+        <TourLoader
+          onToursLoaded={handleToursLoaded}
+          currentPage={currentPage}
+          limit={toursPerPage}
+          onLoadingChange={setIsLoadingTours}
+        />
+
+        {/* Main container */}
+        <div className="container mx-auto px-4 py-8 md:py-12 relative z-10">
+
+          <VoiceAgentButton />
+          {/* Hero Section with Globe */}
+          <div className="relative overflow-hidden rounded-2xl bg-slate-900/80 shadow-xl mb-12 border border-purple-900/50 backdrop-blur-sm">
+            <div className="p-6 md:p-12 relative z-10">
+              <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
+                <div className="lg:w-1/2 text-center lg:text-left">
+                  <h1 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">
+                    <span className="block text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-500">
+                      Audio Travel Guides
+                    </span>
+                  </h1>
+
+                  <p className="text-lg max-w-xl mx-auto lg:mx-0 mb-8 text-purple-100/90">
+                    Explore the world through intelligent voice guides in your preferred language.
+                  </p>
+
+                  <button
+                    onClick={openModal}
+                    className="px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 rounded-lg 
                     text-white font-medium shadow-lg shadow-orange-900/30 
                     transition-all duration-300 flex items-center mx-auto lg:mx-0"
-                >
-                  <svg className="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
-                  </svg>
-                  Generate Audio Guide
-                </button>
-              </div>
-              
-              <div className="lg:w-1/2 mt-8 lg:mt-0 perspective relative">
-                <div className="globe">
-                  <div className="meridian"></div>
-                  <div className="meridian"></div>
-                  <div className="meridian"></div>
-                  <div className="meridian"></div>
-                  <div className="meridian"></div>
-                  <div className="meridian"></div>
-                  
-                  <div className="location-ping"></div>
-                  <div className="location-ping"></div>
-                  <div className="location-ping"></div>
+                  >
+                    <svg className="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
+                    </svg>
+                    Generate Audio Guide
+                  </button>
                 </div>
-                
-                <div className="absolute bottom-0 left-0 right-0 h-12">
-                  <div className="audio-wave">
-                    <div className="wave-line"></div>
-                    <div className="wave-line"></div>
+
+                <div className="lg:w-1/2 mt-8 lg:mt-0 perspective relative">
+                  <div className="globe">
+                    <div className="meridian"></div>
+                    <div className="meridian"></div>
+                    <div className="meridian"></div>
+                    <div className="meridian"></div>
+                    <div className="meridian"></div>
+                    <div className="meridian"></div>
+
+                    <div className="location-ping"></div>
+                    <div className="location-ping"></div>
+                    <div className="location-ping"></div>
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Decorative elements */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full -translate-y-1/3 translate-x-1/3 blur-3xl"></div>
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-pink-500/10 rounded-full translate-y-1/3 -translate-x-1/3 blur-3xl"></div>
-        </div>
-        
-        {/* Tours Section */}
-        <div className="bg-slate-900/80 border border-purple-900/50 rounded-xl overflow-hidden shadow-lg shadow-purple-900/20 mb-12 relative backdrop-blur-sm">
-          <div className="h-1 bg-gradient-to-r from-orange-500 via-pink-500 to-purple-500 absolute top-0 left-0 right-0"></div>
-          <div className="absolute -right-16 -top-16 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl"></div>
-          
-          <div className="p-6 relative z-10">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-orange-50 flex items-center">
-                <span className="w-1 h-6 bg-gradient-to-b from-orange-400 to-pink-500 rounded-full mr-2 inline-block"></span>
-                {tours.length > 0 ? "Your Audio Guides" : "Start Exploring"}
-              </h2>
-            </div>
-            
-            {tours.length === 0 ? (
-              <div className="text-center py-16 px-4 bg-slate-900/50 rounded-lg border border-purple-800/50">
-                <div className="inline-block p-4 bg-orange-900/30 rounded-full mb-4">
-                  <svg className="w-10 h-10 text-orange-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-medium text-white mb-2">No Audio Guides Yet</h3>
-                <p className="text-purple-100/80 mb-6 max-w-md mx-auto">
-                  Create your first personalized audio guide by selecting a location.
-                </p>
-                <button 
-                  onClick={openModal}
-                  className="px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white font-medium rounded-lg
-                    shadow-lg shadow-orange-900/30 transition-all duration-300"
-                >
-                  Create Your First Guide
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="bg-slate-900/60 rounded-lg border border-purple-900/30 p-4 relative">
-                  {isLoadingTours && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 rounded-lg z-10">
-                      <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 border-4 border-t-orange-500 border-r-transparent border-b-pink-500 border-l-transparent rounded-full animate-spin mb-2"></div>
-                        <span className="text-orange-300 text-sm">Loading tours...</span>
-            </div>
-          </div>
-        )}
-                  <TourList tours={tours} loading={isLoadingTours} />
-                </div>
-                
-                {/* Pagination Controls - Add loading indicator when changing pages */}
-                {totalPages > 1 && (
-                  <div className="flex justify-center items-center space-x-2 mt-4">
-                    <button
-                      onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                      disabled={currentPage === 1 || isLoadingTours}
-                      className={`px-3 py-1 rounded-md flex items-center 
-                        ${(currentPage === 1 || isLoadingTours) 
-                          ? 'bg-slate-800/70 text-slate-400 cursor-not-allowed' 
-                          : 'bg-slate-800/70 hover:bg-slate-700/70 text-white'}`}
-                    >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    
-                    <div className="px-3 py-1 bg-slate-800/80 rounded-md text-white flex items-center">
-                      {isLoadingTours ? (
-                        <div className="w-4 h-4 border-2 border-t-orange-500 border-r-transparent border-b-pink-500 border-l-transparent rounded-full animate-spin mr-2"></div>
-                      ) : null}
-                      {currentPage} / {totalPages}
+
+                  <div className="absolute bottom-0 left-0 right-0 h-12">
+                    <div className="audio-wave">
+                      <div className="wave-line"></div>
+                      <div className="wave-line"></div>
                     </div>
-                    
-          <button 
-                      onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-                      disabled={currentPage === totalPages || isLoadingTours}
-                      className={`px-3 py-1 rounded-md flex items-center
-                        ${(currentPage === totalPages || isLoadingTours)
-                          ? 'bg-slate-800/70 text-slate-400 cursor-not-allowed' 
-                          : 'bg-slate-800/70 hover:bg-slate-700/70 text-white'}`}
-                    >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
                   </div>
-                )}
+                </div>
               </div>
-            )}
+            </div>
+
+            {/* Decorative elements */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full -translate-y-1/3 translate-x-1/3 blur-3xl"></div>
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-pink-500/10 rounded-full translate-y-1/3 -translate-x-1/3 blur-3xl"></div>
+          </div>
+
+          {/* Tours Section */}
+          <div className="bg-slate-900/80 border border-purple-900/50 rounded-xl overflow-hidden shadow-lg shadow-purple-900/20 mb-12 relative backdrop-blur-sm">
+            <div className="h-1 bg-gradient-to-r from-orange-500 via-pink-500 to-purple-500 absolute top-0 left-0 right-0"></div>
+            <div className="absolute -right-16 -top-16 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl"></div>
+
+            <div className="p-6 relative z-10">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-orange-50 flex items-center">
+                  <span className="w-1 h-6 bg-gradient-to-b from-orange-400 to-pink-500 rounded-full mr-2 inline-block"></span>
+                  {tours.length > 0 ? "Your Audio Guides" : "Start Exploring"}
+                </h2>
+              </div>
+
+              {tours.length === 0 ? (
+                <div className="text-center py-16 px-4 bg-slate-900/50 rounded-lg border border-purple-800/50">
+                  <div className="inline-block p-4 bg-orange-900/30 rounded-full mb-4">
+                    <svg className="w-10 h-10 text-orange-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-medium text-white mb-2">No Audio Guides Yet</h3>
+                  <p className="text-purple-100/80 mb-6 max-w-md mx-auto">
+                    Create your first personalized audio guide by selecting a location.
+                  </p>
+                  <button
+                    onClick={openModal}
+                    className="px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white font-medium rounded-lg
+                    shadow-lg shadow-orange-900/30 transition-all duration-300"
+                  >
+                    Create Your First Guide
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-slate-900/60 rounded-lg border border-purple-900/30 p-4 relative">
+                    {isLoadingTours && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 rounded-lg z-10">
+                        <div className="flex flex-col items-center">
+                          <div className="w-12 h-12 border-4 border-t-orange-500 border-r-transparent border-b-pink-500 border-l-transparent rounded-full animate-spin mb-2"></div>
+                          <span className="text-orange-300 text-sm">Loading tours...</span>
+                        </div>
+                      </div>
+                    )}
+                    <TourList tours={tours} loading={isLoadingTours} />
+                  </div>
+
+                  {/* Pagination Controls - Add loading indicator when changing pages */}
+                  {totalPages > 1 && (
+                    <div className="flex justify-center items-center space-x-2 mt-4">
+                      <button
+                        onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1 || isLoadingTours}
+                        className={`px-3 py-1 rounded-md flex items-center 
+                        ${(currentPage === 1 || isLoadingTours)
+                            ? 'bg-slate-800/70 text-slate-400 cursor-not-allowed'
+                            : 'bg-slate-800/70 hover:bg-slate-700/70 text-white'}`}
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+
+                      <div className="px-3 py-1 bg-slate-800/80 rounded-md text-white flex items-center">
+                        {isLoadingTours ? (
+                          <div className="w-4 h-4 border-2 border-t-orange-500 border-r-transparent border-b-pink-500 border-l-transparent rounded-full animate-spin mr-2"></div>
+                        ) : null}
+                        {currentPage} / {totalPages}
+                      </div>
+
+                      <button
+                        onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages || isLoadingTours}
+                        className={`px-3 py-1 rounded-md flex items-center
+                        ${(currentPage === totalPages || isLoadingTours)
+                            ? 'bg-slate-800/70 text-slate-400 cursor-not-allowed'
+                            : 'bg-slate-800/70 hover:bg-slate-700/70 text-white'}`}
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        </div>
-        
-      {/* Tour modal */}
-        <TourModal 
-          isOpen={isModalOpen} 
-          onClose={closeModal} 
+
+        {/* Tour modal */}
+        <TourModal
+          isOpen={isModalOpen}
+          onClose={closeModal}
           onSave={(tourData) => {
             // First close the modal immediately
             closeModal();
@@ -777,6 +865,7 @@ export default function Home() {
           userLocation={userLocation || undefined}
           mapsApiLoaded={isLoaded}
         />
-    </div>
+      </div>
+    </RTVIClientProvider>
   );
 } 
