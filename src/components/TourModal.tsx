@@ -36,7 +36,7 @@ interface TourPreferences {
 
 // Available options
 const INTERESTS_OPTIONS = [
-  'History', 'Architecture', 'Art', 'Nature', 'Food'
+  'History', 'Architecture', 'Art', 'Nature'
 ];
 
 const DURATION_OPTIONS = [30, 60, 90, 120]; // in minutes

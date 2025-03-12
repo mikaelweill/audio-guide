@@ -79,8 +79,7 @@ function mapInterestToGoogleType(interest: string): string[] {
     'History': ['museum', 'historic', 'landmark'],
     'Architecture': ['landmark', 'church', 'place_of_worship'],
     'Art': ['art_gallery', 'museum'],
-    'Nature': ['park', 'natural_feature'],
-    'Food': ['restaurant', 'cafe', 'bakery']
+    'Nature': ['park', 'natural_feature']
   };
   
   return mapping[interest] || [];
