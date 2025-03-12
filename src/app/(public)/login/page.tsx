@@ -126,18 +126,18 @@ export default function Login() {
   
   if (isLoading || (redirecting && !showManualLink)) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
-        <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-md">
-          <h1 className="text-2xl font-bold mb-6 text-center">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 p-4">
+        <div className="w-full max-w-md p-6 bg-slate-900 rounded-lg shadow-md border border-purple-900/30">
+          <h1 className="text-2xl font-bold mb-6 text-center text-white">
             {redirecting ? 'Redirecting...' : 'Checking authentication...'}
           </h1>
           
           <div className="flex justify-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-900"></div>
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-pink-500"></div>
           </div>
           
           {redirecting && (
-            <p className="mt-4 text-center text-gray-600">
+            <p className="mt-4 text-center text-gray-400">
               Redirecting to home page...
             </p>
           )}
@@ -148,19 +148,19 @@ export default function Login() {
   
   if (showManualLink) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
-        <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-md">
-          <h1 className="text-2xl font-bold mb-6 text-center">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 p-4">
+        <div className="w-full max-w-md p-6 bg-slate-900 rounded-lg shadow-md border border-purple-900/30">
+          <h1 className="text-2xl font-bold mb-6 text-center text-white">
             Having trouble redirecting
           </h1>
           
-          <p className="mb-6 text-center">
+          <p className="mb-6 text-center text-gray-300">
             You are signed in as {user?.email} but we're having trouble redirecting you.
           </p>
           <div className="flex justify-center">
             <Link
               href="/"
-              className="inline-block px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="inline-block px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-600 text-white rounded-md hover:opacity-90 transition duration-200"
             >
               Click here to go to home page
             </Link>
@@ -171,21 +171,21 @@ export default function Login() {
   }
   
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
-      <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-lg">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 p-4">
+      <div className="w-full max-w-md p-8 bg-slate-900 rounded-lg shadow-lg border border-purple-900/30">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-white">
             {otpSent ? 'Enter Verification Code' : 'Welcome to Audio Guide'}
           </h1>
           {otpSent && (
-            <p className="mt-2 text-gray-600">
+            <p className="mt-2 text-gray-300">
               We've sent a code to {email}
             </p>
           )}
         </div>
         
         {(error || localError) && (
-          <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-md">
+          <div className="mb-6 p-4 bg-red-900/30 text-red-300 rounded-md border border-red-800">
             {error || localError}
           </div>
         )}
@@ -193,7 +193,7 @@ export default function Login() {
         {otpSent ? (
           <form onSubmit={handleVerifyOtp} className="space-y-6">
             <div>
-              <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="otp" className="block text-sm font-medium text-gray-300 mb-1">
                 Verification Code
               </label>
               <div className="my-4">
@@ -213,13 +213,13 @@ export default function Login() {
                 />
               </div>
               <div className="flex justify-between items-center">
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-gray-400">
                   Enter the 6-digit code sent to your email
                 </div>
                 <button 
                   type="button" 
                   onClick={() => setOtp('')}
-                  className="text-sm text-blue-600 hover:text-blue-800"
+                  className="text-sm text-pink-400 hover:text-pink-300"
                 >
                   Clear
                 </button>
@@ -227,7 +227,7 @@ export default function Login() {
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 font-medium"
+              className="w-full bg-gradient-to-r from-orange-500 to-pink-600 text-white py-3 px-4 rounded-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 font-medium transition duration-200"
               disabled={isLoading && redirecting}
             >
               {isLoading && redirecting ? 'Verifying...' : 'Verify & Continue'}
@@ -236,7 +236,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={handleSendOtp}
-                className="w-full text-blue-600 py-2 px-4 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-sm"
+                className="w-full text-pink-400 py-2 px-4 rounded-md hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 text-sm transition duration-200"
               >
                 Resend code
               </button>
@@ -247,16 +247,16 @@ export default function Login() {
                   setOtp('');
                   setLocalError(null);
                 }}
-                className="w-full text-gray-600 py-2 px-4 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-sm"
+                className="w-full text-gray-400 py-2 px-4 rounded-md hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 text-sm transition duration-200"
               >
-                Back to Email
+                Change email
               </button>
             </div>
           </form>
         ) : (
           <form onSubmit={handleSendOtp} className="space-y-6">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1">
                 Email Address
               </label>
               <input
@@ -264,32 +264,27 @@ export default function Login() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 bg-slate-800 text-white border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent placeholder-gray-500"
                 placeholder="you@example.com"
                 required
-                autoFocus
               />
-              <p className="mt-2 text-sm text-gray-500">
-                We'll send you a verification code to sign in or create an account
+              <p className="mt-2 text-sm text-gray-400">
+                We'll send you a verification code to sign in or create an account.
               </p>
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 font-medium"
+              className="w-full bg-gradient-to-r from-orange-500 to-pink-600 text-white py-3 px-4 rounded-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 font-medium transition duration-200"
             >
               Send OTP
             </button>
           </form>
         )}
         
-        {/* Add a manual link back to home if already logged in */}
-        {user && (
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <p className="text-center text-sm text-gray-600">
-              Already signed in as {user.email}.{' '}
-              <Link href="/" className="text-blue-600 hover:underline">
-                Return to Home
-              </Link>
+        {!otpSent && (
+          <div className="mt-8 border-t border-slate-800 pt-6">
+            <p className="text-sm text-gray-400 text-center mb-4">
+              By continuing, you agree to our Terms of Service and Privacy Policy
             </p>
           </div>
         )}

@@ -156,8 +156,9 @@ const OTPInput: React.FC<OTPInputProps> = ({
         onFocus={() => handleFocus(i)}
         onClick={() => handleClick(i)}
         className={`w-12 h-14 text-center text-xl font-bold border-2 rounded-md mx-1 
-                    focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none
-                    ${activeInput === i ? 'border-blue-500' : 'border-gray-300'}`}
+                    bg-slate-800 text-white
+                    focus:border-pink-500 focus:ring-2 focus:ring-pink-200/20 focus:outline-none
+                    ${activeInput === i ? 'border-pink-500' : 'border-slate-700'}`}
         aria-label={`digit ${i + 1}`}
       />
     );
