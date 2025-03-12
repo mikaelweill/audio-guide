@@ -675,7 +675,7 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
         
           {/* Interests Section */}
           <div className="mb-6">
-            <label className="block text-gray-700 font-medium mb-2">What are you interested in?</label>
+            <label className="block text-white font-medium mb-2">What are you interested in?</label>
             <div className="flex flex-wrap gap-2">
               {INTERESTS_OPTIONS.map(interest => (
                 <button
@@ -684,8 +684,8 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
                   onClick={() => toggleInterest(interest)}
                   className={`px-3 py-2 rounded-full text-sm transition duration-200 cursor-pointer ${
                     preferences.interests.includes(interest)
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white shadow-md'
+                      : 'bg-slate-800 text-gray-300 hover:bg-slate-700 border border-purple-900/20'
                   }`}
                 >
                   {interest}
@@ -693,13 +693,13 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
               ))}
             </div>
             {preferences.interests.length === 0 && (
-              <p className="text-red-500 text-xs mt-1">Please select at least one interest</p>
+              <p className="text-pink-400 text-xs mt-1">Please select at least one interest</p>
             )}
           </div>
 
           {/* Start Location */}
           <div className="mb-6">
-            <label className="block text-gray-700 font-medium mb-2">Starting Location</label>
+            <label className="block text-white font-medium mb-2">Starting Location</label>
             <div className="relative">
               {mapsApiLoaded ? (
                 <Autocomplete
@@ -709,7 +709,7 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
                   <input
                     type="text"
                     placeholder="Enter starting location"
-                    className="w-full p-2 border border-gray-300 rounded-md text-gray-700"
+                    className="w-full p-2 border border-slate-700 bg-slate-800 rounded-md text-white placeholder-gray-400"
                     value={startAddress}
                     onChange={handleStartLocationChange}
                   />
@@ -718,7 +718,7 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
                 <input
                   type="text"
                   placeholder="Loading autocomplete..."
-                  className="w-full p-2 border border-gray-300 rounded-md text-gray-700"
+                  className="w-full p-2 border border-slate-700 bg-slate-800 rounded-md text-white placeholder-gray-400"
                   disabled
                 />
               )}
@@ -727,8 +727,8 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
                 onClick={useCurrentLocationForStart}
                 className={`mt-2 text-sm ${
                   preferences.startLocation.useCurrentLocation
-                    ? 'text-blue-600 font-medium'
-                    : 'text-blue-500 hover:text-blue-700'
+                    ? 'text-pink-400 font-medium'
+                    : 'text-pink-400 hover:text-pink-300'
                 } cursor-pointer`}
               >
                 {preferences.startLocation.useCurrentLocation ? '✓ Using current location' : 'Use my current location'}
@@ -738,16 +738,16 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
 
           {/* End Location Options */}
           <div className="mb-6">
-            <label className="block text-gray-700 font-medium mb-2">End Location</label>
+            <label className="block text-white font-medium mb-2">End Location</label>
             <div className="mb-3">
               <label className="flex items-center">
                 <input
                   type="checkbox"
                   checked={preferences.returnToStart}
                   onChange={toggleReturnToStart}
-                  className="h-4 w-4 text-blue-600 border-gray-300 rounded cursor-pointer"
+                  className="h-4 w-4 text-pink-500 border-slate-700 bg-slate-800 rounded cursor-pointer focus:ring-pink-500 focus:ring-opacity-50"
                 />
-                <span className="ml-2 text-gray-700">Return to starting point</span>
+                <span className="ml-2 text-white">Return to starting point</span>
               </label>
             </div>
 
@@ -761,7 +761,7 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
                     <input
                       type="text"
                       placeholder="Enter end location"
-                      className="w-full p-2 border border-gray-300 rounded-md text-gray-700"
+                      className="w-full p-2 border border-slate-700 bg-slate-800 rounded-md text-white placeholder-gray-400"
                       value={endAddress}
                       onChange={handleEndLocationChange}
                     />
@@ -770,7 +770,7 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
                   <input
                     type="text"
                     placeholder="Loading autocomplete..."
-                    className="w-full p-2 border border-gray-300 rounded-md text-gray-700"
+                    className="w-full p-2 border border-slate-700 bg-slate-800 rounded-md text-white placeholder-gray-400"
                     disabled
                   />
                 )}
@@ -779,20 +779,20 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
                   onClick={useCurrentLocationForEnd}
                   className={`mt-2 text-sm ${
                     preferences.endLocation.useCurrentLocation
-                      ? 'text-blue-600 font-medium'
-                      : 'text-blue-500 hover:text-blue-700'
+                      ? 'text-pink-400 font-medium'
+                      : 'text-pink-400 hover:text-pink-300'
                   } cursor-pointer`}
                 >
                   {preferences.endLocation.useCurrentLocation ? '✓ Using current location' : 'Use my current location'}
                 </button>
               </div>
             )}
-            <p className="text-gray-500 text-xs mt-2 italic">Leave blank for a one-way, free-form exploration</p>
+            <p className="text-gray-400 text-xs mt-2 italic">Leave blank for a one-way, free-form exploration</p>
           </div>
 
           {/* Duration Section */}
           <div className="mb-6">
-            <label className="block text-gray-700 font-medium mb-2">Tour Duration (minutes)</label>
+            <label className="block text-white font-medium mb-2">Tour Duration (minutes)</label>
             <div className="flex gap-2">
               {DURATION_OPTIONS.map(option => (
                 <button
@@ -801,8 +801,8 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
                   onClick={() => updateDuration(option)}
                   className={`flex-1 px-3 py-2 rounded-md text-sm transition duration-200 cursor-pointer ${
                     preferences.duration === option
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white shadow-md'
+                      : 'bg-slate-800 text-gray-300 hover:bg-slate-700 border border-purple-900/20'
                   }`}
                 >
                   {option}
@@ -813,7 +813,7 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
 
           {/* Distance Section */}
           <div className="mb-6">
-            <label className="block text-gray-700 font-medium mb-2">Distance (km)</label>
+            <label className="block text-white font-medium mb-2">Distance (km)</label>
             <div className="flex gap-2">
               {DISTANCE_OPTIONS.map(option => (
                 <button
@@ -822,8 +822,8 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
                   onClick={() => updateDistance(option)}
                   className={`flex-1 px-3 py-2 rounded-md text-sm transition duration-200 cursor-pointer ${
                     preferences.distance === option
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white shadow-md'
+                      : 'bg-slate-800 text-gray-300 hover:bg-slate-700 border border-purple-900/20'
                   }`}
                 >
                   {option}
@@ -834,7 +834,7 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
           
           {/* Transportation Mode */}
           <div className="mb-8">
-            <label className="block text-gray-700 font-medium mb-2">Transportation Mode</label>
+            <label className="block text-white font-medium mb-2">Transportation Mode</label>
             <div className="flex gap-2">
               {TRANSPORTATION_MODES.map(mode => (
                 <button
@@ -843,8 +843,8 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
                   onClick={() => updateTransportationMode(mode.id as 'walking' | 'transit')}
                   className={`flex-1 px-3 py-2 rounded-md text-sm transition duration-200 cursor-pointer ${
                     preferences.transportationMode === mode.id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white shadow-md'
+                      : 'bg-slate-800 text-gray-300 hover:bg-slate-700 border border-purple-900/20'
                   }`}
                 >
                   {mode.label}
@@ -859,8 +859,8 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
             disabled={preferences.interests.length === 0 || isDiscovering}
             className={`w-full py-3 rounded-md text-white font-medium transition duration-200 cursor-pointer ${
               preferences.interests.length === 0 || isDiscovering
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700'
+                ? 'bg-gray-500 cursor-not-allowed'
+                : 'bg-gradient-to-r from-orange-500 via-pink-600 to-purple-600 hover:opacity-90 shadow-md'
             }`}
           >
             {isDiscovering ? 'Finding Points of Interest...' : 'Find Points of Interest'}
@@ -928,16 +928,16 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
 
   return (
     <div className="fixed z-50 inset-0 flex items-center justify-center pointer-events-none">
-      <div className="bg-white rounded-lg shadow-2xl border border-gray-200 pointer-events-auto overflow-hidden max-h-[90vh] w-full max-w-5xl">
-        <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-2xl font-bold text-gray-800">
+      <div className="bg-slate-900 rounded-lg shadow-2xl border border-purple-900/30 pointer-events-auto overflow-hidden max-h-[90vh] w-full max-w-5xl">
+        <div className="flex justify-between items-center p-6 border-b border-purple-900/30 bg-gradient-to-r from-purple-900/50 via-slate-900 to-slate-900">
+          <h2 className="text-2xl font-bold text-white">
             {currentPhase === 'preferences' && 'Create Your Tour'}
             {currentPhase === 'poi-selection' && 'Select Points of Interest'}
             {currentPhase === 'results' && 'Your Personalized Tour'}
           </h2>
           <button 
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-300 hover:text-pink-400"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -945,7 +945,7 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
           </button>
         </div>
         
-        <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 76px)' }}>
+        <div className="p-6 overflow-y-auto bg-gradient-to-b from-slate-900 to-slate-950" style={{ maxHeight: 'calc(90vh - 76px)' }}>
           {renderModalContent()}
         </div>
       </div>

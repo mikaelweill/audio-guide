@@ -178,11 +178,11 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
   };
   
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 mx-auto max-w-6xl">
+    <div className="bg-slate-900 rounded-lg shadow-md p-6 mx-auto max-w-6xl border border-purple-900/30">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold text-gray-900">Select Points of Interest</h2>
-        <div className="text-sm text-gray-600">
-          Selected: <span className="font-medium">{selectedPOIs.length}</span>
+        <h2 className="text-2xl font-bold text-white">Select Points of Interest</h2>
+        <div className="text-sm text-gray-300">
+          Selected: <span className="font-medium text-purple-200">{selectedPOIs.length}</span>
           {recommendedCount > 0 && (
             <span> (Recommended: {recommendedCount})</span>
           )}
@@ -190,13 +190,13 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
       </div>
       
       {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
+        <div className="mb-4 p-3 bg-red-900/30 text-red-300 rounded-md border border-red-800/50">
           {error}
         </div>
       )}
       
       {pois.length === 0 ? (
-        <div className="text-gray-600 text-center py-8">
+        <div className="text-gray-300 text-center py-8">
           No points of interest found for your preferences. Try adjusting your search parameters.
         </div>
       ) : (
@@ -206,12 +206,12 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
               key={poi.place_id}
               className={`border rounded-lg overflow-hidden cursor-pointer transition-all duration-200 ${
                 selectedPOIs.some(p => p.place_id === poi.place_id)
-                  ? 'border-blue-500 ring-2 ring-blue-200' 
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
+                  ? 'border-pink-600 ring-2 ring-pink-600/20' 
+                  : 'border-purple-900/30 hover:border-purple-700'
+              } bg-slate-800`}
               onClick={() => togglePOISelection(poi)}
             >
-              <div className="h-32 relative overflow-hidden rounded-t-md bg-gray-200">
+              <div className="h-32 relative overflow-hidden rounded-t-md bg-slate-700">
                 {poi.photos && poi.photos[0] ? (
                   <Image 
                     src={getPoiImage(poi)}
@@ -220,8 +220,8 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
                     style={{ objectFit: 'cover' }}
                   />
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center bg-gray-200">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="h-full w-full flex items-center justify-center bg-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
@@ -230,7 +230,7 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
                 
                 {/* Selection indicator */}
                 {selectedPOIs.some(p => p.place_id === poi.place_id) && (
-                  <div className="absolute top-2 right-2 bg-blue-500 rounded-full w-8 h-8 flex items-center justify-center">
+                  <div className="absolute top-2 right-2 bg-gradient-to-r from-orange-500 to-pink-600 rounded-full w-8 h-8 flex items-center justify-center shadow-lg">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
@@ -238,19 +238,19 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
                 )}
               </div>
               <div className="p-4">
-                <h3 className="font-bold text-gray-900 mb-1">{poi.name}</h3>
-                <p className="text-gray-600 text-sm mb-2">{poi.vicinity}</p>
+                <h3 className="font-bold text-white mb-1">{poi.name}</h3>
+                <p className="text-gray-300 text-sm mb-2">{poi.vicinity}</p>
                 <div className="flex items-center">
                   <div className="flex items-center mr-3">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-yellow-500 mr-1" viewBox="0 0 20 20" fill="currentColor">
                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                     </svg>
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-medium text-gray-200">
                       {poi.rating ? poi.rating.toFixed(1) : 'N/A'}
                     </span>
                   </div>
                   {poi.user_ratings_total && (
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-gray-400">
                       ({poi.user_ratings_total} reviews)
                     </div>
                   )}
@@ -263,7 +263,7 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
                       href={poi.details.website}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm"
+                      className="inline-flex items-center text-pink-400 hover:text-pink-300 text-sm"
                     >
                       <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -282,7 +282,7 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
         <button
           type="button"
           onClick={onBack}
-          className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          className="px-4 py-2 border border-purple-900/30 rounded-md text-gray-300 hover:bg-slate-800 focus:outline-none"
         >
           Back
         </button>
@@ -290,10 +290,10 @@ export default function POISelection({ pois, tourPreferences, onGenerateTour, on
           type="button"
           onClick={handleGenerateTour}
           disabled={selectedPOIs.length === 0 || isGenerating}
-          className={`px-4 py-2 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+          className={`px-4 py-2 rounded-md text-white focus:outline-none ${
             selectedPOIs.length === 0 || isGenerating
-              ? 'bg-blue-300 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700'
+              ? 'bg-gray-500 cursor-not-allowed'
+              : 'bg-gradient-to-r from-orange-500 via-pink-600 to-purple-600 hover:opacity-90 shadow-md'
           }`}
         >
           {isGenerating ? 'Generating...' : 'Generate Tour'}

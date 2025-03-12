@@ -59,10 +59,10 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
       console.error('No POIs found in tour data');
       return;
     }
-    
+
     setIsGenerating(true);
     setProgress(0);
-    
+
     try {
       // Calculate progress increment per POI
       const progressIncrement = 100 / tour.poiIds.length;
@@ -112,7 +112,7 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
     } finally {
       // Reset generating state after a delay
       setTimeout(() => {
-        setIsGenerating(false);
+      setIsGenerating(false);
       }, 1500);
     }
   };
@@ -280,30 +280,30 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
       {/* Generate audio button - only shown if audio is missing */}
       {tour.poiIds.some((poiId: string) => !audioData[poiId]?.audioUrl) && (
         <div className="fixed bottom-24 left-0 right-0 z-50 flex justify-center">
-          <button
-            onClick={handleGenerateAudioGuides}
-            disabled={isGenerating}
+        <button 
+          onClick={handleGenerateAudioGuides}
+          disabled={isGenerating}
             className={`px-4 py-2 rounded-lg flex items-center justify-center 
               ${isGenerating ? 'bg-gray-700 text-gray-400' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}
               shadow-lg transition-colors duration-300`}
-          >
-            {isGenerating ? (
-              <>
+        >
+          {isGenerating ? (
+            <>
                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
                 {currentStep} ({Math.round(progress)}%)
-              </>
-            ) : (
-              <>
+            </>
+          ) : (
+            <>
                 <svg className="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
+              </svg>
                 Generate Audio Guides
-              </>
-            )}
-          </button>
+            </>
+          )}
+        </button>
         </div>
       )}
       
@@ -313,9 +313,9 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
           {/* POI selector */}
           <div className="flex mb-4 overflow-x-auto scrollbar-hide gap-2 pb-2">
             {poiAudios.map((poiAudio, index) => (
-              <button
+                    <button 
                 key={poiAudio.id}
-                onClick={() => {
+                      onClick={() => {
                   setSelectedPoiId(poiAudio.id);
                   setCurrentPoiIndex(index);
                 }}
@@ -329,7 +329,7 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
                 {poiAudio.translationInProgress && (
                   <span className="ml-1 inline-block w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
                 )}
-              </button>
+                    </button>
             ))}
           </div>
           
@@ -355,20 +355,20 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
                       Translating...
                     </span>
                   )}
-                </div>
-                
+          </div>
+          
                 {poiAudios[currentPoiIndex]?.transcript && (
-                  <button
+          <button 
                     onClick={() => handleViewTranscript(poiAudios[currentPoiIndex].id)}
                     className="text-indigo-400 hover:text-indigo-300 text-sm flex items-center"
-                  >
+          >
                     View Transcript
                     <svg className="ml-1 w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
+            </svg>
+          </button>
                 )}
-              </div>
+        </div>
               
               {/* Audio progress bar */}
               <div 
@@ -378,16 +378,16 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
                 <div 
                   className="h-full bg-gradient-to-r from-indigo-500 to-blue-500"
                   style={{ width: `${(currentTime / duration) * 100}%` }}
-                ></div>
-              </div>
+            ></div>
+          </div>
               
               <div className="flex justify-between text-xs text-gray-400 mt-1 px-1">
                 <span>{formatDuration(currentTime)}</span>
                 <span>{formatDuration(duration)}</span>
               </div>
-            </div>
-          )}
-          
+        </div>
+      )}
+
           {/* Playback controls */}
           <div className="flex items-center justify-between">
             {/* Left controls - Previous button */}
@@ -403,7 +403,7 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
             </button>
             
             {/* Center - Play button */}
-            <button
+              <button 
               onClick={togglePlay}
               disabled={!poiAudios[currentPoiIndex]?.audioUrl}
               className={`p-4 rounded-full focus:outline-none
@@ -421,7 +421,7 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               )}
-            </button>
+              </button>
             
             {/* Right controls - Next button */}
             <button
@@ -438,7 +438,7 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
             </button>
           </div>
         </div>
-      </div>
+    </div>
     </>
   );
 } 
