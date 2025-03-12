@@ -200,6 +200,12 @@ export default function TourPage() {
   // Add this state variable to track the visible transcript
   const [showTranscript, setShowTranscript] = useState(false);
   
+  // Add state for transcript highlighting
+  const [highlightPosition, setHighlightPosition] = useState(0);
+  const [sentences, setSentences] = useState<{text: string, endIndex: number}[]>([]);
+  const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  
   // Add a ref to track current time without causing re-renders
   const currentTimeRef = useRef(0);
   const lastTimeUpdateRef = useRef(0);
@@ -776,6 +782,88 @@ export default function TourPage() {
       console.log(`Playback speed changed to ${speed}x`);
     }
   }, [audioElement]);
+
+  // Add useEffect for transcript highlighting with sentence-level precision
+  useEffect(() => {
+    if (isPlaying && duration > 0 && currentTime > 0 && transcriptRef.current) {
+      // Calculate how far through the audio we are as a percentage
+      const percentComplete = currentTime / duration;
+      
+      // Get the total length of the transcript text
+      const transcriptElement = transcriptRef.current;
+      const textContent = transcriptElement.textContent || '';
+      const textLength = textContent.length;
+      
+      // Calculate how many characters should be highlighted based on percentage
+      const charsToHighlight = Math.floor(percentComplete * textLength);
+      
+      // Find which sentence we're currently in
+      let sentenceIndex = 0;
+      for (let i = 0; i < sentences.length; i++) {
+        if (charsToHighlight <= sentences[i].endIndex) {
+          sentenceIndex = i;
+          break;
+        }
+        sentenceIndex = i;
+      }
+      
+      // If we're in a new sentence, update the highlight position to end of this sentence
+      if (sentenceIndex !== currentSentenceIndex) {
+        setCurrentSentenceIndex(sentenceIndex);
+      }
+      
+      // Set highlight position to the end of the current sentence
+      const sentenceEndPosition = sentences[sentenceIndex]?.endIndex || charsToHighlight;
+      setHighlightPosition(sentenceEndPosition);
+    }
+  }, [currentTime, duration, isPlaying, sentences, currentSentenceIndex]);
+
+  // Add useEffect to parse sentences when transcript content changes
+  useEffect(() => {
+    if (currentStop && audioData && currentAudioId) {
+      const poiId = currentStop?.poi?.id || `poi-${currentStopIndex}`;
+      const content = audioData[poiId]?.content;
+      
+      if (!content) return;
+      
+      // Get the appropriate content based on current audio type
+      let transcriptText = "";
+      if (currentAudioId === 'brief') {
+        transcriptText = content.core || content.brief || content.summary || "";
+      } else if (currentAudioId === 'detailed') {
+        transcriptText = content.secondary || content.detailed || content.medium || "";
+      } else {
+        transcriptText = content.tertiary || content.in_depth || content.indepth || content.complete || "";
+      }
+      
+      // Split text into sentences and track their end positions
+      const sentenceRegex = /[^.!?]+[.!?]+/g;
+      const matches = transcriptText.match(sentenceRegex) || [];
+      
+      let parsedSentences: {text: string, endIndex: number}[] = [];
+      let currentIndex = 0;
+      
+      matches.forEach(sentence => {
+        currentIndex += sentence.length;
+        parsedSentences.push({
+          text: sentence,
+          endIndex: currentIndex
+        });
+      });
+      
+      // Handle any remaining text that doesn't end with a sentence terminator
+      if (currentIndex < transcriptText.length) {
+        parsedSentences.push({
+          text: transcriptText.slice(currentIndex),
+          endIndex: transcriptText.length
+        });
+      }
+      
+      setSentences(parsedSentences);
+      setCurrentSentenceIndex(0);
+      setHighlightPosition(0);
+    }
+  }, [currentStop, audioData, currentAudioId, currentStopIndex]);
   
   if (loading) {
     return (
@@ -999,7 +1087,7 @@ export default function TourPage() {
                               ) : (
                                 <>
                                   <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"></path>
                                   </svg>
                                   Brief Overview (30-60s)
                                 </>
@@ -1261,7 +1349,10 @@ export default function TourPage() {
                 </button>
               </div>
               
-              <div className="prose prose-sm max-w-none text-gray-300 prose-headings:text-pink-300 prose-strong:text-pink-200 prose-a:text-pink-400">
+              <div 
+                ref={transcriptRef}
+                className="prose prose-sm max-w-none text-gray-300 prose-headings:text-pink-300 prose-strong:text-pink-200 prose-a:text-pink-400 relative"
+              >
                 {(() => {
                   const poiData = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`];
                   const content = poiData?.content;
@@ -1270,13 +1361,29 @@ export default function TourPage() {
                   if (!content) return "No transcript available.";
                   
                   // Try multiple possible property names for content
+                  let transcriptText = "";
                   if (currentAudioId === 'brief') {
-                    return content.core || content.brief || content.summary || "No brief transcript available.";
+                    transcriptText = content.core || content.brief || content.summary || "No brief transcript available.";
                   } else if (currentAudioId === 'detailed') {
-                    return content.secondary || content.detailed || content.medium || "No detailed transcript available.";
+                    transcriptText = content.secondary || content.detailed || content.medium || "No detailed transcript available.";
                   } else {
-                    return content.tertiary || content.in_depth || content.indepth || content.complete || "No in-depth transcript available.";
+                    transcriptText = content.tertiary || content.in_depth || content.indepth || content.complete || "No in-depth transcript available.";
                   }
+                  
+                  // Return the highlighted transcript
+                  if (typeof transcriptText === 'string') {
+                    const highlighted = transcriptText.substring(0, highlightPosition);
+                    const remaining = transcriptText.substring(highlightPosition);
+                    
+                    return (
+                      <>
+                        <span className="text-pink-300">{highlighted}</span>
+                        <span>{remaining}</span>
+                      </>
+                    );
+                  }
+                  
+                  return transcriptText;
                 })()}
               </div>
             </div>
