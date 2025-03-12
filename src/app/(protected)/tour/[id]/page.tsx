@@ -832,30 +832,7 @@ export default function TourPage() {
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Audio Guide Generation Button - Parent level control */}
-          {!isGeneratingAudio && Object.keys(audioData).length === 0 && (
-            <div className="bg-slate-900/80 p-4 rounded-lg shadow-lg border border-purple-900/30 mb-8">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center">
-                  <svg className="w-5 h-5 text-pink-500 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M18 3a1 1 0 00-1.447-.894L8.763 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-4.382l6.553 3.276A1 1 0 0018 15V3z"></path>
-                  </svg>
-                  <h3 className="font-semibold text-lg text-white">Audio Tour Guides</h3>
-                </div>
-                <button 
-                  onClick={handleGenerateAudioGuides}
-                  className="bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90 text-white py-2 px-4 rounded-md font-medium text-sm flex items-center shadow-md"
-                >
-                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                  </svg>
-                  Generate Audio For All Stops
-                </button>
-              </div>
-              <p className="text-sm text-gray-400">
-                Generate audio guides for all stops on this tour. This will create audio content you can listen to at each location.
-              </p>
-            </div>
-          )}
+          {/* This section is removed as requested */}
           
           {/* Generation Progress Indicator */}
           {isGeneratingAudio && (
