@@ -24,3 +24,41 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Google Places Autocomplete Styling - Dark Theme */
+.pac-container {
+  background-color: #1e293b; /* slate-800 */
+  border-radius: 0.5rem;
+  border: 1px solid #4b5563; /* gray-600 */
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+  margin-top: 2px;
+  font-family: inherit;
+  z-index: 9999;
+}
+
+.pac-item {
+  padding: 8px 10px;
+  color: #f3f4f6; /* gray-100 */
+  font-size: 0.875rem;
+  cursor: pointer;
+  border-top: 1px solid #374151; /* gray-700 */
+}
+
+.pac-item:hover,
+.pac-item-selected {
+  background-color: #374151; /* gray-700 */
+}
+
+.pac-item-query {
+  color: #f9fafb; /* gray-50 */
+  font-size: 0.875rem;
+}
+
+.pac-matched {
+  color: #f97316; /* orange-500 */
+  font-weight: bold;
+}
+
+.pac-icon {
+  filter: invert(0.8); /* Invert icon colors to work with dark theme */
+}
