@@ -120,7 +120,7 @@ async function processPOI(poiData: any) {
     // This is critical because we need the UUID (id) for saving translations
     const { data: existingPoi, error: lookupError } = await supabaseClient
       .from('Poi')
-      .select('id, place_id')
+      .select('id, place_id, audio_generated_at')
       .eq('place_id', placeId)
       .maybeSingle();
     
@@ -130,6 +130,7 @@ async function processPOI(poiData: any) {
     }
     
     let poiUuid;
+    let audioExists = false;
     
     // If POI doesn't exist, create a minimal record first
     if (!existingPoi) {
@@ -165,41 +166,179 @@ async function processPOI(poiData: any) {
     } else {
       console.log(`Found existing POI record with UUID: ${existingPoi.id}`);
       poiUuid = existingPoi.id;
+      audioExists = existingPoi.audio_generated_at !== null;
+      
+      if (audioExists) {
+        console.log(`Audio was previously generated at ${existingPoi.audio_generated_at}`);
+      }
+    }
+    
+    // Check if specific items need to be generated
+    const generateOptions = poiData.generateOptions || {};
+    const forceRegenerate = generateOptions.force === true;
+    
+    console.log(`Generation options:`, generateOptions);
+    console.log(`Force regenerate: ${forceRegenerate}`);
+    
+    // Default: generate everything if not specified
+    const shouldGenerateAudio = generateOptions.audio !== false;
+    const shouldGenerateKnowledge = generateOptions.knowledge !== false;
+    
+    console.log(`Will generate audio: ${shouldGenerateAudio}`);
+    console.log(`Will generate knowledge: ${shouldGenerateKnowledge}`);
+    
+    // Check for existing transcripts and audio files
+    let existingTranscripts = {};
+    let existingAudioPaths = {};
+    
+    if (audioExists && shouldGenerateAudio && !forceRegenerate) {
+      console.log('Checking for existing transcripts and audio files...');
+      
+      // Check for existing translations
+      const { data: translations, error: translationsError } = await supabaseClient
+        .from('Translation')
+        .select('content_type, language_code, translated_text, audio_path')
+        .eq('poi_id', poiUuid)
+        .eq('language_code', 'en');
+      
+      if (translationsError) {
+        console.error(`Error fetching translations: ${translationsError.message}`);
+      } else if (translations && translations.length > 0) {
+        console.log(`Found ${translations.length} existing translations`);
+        
+        const transcripts = {};
+        const audioPaths = {};
+        
+        translations.forEach(translation => {
+          if (translation.content_type) {
+            if (translation.translated_text) {
+              transcripts[`${translation.content_type}_transcript`] = translation.translated_text;
+            }
+            if (translation.audio_path) {
+              audioPaths[`${translation.content_type}_audio_path`] = translation.audio_path;
+            }
+          }
+        });
+        
+        existingTranscripts = transcripts;
+        existingAudioPaths = audioPaths;
+        
+        console.log('Existing transcripts:', Object.keys(existingTranscripts));
+        console.log('Existing audio paths:', Object.keys(existingAudioPaths));
+      } else {
+        console.log('No existing translations found despite audio_generated_at being set');
+      }
+    }
+    
+    // Check for existing knowledge
+    let knowledgeExists = false;
+    let existingKnowledge = null;
+    
+    if (shouldGenerateKnowledge && !forceRegenerate) {
+      const { data: poiKnowledge, error: knowledgeError } = await supabaseClient
+        .from('poi_knowledge')
+        .select('*')
+        .eq('poi_id', poiUuid)
+        .maybeSingle();
+      
+      if (knowledgeError) {
+        console.error(`Error checking for existing knowledge: ${knowledgeError.message}`);
+      } else if (poiKnowledge) {
+        knowledgeExists = true;
+        existingKnowledge = poiKnowledge;
+        console.log(`Knowledge exists, last updated: ${poiKnowledge.last_updated}`);
+      } else {
+        console.log('No existing knowledge found');
+      }
     }
     
     // Now generate content with the UUID instead of place_id
     console.log(`Using UUID ${poiUuid} for all database operations`);
     
-    // Generate all content using proper prompting and OpenAI
-    const coreContent = await generateCoreContent(openai, poiData);
-    const secondaryContent = await generateSecondaryContent(openai, poiData, coreContent);
-    const tertiaryContent = await generateTertiaryContent(openai, poiData, coreContent);
+    // Determine what needs to be generated
+    const needsToGenerateAudio = shouldGenerateAudio && (forceRegenerate || !audioExists || 
+      !existingTranscripts.brief_transcript || 
+      !existingTranscripts.detailed_transcript || 
+      !existingTranscripts.complete_transcript);
     
-    // Add credits to the most complete transcript
-    const credits = generateCredits(poiData);
-    const tertiaryWithCredits = credits ? `${tertiaryContent}\n\n${credits}` : tertiaryContent;
+    const needsToGenerateKnowledge = shouldGenerateKnowledge && (forceRegenerate || !knowledgeExists);
     
-    // Create content mappings for parallel processing
-    const contentMappings = [
-      { contentType: 'brief', text: coreContent },
-      { contentType: 'detailed', text: secondaryContent },
-      { contentType: 'complete', text: tertiaryWithCredits }
-    ];
+    console.log(`Needs to generate audio: ${needsToGenerateAudio}`);
+    console.log(`Needs to generate knowledge: ${needsToGenerateKnowledge}`);
     
-    // Process all content types in parallel with the UUID
-    const audioResults = await processAllContentTypes(contentMappings, poiUuid, placeId, 'nova', supabaseClient, openai);
+    // Initialize result containers
+    let audioResults = {
+      brief_transcript: existingTranscripts.brief_transcript || null,
+      detailed_transcript: existingTranscripts.detailed_transcript || null,
+      complete_transcript: existingTranscripts.complete_transcript || null,
+      brief_audio_path: existingAudioPaths.brief_audio_path || null,
+      detailed_audio_path: existingAudioPaths.detailed_audio_path || null,
+      complete_audio_path: existingAudioPaths.complete_audio_path || null
+    };
     
-    // Mark the Poi record as having generated audio
-    const { error: updateError } = await supabaseClient
-      .from('Poi')
-      .update({
-        audio_generated_at: new Date().toISOString()
-      })
-      .eq('id', poiUuid);
+    let knowledgeResult = existingKnowledge ? { 
+      success: true, 
+      poi_id: poiUuid,
+      data: existingKnowledge 
+    } : null;
     
-    if (updateError) {
-      console.error(`Error updating POI audio generation status: ${updateError.message}`);
-      console.warn(`Continuing despite Poi table update error - translations were saved successfully`);
+    // Generate content only if needed
+    const tasks = [];
+    
+    if (needsToGenerateAudio) {
+      tasks.push((async () => {
+        console.log('Generating audio content...');
+        // Generate all content using proper prompting and OpenAI
+        const coreContent = await generateCoreContent(openai, poiData);
+        const secondaryContent = await generateSecondaryContent(openai, poiData, coreContent);
+        const tertiaryContent = await generateTertiaryContent(openai, poiData, coreContent);
+        
+        // Add credits to the most complete transcript
+        const credits = generateCredits(poiData);
+        const tertiaryWithCredits = credits ? `${tertiaryContent}\n\n${credits}` : tertiaryContent;
+        
+        // Create content mappings for parallel processing
+        const contentMappings = [
+          { contentType: 'brief', text: coreContent },
+          { contentType: 'detailed', text: secondaryContent },
+          { contentType: 'complete', text: tertiaryWithCredits }
+        ];
+        
+        // Process all content types in parallel with the UUID
+        audioResults = await processAllContentTypes(contentMappings, poiUuid, placeId, 'nova', supabaseClient, openai);
+        
+        // Mark the Poi record as having generated audio
+        const { error: updateError } = await supabaseClient
+          .from('Poi')
+          .update({
+            audio_generated_at: new Date().toISOString()
+          })
+          .eq('id', poiUuid);
+        
+        if (updateError) {
+          console.error(`Error updating POI audio generation status: ${updateError.message}`);
+          console.warn(`Continuing despite Poi table update error - translations were saved successfully`);
+        }
+      })());
+    } else {
+      console.log('Skipping audio generation, using existing content');
+    }
+    
+    if (needsToGenerateKnowledge) {
+      tasks.push((async () => {
+        console.log('Generating knowledge content...');
+        knowledgeResult = await generateStructuredKnowledge(openai, poiData, poiUuid, supabaseClient);
+      })());
+    } else {
+      console.log('Skipping knowledge generation, using existing content');
+    }
+    
+    // Wait for all tasks to complete
+    if (tasks.length > 0) {
+      console.log(`Waiting for ${tasks.length} generation tasks to complete...`);
+      await Promise.all(tasks);
+    } else {
+      console.log('No generation tasks needed, using all existing content');
     }
     
     return {
@@ -207,6 +346,8 @@ async function processPOI(poiData: any) {
       message: `Successfully processed POI: ${poiData.basic?.name || placeId}`,
       poiId: poiUuid,
       placeId: placeId,
+      audioGenerated: needsToGenerateAudio,
+      knowledgeGenerated: needsToGenerateKnowledge,
       transcripts: {
         brief: audioResults.brief_transcript,
         detailed: audioResults.detailed_transcript,
@@ -216,7 +357,8 @@ async function processPOI(poiData: any) {
         brief: audioResults.brief_audio_path,
         detailed: audioResults.detailed_audio_path,
         complete: audioResults.complete_audio_path
-      }
+      },
+      knowledge: knowledgeResult
     };
     
   } catch (error: any) {
@@ -640,5 +782,392 @@ async function storeAudioFile(
   } catch (error) {
     console.error(`Failed to store file ${fileName}:`, error);
     throw error;
+  }
+}
+
+// NEW: Function to generate and store structured knowledge for the poi_knowledge table
+async function generateStructuredKnowledge(openai, poiData, poiUuid, supabaseClient) {
+  try {
+    console.log(`Generating structured knowledge for POI with UUID: ${poiUuid}`);
+    
+    // Prepare source information
+    const wikipediaSource = poiData.wikipedia?.url || null;
+    const wikivoyageSource = poiData.wikivoyage?.url || null;
+    
+    // Generate overview - comprehensive but concise summary (250-350 words)
+    const overviewPrompt = `
+      Create a comprehensive yet concise overview (250-350 words) of "${poiData.basic.name}" 
+      that captures its essence, significance, and key attributes.
+      
+      Use this information:
+      ${poiData.wikipedia?.extract ? `Wikipedia: ${poiData.wikipedia.extract}` : ''}
+      ${poiData.wikivoyage?.extract ? `About the area: ${poiData.wikivoyage.extract.substring(0, 500)}...` : ''}
+      
+      The overview should be thorough but efficient, covering what makes this place important,
+      its main features, and why visitors should care about it. Write in a clear, informative style.
+    `;
+    
+    // Generate historical context (200-300 words)
+    const historicalPrompt = `
+      Create a historical context section (200-300 words) for "${poiData.basic.name}" 
+      that explains its origin, development over time, and historical significance.
+      
+      Use this information:
+      ${poiData.wikipedia?.extract ? `Wikipedia: ${poiData.wikipedia.extract}` : ''}
+      
+      Focus on key events, changes in purpose or design over time, historical figures connected to this place,
+      and how its role or perception has evolved. Write in a clear, chronological style when possible.
+    `;
+    
+    // Generate architectural details if relevant
+    const architecturalPrompt = `
+      Create an architectural details section (150-250 words) for "${poiData.basic.name}" 
+      that describes its physical characteristics, design style, materials, and notable features.
+      
+      Use this information:
+      ${poiData.wikipedia?.extract ? `Wikipedia: ${poiData.wikipedia.extract}` : ''}
+      ${poiData.wikivoyage?.seeSection ? `Travel guide: ${poiData.wikivoyage.seeSection}` : ''}
+      
+      If this is not primarily an architectural site, focus instead on its physical description,
+      layout, or natural features. Skip this entirely if there are no meaningful physical characteristics to describe.
+    `;
+    
+    // Generate cultural significance
+    const culturalPrompt = `
+      Create a cultural significance section (150-250 words) for "${poiData.basic.name}" 
+      that explains its impact on culture, society, arts, or regional identity.
+      
+      Use this information:
+      ${poiData.wikipedia?.extract ? `Wikipedia: ${poiData.wikipedia.extract}` : ''}
+      
+      Explain how this place has influenced literature, art, film, or local traditions.
+      Mention any cultural events hosted here, symbolic meaning, or representation in popular culture.
+      Skip this entirely if there is no meaningful cultural significance.
+    `;
+    
+    // Generate practical information
+    const practicalPrompt = `
+      Create a practical information section (100-200 words) for "${poiData.basic.name}" 
+      with essential visitor information like hours, prices, accessibility, and tips.
+      
+      Use this information:
+      ${poiData.wikivoyage?.seeSection ? `Travel guide (See): ${poiData.wikivoyage.seeSection}` : ''}
+      ${poiData.wikivoyage?.doSection ? `Travel guide (Do): ${poiData.wikivoyage.doSection}` : ''}
+      
+      Include opening times, entry fees, best times to visit, accessibility features,
+      photography policies, guided tour options, and insider tips. Be specific when possible
+      but note if information might change seasonally.
+    `;
+    
+    // Generate structured key facts as JSON
+    const keyFactsPrompt = `
+      Create a comprehensive JSON structure of key facts about "${poiData.basic.name}".
+      
+      Use this information:
+      ${poiData.wikipedia?.extract ? `Wikipedia: ${poiData.wikipedia.extract.substring(0, 2000)}...` : ''}
+      ${poiData.wikivoyage?.seeSection ? `Travel guide: ${poiData.wikivoyage.seeSection.substring(0, 1000)}...` : ''}
+      
+      The JSON should follow this structure (adapt fields as needed for this specific place):
+      
+      {
+        "basic": {
+          "name": "Full official name",
+          "local_name": "Name in local language if applicable",
+          "year_built": "Construction year or period",
+          "designers": ["Names of architects/designers"],
+          "location": "Precise address or location",
+          "coordinates": {"latitude": 00.0000, "longitude": 00.0000},
+          "type": "Type of place (museum, landmark, etc.)",
+          "architectural_style": "If applicable"
+        },
+        "physical": {
+          "dimensions": {"height": {"meters": 00, "feet": 00}, "area": {"sq_meters": 00}},
+          "materials": ["Main construction materials"],
+          "distinctive_features": ["List of notable physical features"]
+        },
+        "historical": {
+          "original_purpose": "What it was built for",
+          "construction_time": "How long it took to build",
+          "notable_events": [
+            {"year": 0000, "event": "Description of significant event"},
+            {"year": 0000, "event": "Another significant event"}
+          ],
+          "renovations": [{"year": 0000, "description": "Details of major changes"}]
+        },
+        "visitor_info": {
+          "annual_visitors": "Approximate number if known",
+          "opening_hours": "General hours",
+          "ticket_prices": {"adults": "00", "children": "00"},
+          "best_time_to_visit": "Seasonal or time recommendations"
+        }
+      }
+      
+      Only include sections and fields that have factual information available.
+      Ensure all data is accurate. Use null for unknown values, don't guess.
+      Make sure the JSON is valid with proper quotes and commas.
+    `;
+    
+    // Generate interesting trivia
+    const triviaPrompt = `
+      Create an array of 8-12 interesting and surprising facts or trivia points about "${poiData.basic.name}".
+      
+      Use this information:
+      ${poiData.wikipedia?.extract ? `Wikipedia: ${poiData.wikipedia.extract}` : ''}
+      ${poiData.wikivoyage?.extract ? `Travel guide: ${poiData.wikivoyage.extract}` : ''}
+      
+      Each trivia item should be:
+      - Fascinating and not obvious
+      - Accurate and fact-based
+      - 1-2 sentences in length
+      - Diverse (cover different aspects)
+      
+      Format your response as a JSON array of strings only (without a wrapper object).
+      Example format: ["Fact 1 about the place.", "Fact 2 about the place.", "Fact 3 about the place."]
+    `;
+    
+    // Generate visitor experience
+    const visitorPrompt = `
+      Create a visitor experience section (150-250 words) for "${poiData.basic.name}" 
+      that describes what visitors should expect, highlights to look for, and sensory experiences.
+      
+      Use this information:
+      ${poiData.wikivoyage?.seeSection ? `Travel guide (See): ${poiData.wikivoyage.seeSection}` : ''}
+      ${poiData.wikivoyage?.doSection ? `Travel guide (Do): ${poiData.wikivoyage.doSection}` : ''}
+      
+      Describe the typical visitor journey, what they'll see and experience, recommended routes or viewpoints,
+      hidden gems to look for, and how much time to allocate. Make it vivid and experiential.
+    `;
+    
+    // Process all prompts in parallel
+    const [
+      overviewResponse,
+      historicalResponse,
+      architecturalResponse,
+      culturalResponse,
+      practicalResponse,
+      keyFactsResponse,
+      triviaResponse,
+      visitorResponse
+    ] = await Promise.all([
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are an expert curator of travel and historical knowledge." },
+          { role: "user", content: overviewPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 600,
+      }),
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are an expert curator of travel and historical knowledge." },
+          { role: "user", content: historicalPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 600,
+      }),
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are an expert curator of travel and historical knowledge." },
+          { role: "user", content: architecturalPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 600,
+      }),
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are an expert curator of travel and historical knowledge." },
+          { role: "user", content: culturalPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 600,
+      }),
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are an expert curator of travel and historical knowledge." },
+          { role: "user", content: practicalPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 400,
+      }),
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are an expert curator of travel and historical knowledge. Always return valid JSON." },
+          { role: "user", content: keyFactsPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+        response_format: { type: "json_object" }
+      }),
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are an expert curator of travel and historical knowledge. Always return valid JSON." },
+          { role: "user", content: triviaPrompt }
+        ],
+        temperature: 0.8,
+        max_tokens: 800,
+        response_format: { type: "json_object" }
+      }),
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are an expert curator of travel and historical knowledge." },
+          { role: "user", content: visitorPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 600,
+      })
+    ]);
+    
+    // Extract content from responses
+    const overview = overviewResponse.choices[0].message.content || '';
+    const historical_context = historicalResponse.choices[0].message.content || '';
+    const architectural_details = architecturalResponse.choices[0].message.content || '';
+    const cultural_significance = culturalResponse.choices[0].message.content || '';
+    const practical_info = practicalResponse.choices[0].message.content || '';
+    
+    // For JSON responses, parse and ensure they're valid
+    let key_facts;
+    try {
+      // The response is already in JSON format due to response_format parameter
+      const keyFactsContent = keyFactsResponse.choices[0].message.content;
+      // Ensure it's properly formatted as a JSON string
+      key_facts = keyFactsContent;
+    } catch (error) {
+      console.warn('Failed to parse key_facts JSON:', error);
+      key_facts = '{}';
+    }
+    
+    let interesting_trivia;
+    try {
+      const triviaContent = triviaResponse.choices[0].message.content;
+      console.log('Raw trivia content:', triviaContent.substring(0, 150));
+      
+      // Parse the JSON to validate it's a proper array
+      let triviaArray = [];
+      try {
+        // Parse the JSON response
+        const parsedContent = JSON.parse(triviaContent);
+        
+        // Handle case where API returns an object with a "trivia" key instead of a direct array
+        if (Array.isArray(parsedContent)) {
+          console.log('Trivia is already in array format');
+          triviaArray = parsedContent;
+        } else if (parsedContent.trivia && Array.isArray(parsedContent.trivia)) {
+          console.log('Trivia returned as an object with trivia key, extracting array');
+          triviaArray = parsedContent.trivia;
+        } else {
+          console.warn('Trivia not in expected format:', typeof parsedContent);
+          // Extract all string values from the JSON to try to salvage trivia items
+          const allValues = [];
+          const extractValues = (obj) => {
+            if (!obj) return;
+            if (typeof obj === 'string') allValues.push(obj);
+            else if (Array.isArray(obj)) {
+              for (const item of obj) extractValues(item);
+            } else if (typeof obj === 'object') {
+              for (const key in obj) extractValues(obj[key]);
+            }
+          };
+          extractValues(parsedContent);
+          
+          if (allValues.length > 0) {
+            console.log(`Extracted ${allValues.length} potential trivia items`);
+            triviaArray = allValues;
+          }
+        }
+      } catch (parseError) {
+        console.warn('Failed to parse trivia JSON:', parseError);
+        
+        // Fallback: Try to extract array using regex if JSON parsing fails
+        // Using a simplified regex that works in older JS versions
+        const arrayMatch = triviaContent.match(/\[[\s\S]*\]/);
+        if (arrayMatch) {
+          try {
+            const potentialArray = JSON.parse(arrayMatch[0]);
+            if (Array.isArray(potentialArray)) {
+              triviaArray = potentialArray;
+              console.log(`Extracted ${triviaArray.length} trivia items via regex`);
+            }
+          } catch (e) {
+            console.warn('Could not parse extracted array:', e);
+          }
+        }
+      }
+      
+      // Convert JavaScript array to PostgreSQL text[] format
+      if (triviaArray.length > 0) {
+        console.log(`Converting ${triviaArray.length} trivia items to PostgreSQL array format`);
+        // Format as PostgreSQL array literal: each element is quoted and escaped
+        const pgArray = triviaArray.map(item => {
+          if (typeof item !== 'string') {
+            return String(item);
+          }
+          // Escape single quotes and backslashes for PostgreSQL
+          return item.replace(/\\/g, '\\\\').replace(/'/g, "''");
+        });
+        
+        // Final PostgreSQL array format is {item1,item2,item3}
+        interesting_trivia = `{${pgArray.map(item => `"${item}"`).join(',')}}`;
+        console.log(`Formatted as PostgreSQL array: ${interesting_trivia.substring(0, 50)}...`);
+      } else {
+        console.warn('No valid trivia items found, using empty array');
+        interesting_trivia = '{}'; // Empty PostgreSQL array
+      }
+    } catch (error) {
+      console.warn('Failed to process interesting_trivia:', error);
+      interesting_trivia = '{}'; // Empty PostgreSQL array
+    }
+    
+    const visitor_experience = visitorResponse.choices[0].message.content || '';
+    
+    // Log parsed values for debugging
+    console.log(`Saving key_facts (truncated): ${key_facts.substring(0, 100)}...`);
+    console.log(`Saving interesting_trivia (truncated): ${interesting_trivia.substring(0, 100)}...`);
+    
+    // Save to poi_knowledge table
+    const { data: savedKnowledge, error: knowledgeError } = await supabaseClient
+      .from('poi_knowledge')
+      .upsert({
+        poi_id: poiUuid,
+        overview,
+        historical_context,
+        architectural_details,
+        cultural_significance,
+        practical_info,
+        key_facts,
+        interesting_trivia,
+        visitor_experience,
+        source_wikipedia: wikipediaSource,
+        source_wikivoyage: wikivoyageSource,
+        last_updated: new Date().toISOString()
+      }, {
+        onConflict: 'poi_id'
+      })
+      .select();
+    
+    if (knowledgeError) {
+      console.error('Error saving structured knowledge:', knowledgeError);
+      throw knowledgeError;
+    }
+    
+    console.log(`Successfully saved structured knowledge for POI with UUID: ${poiUuid}`);
+    return {
+      success: true,
+      poi_id: poiUuid
+    };
+    
+  } catch (error) {
+    console.error('Error generating structured knowledge:', error);
+    return {
+      success: false,
+      error: error.message || String(error)
+    };
   }
 } 
