@@ -88,16 +88,64 @@ serve(async (req: Request) => {
       apiKey: Deno.env.get('OPENAI_API_KEY'),
     });
 
-    // 1. First, fetch source language content (English)
+    // Define the required content types
+    const requiredContentTypes = ['brief', 'detailed', 'complete'];
+    
+    // Check if any translations already exist in the target language
+    const { data: existingTranslations, error: existingError } = await supabaseClient
+      .from('Translation')
+      .select('content_type, audio_path')
+      .eq('poi_id', poiId)
+      .eq('language_code', targetLanguage);
+    
+    if (existingError) {
+      console.error('Error checking existing translations:', existingError);
+    }
+    
+    // Determine which content types are missing or incomplete
+    const completedTypes = new Set();
+    
+    if (existingTranslations && existingTranslations.length > 0) {
+      console.log(`Found ${existingTranslations.length} existing translations in ${targetLanguage}`);
+      
+      // Add content types that have both text and audio to the completed set
+      existingTranslations.forEach(item => {
+        if (item.content_type && item.audio_path) {
+          completedTypes.add(item.content_type);
+          console.log(`Content type ${item.content_type} already has complete translation with audio`);
+        }
+      });
+    }
+    
+    // Determine which content types need to be translated
+    const contentTypesToTranslate = requiredContentTypes.filter(type => !completedTypes.has(type));
+    
+    if (contentTypesToTranslate.length === 0) {
+      console.log(`All required content types already have translations in ${targetLanguage}`);
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: `All content types already exist in ${targetLanguage}`,
+          skipped: true,
+          completedTypes: Array.from(completedTypes)
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    console.log(`Need to translate the following content types: ${contentTypesToTranslate.join(', ')}`);
+
+    // 1. Fetch source language content (English) for the needed content types
     const { data: sourceContent, error: sourceError } = await supabaseClient
       .from('Translation')
       .select('content_type, translated_text')
       .eq('poi_id', poiId)
-      .eq('language_code', sourceLanguageCode);
+      .eq('language_code', sourceLanguageCode)
+      .in('content_type', contentTypesToTranslate);
     
     if (sourceError || !sourceContent || sourceContent.length === 0) {
       return new Response(
-        JSON.stringify({ error: `No ${sourceLanguageCode} content found to translate from`, details: sourceError }),
+        JSON.stringify({ error: `No ${sourceLanguageCode} content found to translate from for the missing types`, details: sourceError }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
       );
     }
@@ -120,8 +168,10 @@ serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Successfully translated content to ${targetLanguage}`,
-        results 
+        message: `Successfully translated missing content to ${targetLanguage}`,
+        results,
+        translated: contentTypesToTranslate,
+        alreadyCompleted: Array.from(completedTypes)
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -231,7 +281,7 @@ async function translateText(text: string, targetLanguage: string, openai: any):
     console.log(`Starting translation to ${languageName}`);
     
     const response = await openai.chat.completions.create({
-      model: 'gpt-4-turbo',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',

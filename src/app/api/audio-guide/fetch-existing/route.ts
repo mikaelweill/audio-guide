@@ -92,11 +92,23 @@ export async function POST(request: NextRequest) {
         continue;
       }
       
-      // If no translations found in preferred language, fall back to English
-      let finalTranslations = translations;
+      // Define the required content types that should exist
+      const requiredContentTypes = ['brief', 'detailed', 'complete'];
       
-      if (!translations || translations.length === 0) {
-        console.log(`API: No translations found in ${preferredLanguage}, falling back to English`);
+      // Check if ALL required content types exist in the preferred language
+      const hasAllContentTypes = translations && 
+        requiredContentTypes.every(type => 
+          translations.some(t => t.content_type === type && t.audio_path)
+        );
+      
+      // If any required content type is missing, fall back to English and trigger translation
+      let finalTranslations = translations;
+      let translationNeeded = false;
+      
+      if (!hasAllContentTypes) {
+        console.log(`API: Incomplete translations found in ${preferredLanguage}, some content types are missing`);
+        console.log(`API: Available content types: ${translations?.map(t => t.content_type).join(', ') || 'none'}`);
+        console.log(`API: Falling back to English and checking for translation needs`);
         
         const { data: englishTranslations, error: engError } = await supabase
           .from('Translation')
@@ -116,8 +128,15 @@ export async function POST(request: NextRequest) {
         
         finalTranslations = englishTranslations;
         
-        // If English content exists and we need a different language, trigger translation
-        if (englishTranslations && englishTranslations.length > 0 && preferredLanguage !== 'en') {
+        // Check if English content has all required types
+        const hasAllEnglishContentTypes = englishTranslations && 
+          requiredContentTypes.every(type => 
+            englishTranslations.some(t => t.content_type === type && t.audio_path)
+          );
+        
+        // If English content exists (with all required types) and we need a different language, trigger translation
+        if (hasAllEnglishContentTypes && preferredLanguage !== 'en') {
+          translationNeeded = true;
           console.log(`API: Triggering async translation from English to ${preferredLanguage}`);
           
           try {
@@ -146,6 +165,8 @@ export async function POST(request: NextRequest) {
             console.error('Error initiating translation:', err);
           }
         }
+      } else {
+        console.log(`API: Complete translations found in ${preferredLanguage}, using them`);
       }
       
       // If we still don't have translations, check if there are legacy transcripts in the POI table
