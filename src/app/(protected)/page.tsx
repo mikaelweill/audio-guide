@@ -15,12 +15,37 @@ const client = new RTVIClient({
   params: {
     baseUrl: 'https://server-damp-log-5089.fly.dev',
     requestData: {
-      apiKey: process.env.VOICE_AGENT_API_KEY,
+      services: {
+        stt: "deepgram",
+        tts: "cartesia",
+        llm: "gemini",
+      },
+      api_keys: {
+        gemini: process.env.GEMINI_API_KEY
+      },
       voice: 'cCIUSv3TlEi0E3OFQkzf',
-      messages: [
+      config: [
         {
-          role: 'system',
-          content: 'Hello, how are you?'
+          service: "llm",
+          options: [
+            {
+              name: "model",
+              value: "gemini-2.0-flash-exp"
+            },
+            {
+              name: "temperature",
+              value: 0.7
+            },
+            {
+              name: "initial_messages",
+              value: [
+                {
+                  role: "user",
+                  content: "I want you to act as a tour guide. You are enthusiastic, knowledgeable, and helpful. Keep your responses brief and conversational. Your responses will be spoken out loud, so speak naturally."
+                }
+              ]
+            }
+          ]
         }
       ]
     }

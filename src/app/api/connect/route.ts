@@ -1,6 +1,6 @@
 // [POST] /api/connect
 export async function POST(request: Request) {
-  const { services, config } = await request.json();
+  const { services, config, api_keys } = await request.json();
 
   if (!services || !config || !process.env.DAILY_API_KEY) {
     return Response.json("Services or config not found on request body", {
@@ -8,13 +8,21 @@ export async function POST(request: Request) {
     });
   }
 
+  // Extract and process API keys
+  const apiKeysToSend = {
+    ...(api_keys || {}),
+  };
+
+  // Add Gemini API key if Gemini LLM is being used
+  if (services.llm === 'gemini' && process.env.GEMINI_API_KEY) {
+    apiKeysToSend.gemini = process.env.GEMINI_API_KEY;
+  }
+
   const payload = {
     bot_profile: "voice_2024_10",
     max_duration: 600,
     services,
-    api_keys: {
-      // Optional API keys here (e.g. OpenAI GPT-4 etc)
-    },
+    api_keys: apiKeysToSend,
     config,
   };
 

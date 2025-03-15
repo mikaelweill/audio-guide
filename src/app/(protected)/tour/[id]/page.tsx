@@ -1125,7 +1125,10 @@ export default function TourPage() {
           services: {
             stt: "deepgram",
             tts: "cartesia",
-            llm: "anthropic",
+            llm: "gemini",
+          },
+          api_keys: {
+            gemini: process.env.GEMINI_API_KEY
           },
         },
         endpoints: {
@@ -1173,21 +1176,25 @@ export default function TourPage() {
             options: [
               {
                 name: "model",
-                value: "claude-3-7-sonnet-20250219"
+                value: "gemini-1.5-pro"
               },
               {
                 name: "initial_messages",
                 value: [
                 {
-                  role: "system",
+                  role: "user",
                   content: [
                     {
                       type: "text",
-                      text: initialPrompt
+                      text: `I want you to act as a tour guide. Here's your instructions: ${initialPrompt}`
                     }
                   ]
                 }
                 ]
+              },
+              {
+                name: "temperature",
+                value: 0.7
               }
             ]
           }
@@ -1219,6 +1226,17 @@ export default function TourPage() {
       // Create a new client with the current POI information
       clientRef.current = createClient();
       console.log('New voice agent client created');
+      
+      // Add event listeners for client errors
+      if (clientRef.current) {
+        clientRef.current.on('error', (error) => {
+          console.error('RTVIClient error:', error);
+        });
+        
+        clientRef.current.on('transportStateChanged', (state) => {
+          console.log('Transport state changed:', state);
+        });
+      }
     });
     
     // Clean up on unmount or before recreation
