@@ -10,6 +10,7 @@ import POIImage from '@/components/POIImage';
 import { useRTVIClient, RTVIClientProvider, RTVIClientAudio } from '@pipecat-ai/client-react';
 import { RTVIClient } from '@pipecat-ai/client-js';
 import { DailyTransport } from '@pipecat-ai/daily-transport';
+import { useAgent } from '@/context/AgentContext';
 
 // Debug logging
 const PAGE_DEBUG = true;
@@ -20,22 +21,99 @@ const logPage = (...args: any[]) => {
 };
 
 // Initialize client
+const getAgentPrompt = (poi: any) => {
+  if (!poi) return "You are an AI tour guide assistant. You are enthusiastic, knowledgeable, and helpful. Keep your responses brief and conversational, as they will be spoken out loud. Your responses will be converted to audio, so speak naturally.";
+  
+  return `You are an AI tour guide assistant for ${poi.name}. 
+  
+Here's information about this location:
+- Name: ${poi.name}
+- Address: ${poi.formatted_address || 'Not available'}
+- Rating: ${poi.rating ? `${poi.rating}/5` : 'Not available'}
+${poi.description ? `- Description: ${poi.description}` : ''}
+
+You are enthusiastic, knowledgeable, and helpful. Keep your responses brief and conversational, as they will be spoken out loud. Your responses will be converted to audio, so speak naturally.
+
+If users ask about this location, share interesting facts and information based on what you know. If asked about something you don't know, you can say you don't have that specific information.`;
+};
+
 const client = new RTVIClient({
   transport: new DailyTransport(),
   params: {
-    baseUrl: 'https://server-damp-log-5089.fly.dev',
+    baseUrl: `/api`,
     requestData: {
-      apiKey: process.env.VOICE_AGENT_API_KEY,
-      voice: 'cCIUSv3TlEi0E3OFQkzf',
-      messages: [
-        {
-          role: 'system',
-          content: 'Hello, how are you?'
-        }
-      ]
-    }
+      services: {
+        stt: "deepgram",
+        tts: "cartesia",
+        llm: "anthropic",
+      },
+    },
+    endpoints: {
+      connect: "/connect",
+      action: "/actions",
+    },
+    config: [
+      {
+        service: "vad",
+        options: [
+          {
+            name: "params",
+            value: {
+              stop_secs: 0.3
+            }
+          }
+        ]
+      },
+      {
+        service: "tts",
+        options: [
+          {
+            name: "voice",
+            value: "79a125e8-cd45-4c13-8a67-188112f4dd22"
+          },
+          {
+            name: "language",
+            value: "en"
+          },
+          {
+            name: "text_filter",
+            value: {
+              filter_code: false,
+              filter_tables: false
+            }
+          },
+          {
+            name: "model",
+            value: "sonic-english"
+          }
+        ]
+      },
+      {
+        service: "llm",
+        options: [
+          {
+            name: "model",
+            value: "claude-3-7-sonnet-20250219"
+          },
+          {
+            name: "initial_messages",
+            value: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "You are an AI tour guide assistant. You are enthusiastic, knowledgeable, and helpful. Keep your responses brief and conversational, as they will be spoken out loud. Your responses will be converted to audio, so speak naturally."
+                }
+              ]
+            }
+            ]
+          }
+        ]
+      }
+    ],
   }
-})
+});
 
 // VoiceAgentButton component
 function VoiceAgentButton() {
