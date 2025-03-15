@@ -35,7 +35,9 @@ model Poi {
   detailed_transcript String?
   tourPois            TourPoi[]
   translations        Translation[]
-  poiKnowledge        PoiKnowledge?
+  poi_knowledge       PoiKnowledge?  @relation("PoiToPoiKnowledge")
+
+  @@map("Poi")
 }
 
 model Tour {
@@ -55,6 +57,8 @@ model Tour {
   preferences         Json
   user                User      @relation(fields: [user_id], references: [id])
   tourPois            TourPoi[]
+
+  @@map("Tour")
 }
 
 model TourPoi {
@@ -70,6 +74,7 @@ model TourPoi {
 
   @@unique([tour_id, poi_id])
   @@index([tour_id])
+  @@map("TourPoi")
 }
 
 model User {
@@ -78,6 +83,8 @@ model User {
   created_at         DateTime @default(now())
   preferred_language String   @default("en")
   tours              Tour[]
+
+  @@map("User")
 }
 
 model Translation {
@@ -92,6 +99,7 @@ model Translation {
   poi             Poi      @relation(fields: [poi_id], references: [id], onDelete: Cascade)
 
   @@unique([poi_id, content_type, language_code])
+  @@map("Translation")
 }
 
 model PoiKnowledge {
@@ -104,20 +112,13 @@ model PoiKnowledge {
   practical_info        String?   @db.Text
   key_facts             Json?
   interesting_trivia    String[]  @default([])
-  accessibility         String?   @db.Text
-  opening_hours_notes   String?   @db.Text
-  admission_fee         String?   @db.Text
-  best_time_to_visit    String?   @db.Text
-  nearby_attractions    String?   @db.Text
-  fun_facts             String?   @db.Text
-  local_tips            String?   @db.Text
-  events                String?   @db.Text
-  additional_notes      String?   @db.Text
   source_wikipedia      String?
   source_wikivoyage     String?
   source_official       String?
   additional_sources    String?
   last_updated          DateTime?
   locale                String?
-  poi                   Poi       @relation(fields: [poi_id], references: [id], onDelete: Cascade)
+  poi                   Poi       @relation("PoiToPoiKnowledge", fields: [poi_id], references: [id], onDelete: Cascade)
+
+  @@map("poi_knowledge")
 }

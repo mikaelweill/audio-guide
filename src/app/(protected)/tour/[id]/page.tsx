@@ -52,15 +52,8 @@ const getAgentPrompt = (poi: any) => {
     return trivia.map(item => `- ${item}`).join('\n');
   };
   
-  // Combine all transcripts into knowledge base for the AI
-  const basicKnowledge = [
-    poi.brief_transcript,
-    poi.detailed_transcript,
-    poi.complete_transcript
-  ].filter(Boolean).join('\n\n');
-  
   // Check if poi_knowledge exists and extract data
-  const poiKnowledge = poi.poiKnowledge || {};
+  const poiKnowledge = poi.poi_knowledge || {}; // Updated to use snake_case field name
   
   // Build comprehensive knowledge base with ALL existing poi_knowledge fields
   const advancedKnowledge = [
@@ -71,19 +64,12 @@ const getAgentPrompt = (poi: any) => {
     poiKnowledge.visitor_experience && `VISITOR EXPERIENCE:\n${poiKnowledge.visitor_experience}`,
     poiKnowledge.practical_info && `PRACTICAL INFORMATION:\n${poiKnowledge.practical_info}`,
     poiKnowledge.key_facts && `KEY FACTS:\n${formatKeyFacts(poiKnowledge.key_facts)}`,
-    poiKnowledge.interesting_trivia && poiKnowledge.interesting_trivia.length > 0 && `INTERESTING TRIVIA:\n${formatTrivia(poiKnowledge.interesting_trivia)}`,
-    poiKnowledge.opening_hours_notes && `OPENING HOURS NOTES:\n${poiKnowledge.opening_hours_notes}`,
-    poiKnowledge.admission_fee && `ADMISSION FEE:\n${poiKnowledge.admission_fee}`,
-    poiKnowledge.best_time_to_visit && `BEST TIME TO VISIT:\n${poiKnowledge.best_time_to_visit}`,
-    poiKnowledge.nearby_attractions && `NEARBY ATTRACTIONS:\n${poiKnowledge.nearby_attractions}`,
-    poiKnowledge.fun_facts && `FUN FACTS:\n${poiKnowledge.fun_facts}`,
-    poiKnowledge.local_tips && `LOCAL TIPS:\n${poiKnowledge.local_tips}`,
-    poiKnowledge.events && `EVENTS:\n${poiKnowledge.events}`,
-    poiKnowledge.additional_notes && `ADDITIONAL NOTES:\n${poiKnowledge.additional_notes}`
+    poiKnowledge.interesting_trivia && poiKnowledge.interesting_trivia.length > 0 && `INTERESTING TRIVIA:\n${formatTrivia(poiKnowledge.interesting_trivia)}`
+    // Removed fields that aren't in our updated schema
   ].filter(Boolean).join('\n\n');
   
-  // Combine basic and advanced knowledge
-  const knowledgeBase = [basicKnowledge, advancedKnowledge].filter(Boolean).join('\n\n');
+  // Now using only advanced knowledge
+  const knowledgeBase = advancedKnowledge;
   
   // Add source information if available
   const sources = [
@@ -95,7 +81,7 @@ const getAgentPrompt = (poi: any) => {
   
   const sourceInfo = sources.length > 0 ? `\n\nSOURCES:\n${sources.join('\n')}` : '';
   
-  return `You are an AI tour guide assistant for ${poi.name}. 
+  const prompt = `You are an AI tour guide assistant for ${poi.name}. 
   
 Here's information about this location:
 - Name: ${poi.name}
@@ -126,6 +112,15 @@ Important guidelines:
 6. For practical information like hours, prices, or accessibility, be direct and accurate
 7. If discussing practical info like admission fees or opening hours, mention when this information might change and suggest checking official sources for the most current details
 8. If the locality information is available: ${poiKnowledge.locale ? `The primary language here is ${poiKnowledge.locale}` : 'The primary language here is likely English'}`;
+
+  // Log the prompt being used
+  console.log('================================================');
+  console.log('AGENT PROMPT FOR:', poi.name);
+  console.log('------------------------------------------------');
+  console.log(prompt);
+  console.log('================================================');
+  
+  return prompt;
 };
 
 // Default system prompt for the voice agent
