@@ -139,41 +139,70 @@ Your responses will be spoken out loud, so keep them succinct and easy to listen
 
 // VoiceAgentButton component - updated to work with clientRef
 function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRef: React.RefObject<RTVIClient | null> }) {
-  const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryTimeout, setRetryTimeout] = useState<number | null>(null);
   
-  // Check the actual client connection state when the component mounts or clientRef changes
+  // Keep UI in sync with actual client connection state
   useEffect(() => {
     const checkConnectionState = async () => {
-      try {
-        const client = clientRef.current;
-        if (client) {
-          // Get the current connection state from the client
-          // Use the correct property to check connection state
-          const isConnected = client.connected;
-          console.log(`VoiceAgentButton: Syncing button state with client. Client connected: ${isConnected}`);
-          
-          // Update our state to match the actual client state
-          if (isConnected !== connected) {
-            setConnected(isConnected);
-          }
+      const client = clientRef.current;
+      if (!client) {
+        if (connected) {
+          console.log('VoiceAgentButton: No client found but UI shows connected. Fixing state.');
+          setConnected(false);
         }
-      } catch (err) {
-        console.error('Error checking client connection state:', err);
+        return;
+      }
+      
+      console.log('VoiceAgentButton: Syncing button state with client. Client connected:', client.connected);
+      
+      // Sync our UI state with the actual client state
+      if (client.connected !== connected) {
+        console.log(`VoiceAgentButton state changed - connected: ${client.connected}`);
+        setConnected(client.connected);
       }
     };
     
+    // Check connection state immediately
     checkConnectionState();
     
-    // Set up an interval to check connection state periodically
-    const intervalId = setInterval(checkConnectionState, 2000);
-    return () => clearInterval(intervalId);
+    // And set up an interval to check regularly
+    const interval = setInterval(checkConnectionState, 2000);
+    
+    return () => clearInterval(interval);
   }, [clientRef, connected]);
+
+  // Clear error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timeout = window.setTimeout(() => {
+        setError(null);
+      }, 5000);
+      
+      return () => window.clearTimeout(timeout);
+    }
+  }, [error]);
   
+  // Clear any retry timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeout !== null) {
+        window.clearTimeout(retryTimeout);
+      }
+    };
+  }, [retryTimeout]);
+
   const handleConnect = async () => {
     setError(null);
+    
+    // Clear any existing retry timeout
+    if (retryTimeout !== null) {
+      window.clearTimeout(retryTimeout);
+      setRetryTimeout(null);
+    }
     
     const client = clientRef.current;
     if (!client) {
@@ -186,9 +215,13 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
     if (connected || client.connected) {
       try {
         setDisconnecting(true);
+        console.log('Explicitly disconnecting client to free up Daily resources');
         await client.disconnect();
         setConnected(false);
-        console.log('Disconnected from voice agent');
+        console.log('Successfully disconnected from voice agent');
+        
+        // Give Daily some time to release resources before potentially reconnecting
+        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         console.error('Failed to disconnect from voice agent:', error);
         setError('Failed to disconnect');
@@ -198,118 +231,150 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
       return;
     }
     
-    // Connect to the voice agent - use try/catch for full error handling
-    try {
-      setConnecting(true);
-      
-      // First ensure we're not already connected
-      if (client.connected) {
-        console.log("Client is already connected according to its state. Updating button state.");
+    // Connect to the voice agent with retry logic
+    let retryCount = 0;
+    const maxRetries = 3;
+    const baseDelay = 2000; // Start with 2 seconds
+    
+    const attemptConnect = async () => {
+      try {
+        setConnecting(true);
+        
+        // First ensure we're not already connected
+        if (client.connected) {
+          console.log("Client is already connected according to its state. Updating button state.");
+          setConnected(true);
+          setConnecting(false);
+          return true;
+        }
+        
+        // Connect with the current POI information already in the client configuration
+        console.log(`Attempting to connect to voice agent with Daily service (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+        await client.connect();
         setConnected(true);
-        setConnecting(false);
-        return;
-      }
-      
-      // Connect with the current POI information already in the client configuration
-      await client.connect();
-      setConnected(true);
-      console.log('Connected to voice agent');
-      
-      // Start a conversation about the current POI after connection
-      if (currentPoi) {
-        setTimeout(() => {
-          try {
-            // Send dummy user transcript to trigger the bot to talk about this POI
-            const event = new CustomEvent('user_audio_transcript', {
-              detail: { text: `Tell me about ${currentPoi.name}` }
-            });
-            window.dispatchEvent(event);
-            console.log('Triggered initial conversation about', currentPoi.name);
-          } catch (error) {
-            console.error('Failed to trigger conversation:', error);
+        console.log('Connected to voice agent');
+        
+        // Start a conversation about the current POI after connection
+        if (currentPoi) {
+          setTimeout(() => {
+            try {
+              // Send dummy user transcript to trigger the bot to talk about this POI
+              const event = new CustomEvent('user_audio_transcript', {
+                detail: { text: `Tell me about ${currentPoi.name}` }
+              });
+              window.dispatchEvent(event);
+              console.log('Triggered initial conversation about', currentPoi.name);
+            } catch (error) {
+              console.error('Failed to trigger conversation:', error);
+            }
+          }, 1500);
+        }
+        
+        return true;
+      } catch (error: any) {
+        console.error(`Failed to connect to voice agent (attempt ${retryCount + 1}/${maxRetries + 1}):`, error);
+        
+        // Special handling for "already started" error
+        if (error.message && error.message.includes('already been started')) {
+          console.log('Client is already connected but we tried to connect again. Fixing state...');
+          setConnected(true);
+          // No need to show error to user in this case, just fix the state
+          return true;
+        }
+        // Handle Daily limit exceeded error
+        else if (error.message && (
+          error.message.includes('maximum concurrent') || 
+          error.message.includes('exceeded') || 
+          error.message.includes('limit')
+        )) {
+          if (retryCount < maxRetries) {
+            const delay = baseDelay * Math.pow(2, retryCount);
+            console.log(`Daily bot limit reached. Retrying in ${delay/1000} seconds...`);
+            setError(`Daily limit reached. Retrying in ${delay/1000}s...`);
+            
+            // Wait with exponential backoff
+            await new Promise(resolve => setTimeout(resolve, delay));
+            retryCount++;
+            return false; // Signal to retry
+          } else {
+            setError('Daily bot limit reached. Please try again in 5 minutes or refresh the page.');
+            
+            // Schedule a single automatic retry after 30 seconds
+            const timeout = window.setTimeout(() => {
+              console.log('Attempting automatic reconnect after Daily limit error');
+              setError('Attempting to reconnect...');
+              handleConnect();
+            }, 30000); // 30 seconds
+            
+            setRetryTimeout(timeout);
+            return true; // Stop manual retrying
           }
-        }, 1500);
+        }
+        else {
+          setError(error?.message || 'Connection failed');
+          return true; // Stop retrying
+        }
+      } finally {
+        if (retryCount >= maxRetries) {
+          setConnecting(false);
+        }
       }
-    } catch (error: any) {
-      console.error('Failed to connect to voice agent:', error);
-      
-      // Special handling for "already started" error
-      if (error.message && error.message.includes('already been started')) {
-        console.log('Client is already connected but we tried to connect again. Fixing state...');
-        setConnected(true);
-        // No need to show error to user in this case, just fix the state
-      } else {
-        setError(error?.message || 'Connection failed');
-      }
-    } finally {
-      setConnecting(false);
+    };
+    
+    // Start the retry loop
+    let success = false;
+    while (!success && retryCount <= maxRetries) {
+      success = await attemptConnect();
     }
+    
+    setConnecting(false);
   };
-  
-  // If a client was just newly created after the button was already in connected state,
-  // this makes sure we maintain proper state
-  useEffect(() => {
-    if (connected && !clientRef.current) {
-      setConnected(false);
-    }
-  }, [clientRef, connected]);
-  
-  // Debug the connected state
-  useEffect(() => {
-    console.log(`VoiceAgentButton state changed - connected: ${connected}`);
-  }, [connected]);
-  
+
   return (
-    <div className="relative">
+    <div className="mt-4 flex flex-col items-center">
       <button
+        className={`px-4 py-2 rounded flex items-center justify-center w-full max-w-xs font-medium text-center transition-colors 
+          ${connected ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'}
+          ${(connecting || disconnecting) ? 'opacity-70 cursor-not-allowed' : ''}
+        `}
         onClick={handleConnect}
         disabled={connecting || disconnecting}
-        data-voice-agent-connected={connected ? "true" : "false"}
-        className={`px-4 py-2 rounded-full font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
-          connected 
-            ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30'
-            : connecting
-              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-              : disconnecting
-                ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                : 'bg-purple-600/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30'
-        }`}
       >
-        {connected ? (
+        {connecting ? (
           <>
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-            </span>
-            Click to disconnect
-          </>
-        ) : disconnecting ? (
-          <>
-            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Disconnecting...
-          </>
-        ) : connecting ? (
-          <>
-            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
             Connecting...
           </>
+        ) : disconnecting ? (
+          <>
+            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Disconnecting...
+          </>
+        ) : connected ? (
+          <>
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+            Disconnect Voice Guide
+          </>
         ) : (
           <>
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
             </svg>
-            Connect to voice agent
+            Connect Voice Guide
           </>
         )}
       </button>
+      
       {error && (
-        <div className="text-xs text-red-400 absolute -bottom-5 left-0 whitespace-nowrap">
+        <div className="text-red-500 mt-2 text-sm text-center">
           {error}
         </div>
       )}
@@ -1176,7 +1241,7 @@ export default function TourPage() {
             options: [
               {
                 name: "model",
-                value: "gemini-1.5-pro"
+                value: "gemini-2.0-flash-exp"
               },
               {
                 name: "initial_messages",
@@ -1211,39 +1276,149 @@ export default function TourPage() {
     const disconnectClient = async () => {
       if (clientRef.current) {
         try {
-          // Only try to disconnect if transport is connected
-          console.log('Disconnecting old voice agent client');
-          await clientRef.current.disconnect().catch(e => console.error("Error disconnecting old client:", e));
+          // Check if client is already connected before attempting to disconnect
+          if (clientRef.current.connected) {
+            console.log('Disconnecting old voice agent client');
+            await clientRef.current.disconnect().catch(e => console.error("Error disconnecting old client:", e));
+          } else {
+            console.log('Old client exists but is not connected');
+          }
+          // Nullify the reference regardless of connection state
           clientRef.current = null;
         } catch (e) {
           console.error("Failed to disconnect old client:", e);
+          // Still nullify the reference to create a new client
+          clientRef.current = null;
         }
       }
     };
+
+    // Use a flag to check if the component is still mounted before creating a new client
+    let isMounted = true;
     
-    // Disconnect first, then create a new client
-    disconnectClient().then(() => {
-      // Create a new client with the current POI information
-      clientRef.current = createClient();
-      console.log('New voice agent client created');
+    const initClient = async () => {
+      // First ensure the old client is disconnected
+      await disconnectClient();
       
-      // Add event listeners for client errors
-      if (clientRef.current) {
-        clientRef.current.on('error', (error) => {
-          console.error('RTVIClient error:', error);
-        });
+      // Only create a new client if still mounted
+      if (!isMounted) return;
+      
+      if (!currentStop || !currentStop.poi) {
+        console.log('No current stop or POI available, skipping client creation');
+        return;
+      }
+      
+      try {
+        console.log('Creating new RTVIClient instance for POI:', currentStop.poi.name);
+        // Create the client without arguments - the currentStop is already captured in the closure
+        const client = createClient();
         
-        clientRef.current.on('transportStateChanged', (state) => {
-          console.log('Transport state changed:', state);
+        clientRef.current = client;
+        console.log('New RTVIClient instance created successfully');
+      } catch (error) {
+        console.error('Failed to create RTVIClient:', error);
+      }
+    };
+    
+    // Start the initialization
+    initClient();
+    
+    // Cleanup function to handle unmounting
+    return () => {
+      isMounted = false;
+      
+      // Attempt to clean up any client that might exist
+      if (clientRef.current) {
+        console.log('Component unmounting, cleaning up RTVIClient');
+        // We can't await in the cleanup function, but we can start the process
+        clientRef.current.disconnect().catch(e => {
+          console.error("Error during RTVIClient cleanup:", e);
         });
       }
-    });
-    
-    // Clean up on unmount or before recreation
-    return () => {
-      disconnectClient().catch(e => console.error("Cleanup error:", e));
     };
-  }, [createClient]);
+  }, [currentStop, createClient]);
+  
+  // Enhance disconnect logic for navigation and cleanup
+  useEffect(() => {
+    // Ensure we disconnect when current stop/POI changes
+    return () => {
+      if (clientRef.current?.connected) {
+        console.log('POI changed - disconnecting voice agent to free resources');
+        clientRef.current.disconnect().catch(e => {
+          console.error("Error disconnecting when POI changed:", e);
+        });
+      }
+    };
+  }, [currentStop?.id]);
+
+  // Enhance global disconnection logic
+  useEffect(() => {
+    // Keep track of if we've already cleaned up to avoid duplicate calls
+    let hasCleanedUp = false;
+    
+    const disconnectActiveClient = async () => {
+      if (hasCleanedUp) return;
+      
+      try {
+        hasCleanedUp = true;
+        if (clientRef.current?.connected) {
+          console.log('Global cleanup - Disconnecting voice agent...');
+          await clientRef.current.disconnect();
+          console.log('Successfully disconnected from voice agent during cleanup');
+        }
+      } catch (e) {
+        console.error("Failed to disconnect voice agent during cleanup:", e);
+      }
+    };
+    
+    // Handle page navigation/unload
+    const handleBeforeUnload = () => {
+      console.log('Page unloading - initiating disconnect');
+      // We can't await in beforeunload, but we can start the process
+      if (clientRef.current?.connected) {
+        clientRef.current.disconnect().catch(console.error);
+      }
+    };
+    
+    // Handle visibility change (tab switching)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        console.log('Page hidden - initiating disconnect');
+        disconnectActiveClient().catch(console.error);
+      }
+    };
+    
+    // Set up event listeners
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Cleanup on component unmount
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      disconnectActiveClient().catch(console.error);
+    };
+  }, []);
+  
+  // Make the component cleanup function more robust
+  useEffect(() => {
+    const disconnectOnCleanup = async () => {
+      try {
+        if (clientRef.current?.connected) {
+          console.log('Component cleanup - Disconnecting voice agent');
+          await clientRef.current.disconnect();
+          clientRef.current = null;
+        }
+      } catch (e) {
+        console.error("Component cleanup - Failed to disconnect voice agent:", e);
+      }
+    };
+    
+    // Return cleanup function
+    return () => {
+      disconnectOnCleanup().catch(console.error);
+    };
+  }, []);
   
   if (loading) {
     return (
