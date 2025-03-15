@@ -35,6 +35,7 @@ model Poi {
   detailed_transcript String?
   tourPois            TourPoi[]
   translations        Translation[]
+  poiKnowledge        PoiKnowledge?
 }
 
 model Tour {
@@ -91,4 +92,32 @@ model Translation {
   poi             Poi      @relation(fields: [poi_id], references: [id], onDelete: Cascade)
 
   @@unique([poi_id, content_type, language_code])
+}
+
+model PoiKnowledge {
+  poi_id                String    @id
+  overview              String?   @db.Text
+  historical_context    String?   @db.Text
+  architectural_details String?   @db.Text
+  cultural_significance String?   @db.Text
+  visitor_experience    String?   @db.Text
+  practical_info        String?   @db.Text
+  key_facts             Json?
+  interesting_trivia    String[]  @default([])
+  accessibility         String?   @db.Text
+  opening_hours_notes   String?   @db.Text
+  admission_fee         String?   @db.Text
+  best_time_to_visit    String?   @db.Text
+  nearby_attractions    String?   @db.Text
+  fun_facts             String?   @db.Text
+  local_tips            String?   @db.Text
+  events                String?   @db.Text
+  additional_notes      String?   @db.Text
+  source_wikipedia      String?
+  source_wikivoyage     String?
+  source_official       String?
+  additional_sources    String?
+  last_updated          DateTime?
+  locale                String?
+  poi                   Poi       @relation(fields: [poi_id], references: [id], onDelete: Cascade)
 }

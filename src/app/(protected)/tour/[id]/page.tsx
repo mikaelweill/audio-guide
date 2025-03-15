@@ -36,12 +36,64 @@ const getAgentPrompt = (poi: any) => {
     return hours.weekday_text.join('\n');
   };
   
+  // Format key facts from poi_knowledge if available
+  const formatKeyFacts = (keyFacts: any) => {
+    if (!keyFacts || typeof keyFacts !== 'object') return "";
+    
+    return Object.entries(keyFacts)
+      .map(([key, value]) => `- ${key}: ${value}`)
+      .join('\n');
+  };
+  
+  // Format interesting trivia from poi_knowledge if available
+  const formatTrivia = (trivia: any[]) => {
+    if (!trivia || !Array.isArray(trivia) || trivia.length === 0) return "";
+    
+    return trivia.map(item => `- ${item}`).join('\n');
+  };
+  
   // Combine all transcripts into knowledge base for the AI
-  const knowledgeBase = [
+  const basicKnowledge = [
     poi.brief_transcript,
     poi.detailed_transcript,
     poi.complete_transcript
   ].filter(Boolean).join('\n\n');
+  
+  // Check if poi_knowledge exists and extract data
+  const poiKnowledge = poi.poiKnowledge || {};
+  
+  // Build comprehensive knowledge base with ALL existing poi_knowledge fields
+  const advancedKnowledge = [
+    poiKnowledge.overview && `OVERVIEW:\n${poiKnowledge.overview}`,
+    poiKnowledge.historical_context && `HISTORICAL CONTEXT:\n${poiKnowledge.historical_context}`,
+    poiKnowledge.architectural_details && `ARCHITECTURAL DETAILS:\n${poiKnowledge.architectural_details}`,
+    poiKnowledge.cultural_significance && `CULTURAL SIGNIFICANCE:\n${poiKnowledge.cultural_significance}`,
+    poiKnowledge.visitor_experience && `VISITOR EXPERIENCE:\n${poiKnowledge.visitor_experience}`,
+    poiKnowledge.practical_info && `PRACTICAL INFORMATION:\n${poiKnowledge.practical_info}`,
+    poiKnowledge.key_facts && `KEY FACTS:\n${formatKeyFacts(poiKnowledge.key_facts)}`,
+    poiKnowledge.interesting_trivia && poiKnowledge.interesting_trivia.length > 0 && `INTERESTING TRIVIA:\n${formatTrivia(poiKnowledge.interesting_trivia)}`,
+    poiKnowledge.opening_hours_notes && `OPENING HOURS NOTES:\n${poiKnowledge.opening_hours_notes}`,
+    poiKnowledge.admission_fee && `ADMISSION FEE:\n${poiKnowledge.admission_fee}`,
+    poiKnowledge.best_time_to_visit && `BEST TIME TO VISIT:\n${poiKnowledge.best_time_to_visit}`,
+    poiKnowledge.nearby_attractions && `NEARBY ATTRACTIONS:\n${poiKnowledge.nearby_attractions}`,
+    poiKnowledge.fun_facts && `FUN FACTS:\n${poiKnowledge.fun_facts}`,
+    poiKnowledge.local_tips && `LOCAL TIPS:\n${poiKnowledge.local_tips}`,
+    poiKnowledge.events && `EVENTS:\n${poiKnowledge.events}`,
+    poiKnowledge.additional_notes && `ADDITIONAL NOTES:\n${poiKnowledge.additional_notes}`
+  ].filter(Boolean).join('\n\n');
+  
+  // Combine basic and advanced knowledge
+  const knowledgeBase = [basicKnowledge, advancedKnowledge].filter(Boolean).join('\n\n');
+  
+  // Add source information if available
+  const sources = [
+    poiKnowledge.source_wikipedia && `Wikipedia: ${poiKnowledge.source_wikipedia}`,
+    poiKnowledge.source_wikivoyage && `Wikivoyage: ${poiKnowledge.source_wikivoyage}`,
+    poiKnowledge.source_official && `Official: ${poiKnowledge.source_official}`,
+    poiKnowledge.additional_sources && `Additional Sources: ${poiKnowledge.additional_sources}`
+  ].filter(Boolean);
+  
+  const sourceInfo = sources.length > 0 ? `\n\nSOURCES:\n${sources.join('\n')}` : '';
   
   return `You are an AI tour guide assistant for ${poi.name}. 
   
@@ -54,12 +106,26 @@ ${poi.user_ratings_total ? `- Total Ratings: ${poi.user_ratings_total}` : ''}
 ${poi.website ? `- Website: ${poi.website}` : ''}
 ${poi.phone_number ? `- Phone: ${poi.phone_number}` : ''}
 ${poi.opening_hours ? `- Hours: ${formatOpeningHours(poi.opening_hours)}` : ''}
+${poi.vicinity ? `- Vicinity: ${poi.vicinity}` : ''}
+${poi.google_maps_url ? `- Google Maps: ${poi.google_maps_url}` : ''}
+${poi.price_level ? `- Price Level: ${poi.price_level}/4` : ''}
+${poi.image_attribution ? `- Image Credit: ${poi.image_attribution}` : ''}
 
-${knowledgeBase ? `KNOWLEDGE BASE:\n${knowledgeBase}` : ''}
+${knowledgeBase ? `KNOWLEDGE BASE:\n${knowledgeBase}${sourceInfo}` : ''}
 
 You are enthusiastic, knowledgeable, and helpful. Keep your responses brief and conversational, as they will be spoken out loud. Your responses will be converted to audio, so speak naturally.
 
-If users ask about this location, share interesting facts and information based on what you know. If asked about something you don't know, you can say you don't have that specific information.`;
+If users ask about this location, share interesting facts and information based on what you know. If asked about something you don't know, you can say you don't have that specific information.
+
+Important guidelines:
+1. Never mention "KNOWLEDGE BASE", "OVERVIEW", "HISTORICAL CONTEXT" or any of the section headings in your responses
+2. Present the information naturally as if you're a knowledgeable guide
+3. Keep responses concise and engaging
+4. Prioritize the most interesting information first
+5. If the user asks about something specific, focus your response on that topic
+6. For practical information like hours, prices, or accessibility, be direct and accurate
+7. If discussing practical info like admission fees or opening hours, mention when this information might change and suggest checking official sources for the most current details
+8. If the locality information is available: ${poiKnowledge.locale ? `The primary language here is ${poiKnowledge.locale}` : 'The primary language here is likely English'}`;
 };
 
 // Default system prompt for the voice agent
@@ -78,6 +144,34 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
   const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // Check the actual client connection state when the component mounts or clientRef changes
+  useEffect(() => {
+    const checkConnectionState = async () => {
+      try {
+        const client = clientRef.current;
+        if (client) {
+          // Get the current connection state from the client
+          // Use the correct property to check connection state
+          const isConnected = client.connected;
+          console.log(`VoiceAgentButton: Syncing button state with client. Client connected: ${isConnected}`);
+          
+          // Update our state to match the actual client state
+          if (isConnected !== connected) {
+            setConnected(isConnected);
+          }
+        }
+      } catch (err) {
+        console.error('Error checking client connection state:', err);
+      }
+    };
+    
+    checkConnectionState();
+    
+    // Set up an interval to check connection state periodically
+    const intervalId = setInterval(checkConnectionState, 2000);
+    return () => clearInterval(intervalId);
+  }, [clientRef, connected]);
+  
   const handleConnect = async () => {
     setError(null);
     
@@ -89,7 +183,7 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
     }
     
     // If already connected, disconnect
-    if (connected) {
+    if (connected || client.connected) {
       try {
         setDisconnecting(true);
         await client.disconnect();
@@ -108,8 +202,13 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
     try {
       setConnecting(true);
       
-      // Instead of trying to update an existing client, we ensure we always use
-      // the client that's initialized with the correct POI data
+      // First ensure we're not already connected
+      if (client.connected) {
+        console.log("Client is already connected according to its state. Updating button state.");
+        setConnected(true);
+        setConnecting(false);
+        return;
+      }
       
       // Connect with the current POI information already in the client configuration
       await client.connect();
@@ -133,7 +232,15 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
       }
     } catch (error: any) {
       console.error('Failed to connect to voice agent:', error);
-      setError(error?.message || 'Connection failed');
+      
+      // Special handling for "already started" error
+      if (error.message && error.message.includes('already been started')) {
+        console.log('Client is already connected but we tried to connect again. Fixing state...');
+        setConnected(true);
+        // No need to show error to user in this case, just fix the state
+      } else {
+        setError(error?.message || 'Connection failed');
+      }
     } finally {
       setConnecting(false);
     }
@@ -146,6 +253,11 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
       setConnected(false);
     }
   }, [clientRef, connected]);
+  
+  // Debug the connected state
+  useEffect(() => {
+    console.log(`VoiceAgentButton state changed - connected: ${connected}`);
+  }, [connected]);
   
   return (
     <div className="relative">
