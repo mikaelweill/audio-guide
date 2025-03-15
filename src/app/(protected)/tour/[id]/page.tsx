@@ -53,7 +53,7 @@ const getAgentPrompt = (poi: any) => {
   };
   
   // Check if poi_knowledge exists and extract data
-  const poiKnowledge = poi.poi_knowledge || {}; // Updated to use snake_case field name
+  const poiKnowledge = poi.poi_knowledge || {};
   
   // Build comprehensive knowledge base with ALL existing poi_knowledge fields
   const advancedKnowledge = [
@@ -75,8 +75,8 @@ const getAgentPrompt = (poi: any) => {
   const sources = [
     poiKnowledge.source_wikipedia && `Wikipedia: ${poiKnowledge.source_wikipedia}`,
     poiKnowledge.source_wikivoyage && `Wikivoyage: ${poiKnowledge.source_wikivoyage}`,
-    poiKnowledge.source_official && `Official: ${poiKnowledge.source_official}`,
-    poiKnowledge.additional_sources && `Additional Sources: ${poiKnowledge.additional_sources}`
+    poiKnowledge.source_official && `Official: ${poiKnowledge.source_official}`
+    // Removed additional_sources as it doesn't exist in the database
   ].filter(Boolean);
   
   const sourceInfo = sources.length > 0 ? `\n\nSOURCES:\n${sources.join('\n')}` : '';
@@ -1266,6 +1266,7 @@ export default function TourPage() {
   // Create the client when the component mounts or when currentStop changes
   useEffect(() => {
     console.log('RTVIClient effect triggered - handling client lifecycle');
+    console.log('Current POI:', currentStop?.poi?.name, 'ID:', currentStop?.poi?.id);
     
     // First disconnect the old client if it exists
     const disconnectClient = async () => {
@@ -1273,7 +1274,7 @@ export default function TourPage() {
         try {
           // Check if client is already connected before attempting to disconnect
           if (clientRef.current.connected) {
-            console.log('Disconnecting old voice agent client');
+            console.log('Disconnecting old voice agent client for POI:', currentStop?.poi?.name);
             await clientRef.current.disconnect().catch(e => console.error("Error disconnecting old client:", e));
           } else {
             console.log('Old client exists but is not connected');
@@ -1304,12 +1305,12 @@ export default function TourPage() {
       }
       
       try {
-        console.log('Creating new RTVIClient instance for POI:', currentStop.poi.name);
+        console.log('Creating new RTVIClient instance for POI:', currentStop.poi.name, 'ID:', currentStop.poi.id);
         // Create the client without arguments - the currentStop is already captured in the closure
         const client = createClient();
         
         clientRef.current = client;
-        console.log('New RTVIClient instance created successfully');
+        console.log('New RTVIClient instance created successfully for:', currentStop.poi.name);
       } catch (error) {
         console.error('Failed to create RTVIClient:', error);
       }
@@ -1331,7 +1332,7 @@ export default function TourPage() {
         });
       }
     };
-  }, [currentStop, createClient]);
+  }, [currentStop, currentStop?.poi?.id, createClient]);
   
   // Enhance disconnect logic for navigation and cleanup
   useEffect(() => {
