@@ -7,8 +7,8 @@ import { Tour, TourPoi } from '@/components/TourList';
 import { dataCollectionService } from '@/services/audioGuide';
 import { getImageUrl, getImageAttribution } from '@/utils/images';
 import POIImage from '@/components/POIImage';
-import { useRTVIClient, RTVIClientProvider, RTVIClientAudio, useRTVIClientEvent } from '@pipecat-ai/client-react';
-import { RTVIClient, RTVIEvent } from '@pipecat-ai/client-js';
+import { useRTVIClient, RTVIClientProvider, RTVIClientAudio } from '@pipecat-ai/client-react';
+import { RTVIClient } from '@pipecat-ai/client-js';
 import { DailyTransport } from '@pipecat-ai/daily-transport';
 import { useAgent } from '@/context/AgentContext';
 
@@ -139,29 +139,6 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
   const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryTimeout, setRetryTimeout] = useState<number | null>(null);
-  const [userQuestion, setUserQuestion] = useState<string>("");
-  const [lastResponse, setLastResponse] = useState<string>("");
-  const [isListening, setIsListening] = useState(false);
-  
-  // Listen for agent responses
-  useRTVIClientEvent(
-    RTVIEvent.BotTranscript,
-    useCallback((data: any) => {
-      if (data.final) {
-        console.log("Agent response:", data.text);
-        setLastResponse(data.text);
-      }
-    }, [])
-  );
-  
-  // Listen for voice activity detection status
-  useRTVIClientEvent(
-    RTVIEvent.TransportStateChanged,
-    useCallback((state: string) => {
-      console.log("Agent state changed:", state);
-      setIsListening(state === "vad");
-    }, [])
-  );
   
   // Keep UI in sync with actual client connection state
   useEffect(() => {
@@ -192,7 +169,7 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
     
     return () => clearInterval(interval);
   }, [clientRef, connected]);
-  
+
   // Clear error after 5 seconds
   useEffect(() => {
     if (error) {
@@ -212,28 +189,6 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
       }
     };
   }, [retryTimeout]);
-
-  // Function to send a message to the agent
-  const handleSendMessage = useCallback((message: string) => {
-    if (!clientRef.current || !clientRef.current.connected) {
-      console.error("Cannot send message - client not connected");
-      return;
-    }
-    
-    try {
-      console.log("Sending message to agent:", message);
-      // Create a synthetic ASR event - this simulates someone speaking
-      const event = new CustomEvent('asr:transcript', {
-        detail: {
-          text: message,
-          final: true
-        }
-      });
-      window.dispatchEvent(event);
-    } catch (error) {
-      console.error("Error sending message:", error);
-    }
-  }, [clientRef]);
 
   const handleConnect = async () => {
     setError(null);
@@ -286,15 +241,6 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
           setConnected(true);
           setConnecting(false);
           return true;
-        }
-        
-        // Log the full prompt that will be used for the agent
-        if (currentPoi) {
-          const fullPrompt = getAgentPrompt(currentPoi);
-          console.log('============= AGENT CONTEXT START =============');
-          console.log(`AGENT PROMPT FOR: ${currentPoi.name}`);
-          console.log(fullPrompt);
-          console.log('============= AGENT CONTEXT END =============');
         }
         
         // Connect with the current POI information already in the client configuration
@@ -388,7 +334,6 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
         `}
         onClick={handleConnect}
         disabled={connecting || disconnecting}
-        data-voice-agent-connected={connected ? "true" : "false"}
       >
         {connecting ? (
           <>
@@ -426,50 +371,6 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
       {error && (
         <div className="text-red-500 mt-2 text-sm text-center">
           {error}
-        </div>
-      )}
-      
-      {/* Add text input for questions when connected */}
-      {connected && (
-        <div className="mt-4 w-full max-w-md">
-          {isListening && (
-            <div className="text-center text-green-500 text-sm mb-2 animate-pulse">
-              Listening...
-            </div>
-          )}
-          
-          <form 
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (userQuestion.trim()) {
-                handleSendMessage(userQuestion);
-                setUserQuestion("");
-              }
-            }}
-          >
-            <input
-              type="text"
-              value={userQuestion}
-              onChange={(e) => setUserQuestion(e.target.value)}
-              placeholder="Ask a question..."
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              type="submit"
-              className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"
-            >
-              Ask
-            </button>
-          </form>
-          
-          {/* Show last response from agent */}
-          {lastResponse && (
-            <div className="mt-4 p-3 bg-gray-100 rounded-md">
-              <p className="text-sm text-gray-500">Agent response:</p>
-              <p>{lastResponse}</p>
-            </div>
-          )}
         </div>
       )}
     </div>

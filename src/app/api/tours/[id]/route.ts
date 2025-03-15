@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 export async function GET(
   request: NextRequest,
@@ -84,22 +85,25 @@ export async function GET(
         }
         
         // Now fetch the full tour with related data
-        const tour = await prisma.tour.findFirst({
+        const tour = await prisma.tour.findUnique({
           where: {
             id: tourId,
-            // Including user check now
-            user_id: userId
+            user_id: userId,
           },
           include: {
             tourPois: {
               include: {
-                poi: true
+                poi: {
+                  include: {
+                    poi_knowledge: true
+                  }
+                },
               },
               orderBy: {
                 sequence_number: 'asc'
               }
-            }
-          }
+            },
+          },
         });
         
         console.timeEnd('prisma-fetch');

@@ -115,7 +115,6 @@ model PoiKnowledge {
   source_wikipedia      String?
   source_wikivoyage     String?
   source_official       String?
-  additional_sources    String?
   last_updated          DateTime?
   locale                String?
   poi                   Poi       @relation("PoiToPoiKnowledge", fields: [poi_id], references: [id], onDelete: Cascade)
