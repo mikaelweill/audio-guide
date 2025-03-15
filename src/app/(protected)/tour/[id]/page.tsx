@@ -141,11 +141,12 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
   const [retryTimeout, setRetryTimeout] = useState<number | null>(null);
   // Add a ref to store the interval ID
   const intervalRef = useRef<number | null>(null);
+  // Move the ref to the top level of the component
+  const prevConnectedRef = useRef<boolean | null>(null);
   
   // Keep UI in sync with actual client connection state
   useEffect(() => {
-    // Use a ref to track the previous connection state to avoid unnecessary logs
-    const prevConnectedRef = useRef<boolean | null>(null);
+    // Removed ref declaration from here
     
     const checkConnectionState = async () => {
       const client = clientRef.current;
