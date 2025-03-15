@@ -288,6 +288,15 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
           return true;
         }
         
+        // Log the full prompt that will be used for the agent
+        if (currentPoi) {
+          const fullPrompt = getAgentPrompt(currentPoi);
+          console.log('============= AGENT CONTEXT START =============');
+          console.log(`AGENT PROMPT FOR: ${currentPoi.name}`);
+          console.log(fullPrompt);
+          console.log('============= AGENT CONTEXT END =============');
+        }
+        
         // Connect with the current POI information already in the client configuration
         console.log(`Attempting to connect to voice agent with Daily service (attempt ${retryCount + 1}/${maxRetries + 1})...`);
         await client.connect();
