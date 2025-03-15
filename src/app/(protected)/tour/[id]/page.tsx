@@ -24,107 +24,67 @@ const logPage = (...args: any[]) => {
 const getAgentPrompt = (poi: any) => {
   if (!poi) return "You are an AI tour guide assistant. You are enthusiastic, knowledgeable, and helpful. Keep your responses brief and conversational, as they will be spoken out loud. Your responses will be converted to audio, so speak naturally.";
   
+  // Format types into readable categories
+  const formatTypes = (types: string[] | null) => {
+    if (!types || !Array.isArray(types)) return "Not available";
+    return types.map(type => type.replace(/_/g, ' ')).join(', ');
+  };
+  
+  // Format opening hours into readable text
+  const formatOpeningHours = (hours: any) => {
+    if (!hours || !hours.weekday_text || !Array.isArray(hours.weekday_text)) return "Not available";
+    return hours.weekday_text.join('\n');
+  };
+  
+  // Combine all transcripts into knowledge base for the AI
+  const knowledgeBase = [
+    poi.brief_transcript,
+    poi.detailed_transcript,
+    poi.complete_transcript
+  ].filter(Boolean).join('\n\n');
+  
   return `You are an AI tour guide assistant for ${poi.name}. 
   
 Here's information about this location:
 - Name: ${poi.name}
 - Address: ${poi.formatted_address || 'Not available'}
+- Categories: ${formatTypes(poi.types)}
 - Rating: ${poi.rating ? `${poi.rating}/5` : 'Not available'}
-${poi.description ? `- Description: ${poi.description}` : ''}
+${poi.user_ratings_total ? `- Total Ratings: ${poi.user_ratings_total}` : ''}
+${poi.website ? `- Website: ${poi.website}` : ''}
+${poi.phone_number ? `- Phone: ${poi.phone_number}` : ''}
+${poi.opening_hours ? `- Hours: ${formatOpeningHours(poi.opening_hours)}` : ''}
+
+${knowledgeBase ? `KNOWLEDGE BASE:\n${knowledgeBase}` : ''}
 
 You are enthusiastic, knowledgeable, and helpful. Keep your responses brief and conversational, as they will be spoken out loud. Your responses will be converted to audio, so speak naturally.
 
 If users ask about this location, share interesting facts and information based on what you know. If asked about something you don't know, you can say you don't have that specific information.`;
 };
 
-const client = new RTVIClient({
-  transport: new DailyTransport(),
-  params: {
-    baseUrl: `/api`,
-    requestData: {
-      services: {
-        stt: "deepgram",
-        tts: "cartesia",
-        llm: "anthropic",
-      },
-    },
-    endpoints: {
-      connect: "/connect",
-      action: "/actions",
-    },
-    config: [
-      {
-        service: "vad",
-        options: [
-          {
-            name: "params",
-            value: {
-              stop_secs: 0.3
-            }
-          }
-        ]
-      },
-      {
-        service: "tts",
-        options: [
-          {
-            name: "voice",
-            value: "79a125e8-cd45-4c13-8a67-188112f4dd22"
-          },
-          {
-            name: "language",
-            value: "en"
-          },
-          {
-            name: "text_filter",
-            value: {
-              filter_code: false,
-              filter_tables: false
-            }
-          },
-          {
-            name: "model",
-            value: "sonic-english"
-          }
-        ]
-      },
-      {
-        service: "llm",
-        options: [
-          {
-            name: "model",
-            value: "claude-3-7-sonnet-20250219"
-          },
-          {
-            name: "initial_messages",
-            value: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "You are an AI tour guide assistant. You are enthusiastic, knowledgeable, and helpful. Keep your responses brief and conversational, as they will be spoken out loud. Your responses will be converted to audio, so speak naturally."
-                }
-              ]
-            }
-            ]
-          }
-        ]
-      }
-    ],
-  }
-});
+// Default system prompt for the voice agent
+const DEFAULT_SYSTEM_PROMPT = `You are a helpful, knowledgeable tour guide assistant. 
+You speak in a conversational, friendly tone and keep your answers brief and informative. 
+When you don't know something, you admit it rather than making things up.
+If the user doesn't explicitly ask about a specific place, provide general travel information or assistance.
+When the user asks about a specific location, share interesting facts and information about it based on what you know.
+Do not mention "knowledge base" or "transcripts" in your responses. Just use the information as if it's your own knowledge.
+Your responses will be spoken out loud, so keep them succinct and easy to listen to.`;
 
-// VoiceAgentButton component
-function VoiceAgentButton() {
+// VoiceAgentButton component - updated to work with clientRef
+function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRef: React.RefObject<RTVIClient | null> }) {
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const client = useRTVIClient();
+  const [error, setError] = useState<string | null>(null);
   
   const handleConnect = async () => {
+    setError(null);
+    
+    const client = clientRef.current;
     if (!client) {
       console.error('RTVIClient not available');
+      setError('Voice client not available');
       return;
     }
     
@@ -137,72 +97,111 @@ function VoiceAgentButton() {
         console.log('Disconnected from voice agent');
       } catch (error) {
         console.error('Failed to disconnect from voice agent:', error);
+        setError('Failed to disconnect');
       } finally {
         setDisconnecting(false);
       }
       return;
     }
     
-    // Otherwise, connect
+    // Connect to the voice agent - use try/catch for full error handling
     try {
       setConnecting(true);
+      
+      // Instead of trying to update an existing client, we ensure we always use
+      // the client that's initialized with the correct POI data
+      
+      // Connect with the current POI information already in the client configuration
       await client.connect();
       setConnected(true);
       console.log('Connected to voice agent');
-    } catch (error) {
+      
+      // Start a conversation about the current POI after connection
+      if (currentPoi) {
+        setTimeout(() => {
+          try {
+            // Send dummy user transcript to trigger the bot to talk about this POI
+            const event = new CustomEvent('user_audio_transcript', {
+              detail: { text: `Tell me about ${currentPoi.name}` }
+            });
+            window.dispatchEvent(event);
+            console.log('Triggered initial conversation about', currentPoi.name);
+          } catch (error) {
+            console.error('Failed to trigger conversation:', error);
+          }
+        }, 1500);
+      }
+    } catch (error: any) {
       console.error('Failed to connect to voice agent:', error);
+      setError(error?.message || 'Connection failed');
     } finally {
       setConnecting(false);
     }
   };
   
+  // If a client was just newly created after the button was already in connected state,
+  // this makes sure we maintain proper state
+  useEffect(() => {
+    if (connected && !clientRef.current) {
+      setConnected(false);
+    }
+  }, [clientRef, connected]);
+  
   return (
-    <button
-      onClick={handleConnect}
-      disabled={connecting || disconnecting}
-      className={`px-4 py-2 rounded-full font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
-        connected 
-          ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30'
-          : connecting
-            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-            : disconnecting
-              ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-              : 'bg-purple-600/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30'
-      }`}
-    >
-      {connected ? (
-        <>
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-          </span>
-          Click to disconnect
-        </>
-      ) : disconnecting ? (
-        <>
-          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          Disconnecting...
-        </>
-      ) : connecting ? (
-        <>
-          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          Connecting...
-        </>
-      ) : (
-        <>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-          </svg>
-          Connect to voice agent
-        </>
+    <div className="relative">
+      <button
+        onClick={handleConnect}
+        disabled={connecting || disconnecting}
+        data-voice-agent-connected={connected ? "true" : "false"}
+        className={`px-4 py-2 rounded-full font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
+          connected 
+            ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30'
+            : connecting
+              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+              : disconnecting
+                ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                : 'bg-purple-600/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30'
+        }`}
+      >
+        {connected ? (
+          <>
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+            </span>
+            Click to disconnect
+          </>
+        ) : disconnecting ? (
+          <>
+            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Disconnecting...
+          </>
+        ) : connecting ? (
+          <>
+            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Connecting...
+          </>
+        ) : (
+          <>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+            Connect to voice agent
+          </>
+        )}
+      </button>
+      {error && (
+        <div className="text-xs text-red-400 absolute -bottom-5 left-0 whitespace-nowrap">
+          {error}
+        </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -943,6 +942,179 @@ export default function TourPage() {
     }
   }, [currentStop, audioData, currentAudioId, currentStopIndex]);
   
+  // Create a reference to the client
+  const clientRef = useRef<RTVIClient | null>(null);
+  
+  // Move the useEffect that uses clientRef here after it's declared 
+  // Add this useEffect to update the agent when POI changes
+  useEffect(() => {
+    // No need to update config directly in this effect anymore
+    // Instead, we recreate the client with new POI data when the POI changes
+    // and can trigger a custom event to notify about the change if the agent is connected
+    
+    if (!clientRef.current || !currentStop?.poi) return;
+    
+    console.log(`POI changed to: ${currentStop.poi.name}`); 
+    
+    // Find our VoiceAgentButton and check if it's connected
+    const agentButtonElement = document.querySelector('[data-voice-agent-connected="true"]');
+    
+    if (agentButtonElement) {
+      console.log('Voice agent is connected, sending POI update event');
+      
+      // Send a custom event to notify about POI change
+      setTimeout(() => {
+        try {
+          // Using a custom event rather than trying to reconfigure the agent directly
+          // This will work with our client that's already initialized with the right POI data
+          const event = new CustomEvent('user_audio_transcript', {
+            detail: { text: `I'd like to know about ${currentStop.poi.name} now` }
+          });
+          window.dispatchEvent(event);
+          console.log('Triggered conversation update for new POI:', currentStop.poi.name);
+        } catch (error) {
+          console.error('Failed to trigger conversation for new POI:', error);
+        }
+      }, 1000);
+    } else {
+      console.log('Voice agent not connected, no need to send update');
+    }
+  }, [currentStopIndex, currentStop]);
+  
+  // Create the RTVIClient inside the component to have access to current POI
+  const createClient = useCallback(() => {
+    console.log('Creating new voice agent client with current POI data');
+    
+    // Default system prompt for the voice agent
+    const DEFAULT_SYSTEM_PROMPT = `You are a helpful, knowledgeable tour guide assistant. 
+    You speak in a conversational, friendly tone and keep your answers brief and informative. 
+    When you don't know something, you admit it rather than making things up.
+    If the user doesn't explicitly ask about a specific place, provide general travel information or assistance.
+    When the user asks about a specific location, share interesting facts and information about it based on what you know.
+    Do not mention "knowledge base" or "transcripts" in your responses. Just use the information as if it's your own knowledge.
+    Your responses will be spoken out loud, so keep them succinct and easy to listen to.`;
+
+    // Get current POI information for the initial prompt
+    const currentPoi = currentStop?.poi;
+    
+    // Combine default prompt with POI information if available
+    let initialPrompt = DEFAULT_SYSTEM_PROMPT;
+    if (currentPoi) {
+      initialPrompt = getAgentPrompt(currentPoi);
+      console.log(`Initializing agent with knowledge about: ${currentPoi.name}`);
+    }
+
+    // Creating a fresh client with the updated POI information directly in its config
+    return new RTVIClient({
+      transport: new DailyTransport(),
+      params: {
+        baseUrl: `/api`,
+        requestData: {
+          services: {
+            stt: "deepgram",
+            tts: "cartesia",
+            llm: "anthropic",
+          },
+        },
+        endpoints: {
+          connect: "/connect",
+          action: "/actions",
+        },
+        config: [
+          {
+            service: "vad",
+            options: [
+              {
+                name: "params",
+                value: {
+                  stop_secs: 0.3
+                }
+              }
+            ]
+          },
+          {
+            service: "tts",
+            options: [
+              {
+                name: "voice",
+                value: "79a125e8-cd45-4c13-8a67-188112f4dd22"
+              },
+              {
+                name: "language",
+                value: "en"
+              },
+              {
+                name: "text_filter",
+                value: {
+                  filter_code: false,
+                  filter_tables: false
+                }
+              },
+              {
+                name: "model",
+                value: "sonic-english"
+              }
+            ]
+          },
+          {
+            service: "llm",
+            options: [
+              {
+                name: "model",
+                value: "claude-3-7-sonnet-20250219"
+              },
+              {
+                name: "initial_messages",
+                value: [
+                {
+                  role: "system",
+                  content: [
+                    {
+                      type: "text",
+                      text: initialPrompt
+                    }
+                  ]
+                }
+                ]
+              }
+            ]
+          }
+        ],
+      }
+    });
+  }, [currentStop]);
+  
+  // Create the client when the component mounts or when currentStop changes
+  useEffect(() => {
+    console.log('RTVIClient effect triggered - handling client lifecycle');
+    
+    // First disconnect the old client if it exists
+    const disconnectClient = async () => {
+      if (clientRef.current) {
+        try {
+          // Only try to disconnect if transport is connected
+          console.log('Disconnecting old voice agent client');
+          await clientRef.current.disconnect().catch(e => console.error("Error disconnecting old client:", e));
+          clientRef.current = null;
+        } catch (e) {
+          console.error("Failed to disconnect old client:", e);
+        }
+      }
+    };
+    
+    // Disconnect first, then create a new client
+    disconnectClient().then(() => {
+      // Create a new client with the current POI information
+      clientRef.current = createClient();
+      console.log('New voice agent client created');
+    });
+    
+    // Clean up on unmount or before recreation
+    return () => {
+      disconnectClient().catch(e => console.error("Cleanup error:", e));
+    };
+  }, [createClient]);
+  
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen py-12 bg-slate-950">
@@ -981,8 +1153,20 @@ export default function TourPage() {
     );
   }
   
+  // Create a wrapper for the RTVIClientProvider to handle the null case
+  const SafeRTVIClientProvider: React.FC<{children: ReactNode}> = ({ children }) => {
+    if (!clientRef.current) {
+      return <>{children}</>;
+    }
+    return (
+      <RTVIClientProvider client={clientRef.current}>
+        {children}
+      </RTVIClientProvider>
+    );
+  };
+  
   return (
-    <RTVIClientProvider client={client}>
+    <SafeRTVIClientProvider>
       <RTVIClientAudio />
       <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 pb-20">
         {/* Tour Header */}
@@ -996,7 +1180,7 @@ export default function TourPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <VoiceAgentButton />
+                <VoiceAgentButton currentPoi={currentStop?.poi} clientRef={clientRef} />
                 <Link
                   href="/"
                   className="text-white hover:text-pink-200 transition-colors"
@@ -1501,6 +1685,6 @@ export default function TourPage() {
           </div>
         </div>
       </div>
-    </RTVIClientProvider>
+    </SafeRTVIClientProvider>
   );
 } 
