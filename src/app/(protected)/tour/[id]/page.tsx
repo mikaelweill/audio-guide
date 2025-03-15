@@ -7,8 +7,8 @@ import { Tour, TourPoi } from '@/components/TourList';
 import { dataCollectionService } from '@/services/audioGuide';
 import { getImageUrl, getImageAttribution } from '@/utils/images';
 import POIImage from '@/components/POIImage';
-import { useRTVIClient, RTVIClientProvider, RTVIClientAudio } from '@pipecat-ai/client-react';
-import { RTVIClient } from '@pipecat-ai/client-js';
+import { useRTVIClient, RTVIClientProvider, RTVIClientAudio, useRTVIClientEvent } from '@pipecat-ai/client-react';
+import { RTVIClient, RTVIEvent } from '@pipecat-ai/client-js';
 import { DailyTransport } from '@pipecat-ai/daily-transport';
 import { useAgent } from '@/context/AgentContext';
 
@@ -139,15 +139,32 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
   const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryTimeout, setRetryTimeout] = useState<number | null>(null);
-  // Add a ref to store the interval ID
-  const intervalRef = useRef<number | null>(null);
-  // Move the ref to the top level of the component
-  const prevConnectedRef = useRef<boolean | null>(null);
+  const [userQuestion, setUserQuestion] = useState<string>("");
+  const [lastResponse, setLastResponse] = useState<string>("");
+  const [isListening, setIsListening] = useState(false);
+  
+  // Listen for agent responses
+  useRTVIClientEvent(
+    RTVIEvent.BotTranscript,
+    useCallback((data: any) => {
+      if (data.final) {
+        console.log("Agent response:", data.text);
+        setLastResponse(data.text);
+      }
+    }, [])
+  );
+  
+  // Listen for voice activity detection status
+  useRTVIClientEvent(
+    RTVIEvent.TransportStateChanged,
+    useCallback((state: string) => {
+      console.log("Agent state changed:", state);
+      setIsListening(state === "vad");
+    }, [])
+  );
   
   // Keep UI in sync with actual client connection state
   useEffect(() => {
-    // Removed ref declaration from here
-    
     const checkConnectionState = async () => {
       const client = clientRef.current;
       if (!client) {
@@ -155,17 +172,12 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
           console.log('VoiceAgentButton: No client found but UI shows connected. Fixing state.');
           setConnected(false);
         }
-        prevConnectedRef.current = false;
         return;
       }
       
-      // Only log when the state actually changes from the previous check
-      if (prevConnectedRef.current !== client.connected) {
-        console.log('VoiceAgentButton: Client connection state changed to:', client.connected);
-        prevConnectedRef.current = client.connected;
-      }
+      console.log('VoiceAgentButton: Syncing button state with client. Client connected:', client.connected);
       
-      // Only update React state if it differs from the client state
+      // Sync our UI state with the actual client state
       if (client.connected !== connected) {
         console.log(`VoiceAgentButton state changed - connected: ${client.connected}`);
         setConnected(client.connected);
@@ -175,21 +187,11 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
     // Check connection state immediately
     checkConnectionState();
     
-    // Clear any existing interval before setting a new one
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
+    // And set up an interval to check regularly
+    const interval = setInterval(checkConnectionState, 2000);
     
-    // And set up an interval to check regularly - increased to less frequent checks
-    intervalRef.current = window.setInterval(checkConnectionState, 5000);
-    
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [clientRef, connected]); // Need connected in deps to reset interval when connection changes
+    return () => clearInterval(interval);
+  }, [clientRef, connected]);
   
   // Clear error after 5 seconds
   useEffect(() => {
@@ -210,6 +212,28 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
       }
     };
   }, [retryTimeout]);
+
+  // Function to send a message to the agent
+  const handleSendMessage = useCallback((message: string) => {
+    if (!clientRef.current || !clientRef.current.connected) {
+      console.error("Cannot send message - client not connected");
+      return;
+    }
+    
+    try {
+      console.log("Sending message to agent:", message);
+      // Create a synthetic ASR event - this simulates someone speaking
+      const event = new CustomEvent('asr:transcript', {
+        detail: {
+          text: message,
+          final: true
+        }
+      });
+      window.dispatchEvent(event);
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
+  }, [clientRef]);
 
   const handleConnect = async () => {
     setError(null);
@@ -355,6 +379,7 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
         `}
         onClick={handleConnect}
         disabled={connecting || disconnecting}
+        data-voice-agent-connected={connected ? "true" : "false"}
       >
         {connecting ? (
           <>
@@ -392,6 +417,50 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
       {error && (
         <div className="text-red-500 mt-2 text-sm text-center">
           {error}
+        </div>
+      )}
+      
+      {/* Add text input for questions when connected */}
+      {connected && (
+        <div className="mt-4 w-full max-w-md">
+          {isListening && (
+            <div className="text-center text-green-500 text-sm mb-2 animate-pulse">
+              Listening...
+            </div>
+          )}
+          
+          <form 
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (userQuestion.trim()) {
+                handleSendMessage(userQuestion);
+                setUserQuestion("");
+              }
+            }}
+          >
+            <input
+              type="text"
+              value={userQuestion}
+              onChange={(e) => setUserQuestion(e.target.value)}
+              placeholder="Ask a question..."
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="submit"
+              className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"
+            >
+              Ask
+            </button>
+          </form>
+          
+          {/* Show last response from agent */}
+          {lastResponse && (
+            <div className="mt-4 p-3 bg-gray-100 rounded-md">
+              <p className="text-sm text-gray-500">Agent response:</p>
+              <p>{lastResponse}</p>
+            </div>
+          )}
         </div>
       )}
     </div>
