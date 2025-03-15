@@ -139,9 +139,14 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
   const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryTimeout, setRetryTimeout] = useState<number | null>(null);
+  // Add a ref to store the interval ID
+  const intervalRef = useRef<number | null>(null);
   
   // Keep UI in sync with actual client connection state
   useEffect(() => {
+    // Use a ref to track the previous connection state to avoid unnecessary logs
+    const prevConnectedRef = useRef<boolean | null>(null);
+    
     const checkConnectionState = async () => {
       const client = clientRef.current;
       if (!client) {
@@ -149,12 +154,17 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
           console.log('VoiceAgentButton: No client found but UI shows connected. Fixing state.');
           setConnected(false);
         }
+        prevConnectedRef.current = false;
         return;
       }
       
-      console.log('VoiceAgentButton: Syncing button state with client. Client connected:', client.connected);
+      // Only log when the state actually changes from the previous check
+      if (prevConnectedRef.current !== client.connected) {
+        console.log('VoiceAgentButton: Client connection state changed to:', client.connected);
+        prevConnectedRef.current = client.connected;
+      }
       
-      // Sync our UI state with the actual client state
+      // Only update React state if it differs from the client state
       if (client.connected !== connected) {
         console.log(`VoiceAgentButton state changed - connected: ${client.connected}`);
         setConnected(client.connected);
@@ -164,12 +174,22 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
     // Check connection state immediately
     checkConnectionState();
     
-    // And set up an interval to check regularly
-    const interval = setInterval(checkConnectionState, 2000);
+    // Clear any existing interval before setting a new one
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
     
-    return () => clearInterval(interval);
-  }, [clientRef, connected]);
-
+    // And set up an interval to check regularly - increased to less frequent checks
+    intervalRef.current = window.setInterval(checkConnectionState, 5000);
+    
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [clientRef, connected]); // Need connected in deps to reset interval when connection changes
+  
   // Clear error after 5 seconds
   useEffect(() => {
     if (error) {
