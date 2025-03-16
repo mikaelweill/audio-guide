@@ -12,6 +12,12 @@ const nextConfig = {
   images: {
     domains: ['maps.googleapis.com', 'lh3.googleusercontent.com'],
   },
+  // Add environment variables for production URL
+  env: {
+    NEXT_PUBLIC_APP_URL: process.env.NODE_ENV === 'production' 
+      ? 'https://audio-guide-theta.vercel.app' 
+      : 'http://localhost:3000'
+  },
   // Disable ESLint during production build
   eslint: {
     // Warning: This disables ESLint checks during production build

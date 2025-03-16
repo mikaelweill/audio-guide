@@ -1,6 +1,13 @@
 // Network check script with improved connectivity detection
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // Define our app URL for consistency
+    const APP_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:3000'
+      : 'https://audio-guide-theta.vercel.app';
+      
+    console.log('App running at:', APP_URL);
+    
     // Register the service worker
     // Note: next-pwa will actually register the compiled service worker at /sw.js
     navigator.serviceWorker.register('/sw.js', { 
@@ -54,7 +61,7 @@ window.addEventListener('load', () => {
     }
   };
 
-  // Function to test connectivity to server
+  // Function to test connectivity to server - improved with app URL awareness
   const testConnectivity = async () => {
     try {
       // First try the fetch API with our own API
@@ -70,6 +77,24 @@ window.addEventListener('load', () => {
       }
     } catch (error) {
       console.log('Could not connect to server API:', error);
+      
+      // If first attempt fails, try with explicit production URL as a backup
+      if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        try {
+          const backupResponse = await fetch('https://audio-guide-theta.vercel.app/api/health', { 
+            method: 'HEAD',
+            cache: 'no-cache',
+            headers: { 'Cache-Control': 'no-cache' }
+          });
+          
+          if (backupResponse.ok) {
+            console.log('Connected to production server successfully');
+            return true;
+          }
+        } catch (backupError) {
+          console.log('Could not connect to production server either:', backupError);
+        }
+      }
     }
     
     // If our API check fails, fallback to navigator.onLine

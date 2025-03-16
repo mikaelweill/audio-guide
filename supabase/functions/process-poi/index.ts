@@ -104,6 +104,24 @@ async function processPOI(poiData: any) {
       throw new Error('No place_id provided - cannot process POI');
     }
     
+    // IMMEDIATELY exit if this is a start/end marker to prevent unnecessary processing
+    if (poiData.basic?.types?.includes('route_start') || 
+        poiData.basic?.types?.includes('route_end') ||
+        (poiData.basic?.name && (
+          poiData.basic.name.toLowerCase().includes('start point') ||
+          poiData.basic.name.toLowerCase().includes('end point') ||
+          poiData.basic.name.toLowerCase().includes('starting point') ||
+          poiData.basic.name.toLowerCase().includes('ending point')
+        ))) {
+      console.log(`Skipping processing for route marker: ${poiData.basic?.name || placeId}`);
+      return {
+        success: true,
+        message: `Skipped processing for route marker: ${poiData.basic?.name || placeId}`,
+        skippedMarker: true,
+        placeId: placeId
+      };
+    }
+    
     console.log(`Processing POI with place_id: ${placeId}`);
 
     // Initialize Supabase client and OpenAI

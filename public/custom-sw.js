@@ -5,6 +5,13 @@ self.addEventListener('install', (event) => {
   // Skip waiting to ensure the new service worker activates immediately
   self.skipWaiting();
   
+  // Define production URL for the PWA
+  self.APP_URL = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : 'https://audio-guide-theta.vercel.app';
+  
+  console.log('[Service Worker] Running at:', self.APP_URL);
+  
   event.waitUntil(
     caches.open('offline-v1').then((cache) => {
       console.log('[Service Worker] Caching app shell...');
@@ -64,8 +71,14 @@ self.addEventListener('fetch', (event) => {
     return; // Important: this exits the event handler without calling respondWith
   }
   
+  // Properly check if request is for our app, including production URL
+  const isAppRequest = url.hostname === self.location.hostname || 
+                      url.hostname === 'localhost' || 
+                      url.hostname === '127.0.0.1' ||
+                      url.hostname === 'audio-guide-theta.vercel.app';
+  
   // Skip handling external API requests that might have their own CORS requirements
-  if (!url.hostname.includes('localhost') && !url.hostname.includes('127.0.0.1') && !self.location.hostname.includes(url.hostname)) {
+  if (!isAppRequest) {
     return; // Let browser handle external requests
   }
   
