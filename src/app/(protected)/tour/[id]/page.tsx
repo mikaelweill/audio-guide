@@ -295,6 +295,18 @@ function VoiceAgentButton({ currentPoi, clientRef }: { currentPoi: any, clientRe
   );
 }
 
+// Create a wrapper for the RTVIClientProvider to handle the null case - MOVED OUTSIDE the TourPage component
+const SafeRTVIClientProvider: React.FC<{children: ReactNode, client: RTVIClient | null}> = ({ children, client }) => {
+  if (!client) {
+    return <>{children}</>;
+  }
+  return (
+    <RTVIClientProvider client={client}>
+      {children}
+    </RTVIClientProvider>
+  );
+};
+
 export default function TourPage() {
   // Don't log on every render - this causes React DevTools to trigger re-renders
   // logPage('Component rendering');
@@ -1371,22 +1383,12 @@ export default function TourPage() {
     );
   }
   
-  // Create a wrapper for the RTVIClientProvider to handle the null case
-  const SafeRTVIClientProvider: React.FC<{children: ReactNode}> = ({ children }) => {
-    if (!clientRef.current) {
-      return <>{children}</>;
-    }
-    return (
-      <RTVIClientProvider client={clientRef.current}>
-        {children}
-      </RTVIClientProvider>
-    );
-  };
-  
   return (
-    <SafeRTVIClientProvider>
-      <RTVIClientAudio />
-      <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 pb-20">
+    <SafeRTVIClientProvider client={clientRef.current}>
+      <div className="min-h-screen bg-slate-950">
+        {/* Add RTVIClientAudio component back inside the provider */}
+        <RTVIClientAudio />
+        
         {/* Tour Header */}
         <div className="bg-gradient-to-r from-purple-900 via-pink-800 to-orange-900 text-white py-4 shadow-md shadow-purple-900/20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
