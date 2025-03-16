@@ -1,0 +1,17 @@
+{
+  "name": "Audio Travel Guide",
+  "short_name": "Audio Guide",
+  "description": "Explore the world with personalized audio guides",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e293b",
+  "theme_color": "#f97316",
+  "icons": [
+    {
+      "src": "/earth-globe-global-svgrepo-com.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+} 

@@ -16,6 +16,19 @@ export const metadata: Metadata = {
   icons: {
     icon: '/favicon.ico',
   },
+  manifest: '/manifest.json',
+  themeColor: '#f97316',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Audio Guide',
+  },
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
 };
 
 export default function RootLayout({
@@ -25,6 +38,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="apple-touch-icon" href="/earth-globe-global-svgrepo-com.svg" />
+      </head>
       <body className={`${inter.className} flex flex-col min-h-screen`}>
         <AuthProvider>
           <Providers>
@@ -35,6 +51,7 @@ export default function RootLayout({
             <AuthStatus />
             {process.env.NODE_ENV === "development" && <DebugPanel />}
             <Toaster position="bottom-right" />
+            {/* OfflineIndicator will be added in a client component */}
           </Providers>
         </AuthProvider>
       </body>
