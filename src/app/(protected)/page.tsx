@@ -8,7 +8,6 @@ import { toast } from 'react-hot-toast';
 import { RTVIClientProvider, RTVIClientAudio } from '@pipecat-ai/client-react';
 import { RTVIClient } from '@pipecat-ai/client-js';
 import { DailyTransport } from '@pipecat-ai/daily-transport';
-import { useRTVIClient } from '@pipecat-ai/client-react';
 
 const client = new RTVIClient({
   transport: new DailyTransport(),
@@ -292,97 +291,6 @@ const globeStyles = `
     100% { background-position-x: 0; }
   }
 `;
-
-// VoiceAgentButton component
-function VoiceAgentButton() {
-  const [connecting, setConnecting] = useState(false);
-  const [connected, setConnected] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
-  const client = useRTVIClient();
-  
-  const handleConnect = async () => {
-    if (!client) {
-      console.error('RTVIClient not available');
-      return;
-    }
-    
-    // If already connected, disconnect
-    if (connected) {
-      try {
-        setDisconnecting(true);
-        await client.disconnect();
-        setConnected(false);
-        console.log('Disconnected from voice agent');
-      } catch (error) {
-        console.error('Failed to disconnect from voice agent:', error);
-      } finally {
-        setDisconnecting(false);
-      }
-      return;
-    }
-    
-    // Otherwise, connect
-    try {
-      setConnecting(true);
-      await client.connect();
-      setConnected(true);
-      console.log('Connected to voice agent');
-    } catch (error) {
-      console.error('Failed to connect to voice agent:', error);
-    } finally {
-      setConnecting(false);
-    }
-  };
-  
-  return (
-    <button
-      onClick={handleConnect}
-      disabled={connecting || disconnecting}
-      className={`px-4 py-2 rounded-full font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
-        connected 
-          ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30'
-          : connecting
-            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-            : disconnecting
-              ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-              : 'bg-purple-600/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30'
-      }`}
-    >
-      {connected ? (
-        <>
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-          </span>
-          Click to disconnect
-        </>
-      ) : disconnecting ? (
-        <>
-          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          Disconnecting...
-        </>
-      ) : connecting ? (
-        <>
-          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          Connecting...
-        </>
-      ) : (
-        <>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-          </svg>
-          Connect to voice agent
-        </>
-      )}
-    </button>
-  );
-}
 
 export default function Home() {
   console.log('🏠 HOME: Component rendering');
@@ -756,8 +664,6 @@ export default function Home() {
 
         {/* Main container */}
         <div className="container mx-auto px-4 py-8 md:py-12 relative z-10">
-
-          <VoiceAgentButton />
           {/* Hero Section with Globe */}
           <div className="relative overflow-hidden rounded-2xl bg-slate-900/80 shadow-xl mb-12 border border-purple-900/50 backdrop-blur-sm">
             <div className="p-6 md:p-12 relative z-10">
