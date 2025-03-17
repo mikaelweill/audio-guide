@@ -579,14 +579,20 @@ export default function TourList({ tours, loading }: TourListProps) {
       
       let audioData;
       try {
-        audioData = await response.json();
+        const responseData = await response.json();
+        
+        if (!responseData.success) {
+          throw new Error(responseData.error || 'Failed to fetch audio data');
+        }
+        
+        // Extract the audioData property from the response
+        audioData = responseData.audioData;
+        
+        if (!audioData || typeof audioData !== 'object') {
+          throw new Error('Invalid audio data format received from server');
+        }
       } catch (error) {
         throw new Error('Failed to parse audio data response');
-      }
-      
-      // Safety check for malformed data
-      if (!audioData || typeof audioData !== 'object') {
-        throw new Error('Invalid audio data received');
       }
       
       // Download the tour using our offlineTourService with error reporting
