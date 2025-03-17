@@ -620,17 +620,18 @@ export default function TourList({ tours, loading }: TourListProps) {
               </div>
               
               <div className="mt-6 flex flex-wrap gap-2 justify-between">
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                   <a 
                     href={getGoogleMapsUrl(tour)} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="text-orange-300 hover:text-orange-200 text-sm font-medium inline-flex items-center bg-orange-900/30 hover:bg-orange-900/50 px-3 py-2 rounded-md transition-colors border border-orange-800/30"
+                    className="text-orange-300 hover:text-orange-200 text-sm font-medium inline-flex items-center justify-center bg-orange-900/30 hover:bg-orange-900/50 px-3 py-3 sm:py-2 rounded-md transition-colors border border-orange-800/30"
+                    aria-label="View Route in Google Maps"
                   >
-                    <svg className="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor">
+                    <svg className="w-5 h-5 sm:w-4 sm:h-4 sm:mr-1" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
                     </svg>
-                    View Route in Google Maps
+                    <span className="sm:inline">View Route in Google Maps</span>
                   </a>
                   
                   <button
@@ -638,12 +639,13 @@ export default function TourList({ tours, loading }: TourListProps) {
                       e.stopPropagation();
                       startRenaming(tour.id, tour.name);
                     }}
-                    className="text-gray-300 hover:text-gray-200 text-sm font-medium inline-flex items-center bg-slate-800/70 hover:bg-slate-700/70 px-3 py-2 rounded-md transition-colors cursor-pointer"
+                    className="text-gray-300 hover:text-gray-200 text-sm font-medium inline-flex items-center justify-center bg-slate-800/70 hover:bg-slate-700/70 px-3 py-3 sm:py-2 rounded-md transition-colors cursor-pointer"
+                    aria-label="Rename Tour"
                   >
-                    <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-5 h-5 sm:w-4 sm:h-4 sm:mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                     </svg>
-                    Rename Tour
+                    <span className="sm:inline">Rename Tour</span>
                   </button>
                   
                   <button
@@ -651,18 +653,19 @@ export default function TourList({ tours, loading }: TourListProps) {
                       e.stopPropagation();
                       confirmDelete(tour.id);
                     }}
-                    className="text-red-300 hover:text-red-200 text-sm font-medium inline-flex items-center bg-red-900/30 hover:bg-red-900/50 px-3 py-2 rounded-md transition-colors cursor-pointer border border-red-800/30"
+                    className="text-red-300 hover:text-red-200 text-sm font-medium inline-flex items-center justify-center bg-red-900/30 hover:bg-red-900/50 px-3 py-3 sm:py-2 rounded-md transition-colors cursor-pointer border border-red-800/30"
+                    aria-label="Delete Tour"
                   >
-                    <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-5 h-5 sm:w-4 sm:h-4 sm:mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    Delete Tour
+                    <span className="sm:inline">Delete Tour</span>
                   </button>
                 </div>
 
                 <Link
                   href={`/tour/${tour.id}`}
-                  className="bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white rounded-md px-4 py-2 text-sm font-medium transition-all flex items-center shadow-lg shadow-orange-900/30"
+                  className="bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white rounded-md px-4 py-2 text-sm font-medium transition-all flex items-center shadow-lg shadow-orange-900/30 mt-4 sm:mt-0"
                   onClick={() => {
                     logNav(`Navigating to tour: ${tour.id}`);
                     logNav(`Current URL: ${window.location.href}`);
