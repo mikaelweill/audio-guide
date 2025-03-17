@@ -946,11 +946,11 @@ export default function TourList({ tours, loading }: TourListProps) {
             )}
             
             {/* Action buttons row - improved mobile buttons */}
-            <div className="flex flex-col space-y-2 md:flex-row md:space-y-0 md:space-x-2 mb-3 mt-2">
+            <div className="flex items-center space-x-2 mb-3 mt-2">
               {/* Start Button */}
               <Link
                 href={`/tour/${tour.id}`}
-                className="self-start inline-flex items-center justify-center text-white text-xs font-medium bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 px-3 py-1.5 rounded-md transition-all cursor-pointer shadow-sm shadow-orange-900/20"
+                className="flex-1 inline-flex items-center justify-center text-white text-xs font-medium bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 px-3 py-1.5 rounded-md transition-all cursor-pointer shadow-sm shadow-orange-900/20"
                 onClick={() => {
                   logNav(`Navigating to tour: ${tour.id}`);
                   window._navTimestamp = Date.now();
@@ -970,7 +970,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                       e.stopPropagation();
                       handleDownload(tour);
                     }}
-                    className="self-start inline-flex items-center justify-center text-white text-xs font-medium bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 px-3 py-1.5 rounded-md transition-all cursor-pointer shadow-sm shadow-orange-900/20 active:scale-95"
+                    className="flex-1 inline-flex items-center justify-center text-white text-xs font-medium bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 px-3 py-1.5 rounded-md transition-all cursor-pointer shadow-sm shadow-orange-900/20 active:scale-95"
                     disabled={!isOnline}
                   >
                     <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -993,7 +993,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                         }));
                       }
                     }}
-                    className="self-start inline-flex items-center justify-center text-green-300 hover:text-green-200 text-xs font-medium bg-green-900/30 hover:bg-green-900/50 px-3 py-1.5 rounded-md transition-all cursor-pointer shadow-sm shadow-green-900/20"
+                    className="flex-1 inline-flex items-center justify-center text-green-300 hover:text-green-200 text-xs font-medium bg-green-900/30 hover:bg-green-900/50 px-3 py-1.5 rounded-md transition-all cursor-pointer shadow-sm shadow-green-900/20"
                   >
                     <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
