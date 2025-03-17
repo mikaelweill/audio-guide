@@ -1,8 +1,16 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
+import { 
+  checkIfTourIsDownloaded, 
+  downloadTour, 
+  deleteTour, 
+  getAllDownloadedTours,
+  isPwa
+} from '@/services/offlineTourService';
+import clsx from 'clsx';
 
 // Add debug logging for navigation
 const NAV_DEBUG = true;
@@ -58,6 +66,100 @@ interface TourListProps {
   loading: boolean;
 }
 
+type DownloadProgressProps = {
+  progress: number;
+  status: string | undefined;
+  onCancel?: () => void;
+};
+
+function DownloadProgress({ progress, status, onCancel }: DownloadProgressProps) {
+  // Track time since last progress update to detect stuck downloads
+  const [timeWithNoProgress, setTimeWithNoProgress] = useState(0);
+  const [lastProgress, setLastProgress] = useState(progress);
+  const [showForceReset, setShowForceReset] = useState(false);
+  
+  // Check for stuck downloads
+  useEffect(() => {
+    if (progress !== lastProgress) {
+      // Progress is updating, reset counter
+      setTimeWithNoProgress(0);
+      setLastProgress(progress);
+      setShowForceReset(false);
+    } else {
+      // Set up interval to track stuck progress
+      const interval = setInterval(() => {
+        setTimeWithNoProgress(prev => {
+          const newTime = prev + 1;
+          // If no progress for 15 seconds, show force reset option
+          if (newTime >= 15 && !showForceReset) {
+            setShowForceReset(true);
+          }
+          return newTime;
+        });
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [progress, lastProgress, showForceReset]);
+
+  return (
+    <div className="w-full mt-2">
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-xs text-gray-500">
+          {status || 'Downloading...'}
+          {timeWithNoProgress > 5 && (
+            <span className="ml-1 text-amber-500">
+              {timeWithNoProgress > 30 ? '(Stuck?)' : `(${timeWithNoProgress}s)`}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center">
+          {showForceReset && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm('Force reset this download? This will clear any partial data.')) {
+                  // Clear IndexedDB for this tour
+                  if (window.indexedDB) {
+                    window.indexedDB.deleteDatabase('offline-audio-guide');
+                  }
+                  
+                  // Force reload the page
+                  window.location.reload();
+                }
+              }}
+              className="text-xs font-medium text-amber-600 hover:text-amber-800 mr-2"
+            >
+              Force Reset
+            </button>
+          )}
+          {onCancel && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancel();
+              }}
+              className="text-xs text-red-500 hover:text-red-700"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="w-full bg-gray-200 rounded-full h-2">
+        <div 
+          className={`h-2 rounded-full transition-all duration-300 ${
+            timeWithNoProgress > 15 
+              ? 'bg-amber-500' 
+              : 'bg-gradient-to-r from-orange-500 to-pink-500'
+          }`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function TourList({ tours, loading }: TourListProps) {
   const [expandedTourId, setExpandedTourId] = useState<string | null>(null);
   const [editingTourId, setEditingTourId] = useState<string | null>(null);
@@ -65,6 +167,121 @@ export default function TourList({ tours, loading }: TourListProps) {
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [offlineStatus, setOfflineStatus] = useState<boolean>(false);
+  const [downloadedTours, setDownloadedTours] = useState<string[]>([]);
+  const [downloading, setDownloading] = useState<Record<string, boolean>>({});
+  const [downloadProgress, setDownloadProgress] = useState<Record<string, { progress: number; status?: string }>>({});
+  const [downloadErrors, setDownloadErrors] = useState<Record<string, string>>({});
+  const [isPwaMode, setIsPwaMode] = useState<boolean>(false);
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [downloadControllers, setDownloadControllers] = useState<Record<string, AbortController>>({});
+
+  // Check if we're in PWA mode
+  useEffect(() => {
+    setIsPwaMode(isPwa());
+  }, []);
+
+  // Check if we're offline
+  useEffect(() => {
+    const handleOnlineStatusChange = () => {
+      setOfflineStatus(!navigator.onLine);
+    };
+
+    // Set initial status
+    setOfflineStatus(!navigator.onLine);
+
+    // Add event listeners
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('offline', handleOnlineStatusChange);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('online', handleOnlineStatusChange);
+      window.removeEventListener('offline', handleOnlineStatusChange);
+    };
+  }, []);
+
+  // Check which tours are downloaded
+  useEffect(() => {
+    const checkDownloadedTours = async () => {
+      if (isPwaMode) {
+        try {
+          const tours = await getAllDownloadedTours();
+          const tourIds = tours.map(tour => tour.id);
+          setDownloadedTours(tourIds);
+        } catch (error) {
+          console.error('Error checking downloaded tours:', error);
+        }
+      }
+    };
+
+    checkDownloadedTours();
+  }, [tours, isPwaMode]);
+
+  // Handle online/offline events
+  useEffect(() => {
+    const handleOnlineStatus = () => {
+      setIsOnline(navigator.onLine);
+    };
+
+    window.addEventListener('online', handleOnlineStatus);
+    window.addEventListener('offline', handleOnlineStatus);
+    
+    // Initial check
+    setIsOnline(navigator.onLine);
+
+    return () => {
+      window.removeEventListener('online', handleOnlineStatus);
+      window.removeEventListener('offline', handleOnlineStatus);
+    };
+  }, []);
+
+  // Handle downloading a tour
+  const handleDownloadTour = async (tour: Tour, audioData: Record<string, any>) => {
+    try {
+      setDownloading({ ...downloading, [tour.id]: true });
+      setDownloadProgress(prev => ({
+        ...prev,
+        [tour.id]: { progress: 0, status: 'Initializing download...' }
+      }));
+      
+      await downloadTour(
+        tour,
+        audioData,
+        (progress, status) => {
+          setDownloadProgress(prev => ({
+            ...prev,
+            [tour.id]: { progress, status }
+          }));
+        }
+      );
+      
+      setDownloading({ ...downloading, [tour.id]: false });
+      setDownloadedTours(prev => [...prev, tour.id]);
+      
+      // Clear progress after a delay
+      setTimeout(() => {
+        setDownloadProgress(prev => {
+          const newProgress = { ...prev };
+          delete newProgress[tour.id];
+          return newProgress;
+        });
+      }, 2000);
+    } catch (error) {
+      console.error('Error downloading tour:', error);
+      setDownloading({ ...downloading, [tour.id]: false });
+    }
+  };
+
+  // Handle deleting a downloaded tour
+  const handleDeleteDownload = async (tourId: string, tourName: string) => {
+    try {
+      await deleteTour(tourId);
+      setDownloadedTours(prev => prev.filter(id => id !== tourId));
+    } catch (error) {
+      console.error('Error deleting downloaded tour:', error);
+    }
+  };
 
   const toggleExpand = (tourId: string) => {
     setExpandedTourId(expandedTourId === tourId ? null : tourId);
@@ -314,6 +531,183 @@ export default function TourList({ tours, loading }: TourListProps) {
     return `${lat}, ${lng}`;
   };
 
+  // Handle download of tour for offline use
+  const handleDownload = async (tour: Tour) => {
+    try {
+      // Clear any previous errors
+      setDownloadErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[tour.id];
+        return newErrors;
+      });
+
+      // Set initial progress
+      setDownloadProgress(prev => ({
+        ...prev,
+        [tour.id]: { progress: 0, status: 'Initializing download...' }
+      }));
+
+      // Create a new AbortController
+      const controller = new AbortController();
+      setDownloadControllers(prev => ({
+        ...prev,
+        [tour.id]: controller
+      }));
+
+      // Fetch audio data from our API with a timeout
+      const fetchWithTimeout = async () => {
+        const fetchTimeoutId = setTimeout(() => controller.abort(), 30000);
+        try {
+          const response = await fetch(`/api/tours/${tour.id}/audio-data`, {
+            signal: controller.signal
+          });
+          
+          clearTimeout(fetchTimeoutId);
+          return response;
+        } catch (error) {
+          clearTimeout(fetchTimeoutId);
+          throw error;
+        }
+      };
+
+      // Get the audio data
+      const response = await fetchWithTimeout();
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch audio data: ${response.status} ${response.statusText}`);
+      }
+      
+      let audioData;
+      try {
+        audioData = await response.json();
+      } catch (error) {
+        throw new Error('Failed to parse audio data response');
+      }
+      
+      // Safety check for malformed data
+      if (!audioData || typeof audioData !== 'object') {
+        throw new Error('Invalid audio data received');
+      }
+      
+      // Download the tour using our offlineTourService with error reporting
+      await downloadTour(tour, audioData, (progress, status) => {
+        // Update UI progress
+        setDownloadProgress(prev => ({
+          ...prev,
+          [tour.id]: { progress, status }
+        }));
+        
+        // Check for stuck download (100% progress for too long)
+        if (progress === 100) {
+          const DOWNLOAD_STUCK_TIMEOUT = 10000; // 10 seconds
+          const stuckTimeoutId = setTimeout(() => {
+            console.error(`Download appears stuck at 100% for tour ${tour.id}`);
+            // Force clear the progress to fix UI
+            setDownloadProgress(prev => {
+              const newProgress = { ...prev };
+              delete newProgress[tour.id];
+              return newProgress;
+            });
+            
+            // Show error
+            setDownloadErrors(prev => ({
+              ...prev,
+              [tour.id]: 'Download completed but app did not update. Try refreshing the page.'
+            }));
+          }, DOWNLOAD_STUCK_TIMEOUT);
+          
+          // Clean up the timeout if progress changes or component unmounts
+          return () => clearTimeout(stuckTimeoutId);
+        }
+      });
+      
+      // When download is complete, update downloaded tours list
+      setDownloadedTours(prev => [...prev, tour.id]);
+      
+      // And clear the progress display after a few seconds
+      setTimeout(() => {
+        setDownloadProgress(prev => {
+          const newProgress = { ...prev };
+          delete newProgress[tour.id];
+          return newProgress;
+        });
+
+        // Clear the controller too
+        setDownloadControllers(prev => {
+          const newControllers = { ...prev };
+          delete newControllers[tour.id];
+          return newControllers;
+        });
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Failed to download tour:', error);
+      
+      // Don't show error message if it was a user-initiated cancel
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Download was cancelled by user');
+      } else {
+        // Show error message with suggestion
+        let errorMessage = error instanceof Error ? error.message : 'Failed to download tour';
+        let suggestion = '';
+        
+        // Add helpful suggestions based on error type
+        if (errorMessage.includes('fetch') || errorMessage.includes('network')) {
+          suggestion = ' Check your internet connection and try again.';
+        } else if (errorMessage.includes('parse') || errorMessage.includes('JSON')) {
+          suggestion = ' The server response was invalid. Try refreshing the page.';
+        } else if (errorMessage.includes('timeout')) {
+          suggestion = ' The download request took too long. Try again later.';
+        } else if (errorMessage.includes('IndexedDB') || errorMessage.includes('storage')) {
+          suggestion = ' Your browser storage might be full. Try clearing some space.';
+        }
+        
+        setDownloadErrors(prev => ({
+          ...prev,
+          [tour.id]: errorMessage + suggestion
+        }));
+      }
+      
+      // Clear progress display
+      setDownloadProgress(prev => {
+        const newProgress = { ...prev };
+        delete newProgress[tour.id];
+        return newProgress;
+      });
+
+      // Clear the controller
+      setDownloadControllers(prev => {
+        const newControllers = { ...prev };
+        delete newControllers[tour.id];
+        return newControllers;
+      });
+    }
+  };
+
+  // Cancel download
+  const handleCancelDownload = (tourId: string) => {
+    const controller = downloadControllers[tourId];
+    if (controller) {
+      controller.abort();
+      
+      // Remove the controller from state
+      setDownloadControllers(prev => {
+        const newControllers = { ...prev };
+        delete newControllers[tourId];
+        return newControllers;
+      });
+      
+      // Clear progress display
+      setDownloadProgress(prev => {
+        const newProgress = { ...prev };
+        delete newProgress[tourId];
+        return newProgress;
+      });
+      
+      console.log('Download cancelled');
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -337,9 +731,38 @@ export default function TourList({ tours, loading }: TourListProps) {
     );
   }
 
+  // Filter tours when offline to only show downloaded ones
+  const displayedTours = offlineStatus 
+    ? tours.filter(tour => downloadedTours.includes(tour.id)) 
+    : tours;
+
+  if (offlineStatus && displayedTours.length === 0) {
+    return (
+      <div className="bg-slate-900/60 p-8 rounded-lg text-center border border-purple-900/50">
+        <div className="mb-4">
+          <svg className="w-12 h-12 mx-auto text-orange-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-medium text-white mb-2">You're Offline</h3>
+        <p className="text-purple-100/80 mb-2">No downloaded tours available.</p>
+        <p className="text-purple-100/60 text-sm">Connect to the internet to see your tours or download tours for offline use.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {tours.map((tour) => (
+      {offlineStatus && (
+        <div className="bg-orange-900/30 border border-orange-800/50 rounded-lg p-4 mb-4 flex items-center">
+          <svg className="w-5 h-5 mr-2 text-orange-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span className="text-orange-300">You're offline. Only downloaded tours are shown.</span>
+        </div>
+      )}
+      
+      {displayedTours.map((tour) => (
         <div 
           key={tour.id} 
           className="bg-slate-900/60 border border-purple-900/50 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all relative group backdrop-blur-sm"
@@ -383,7 +806,8 @@ export default function TourList({ tours, loading }: TourListProps) {
           )}
 
           <div className="p-4">
-            <div className="flex justify-between items-center mb-2">
+            {/* Title row layout */}
+            <div className="flex items-center justify-between mb-2">
               {editingTourId === tour.id ? (
                 <div className="flex-1 mr-2">
                   <input
@@ -429,59 +853,193 @@ export default function TourList({ tours, loading }: TourListProps) {
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-1 items-center mr-2 group">
-                  <h3 
-                    className="text-lg font-medium text-white hover:text-orange-400 cursor-pointer"
-                    onClick={() => toggleExpand(tour.id)}
-                  >
-                    {tour.name}
-                  </h3>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation(); // Prevent expanding/collapsing when clicking edit
-                      startRenaming(tour.id, tour.name);
-                    }}
-                    className="ml-2 p-1 text-gray-400 hover:text-orange-400 hover:bg-slate-800/70 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                    title="Rename tour"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation(); // Prevent expanding/collapsing when clicking delete
-                      confirmDelete(tour.id);
-                    }}
-                    className="ml-1 p-1 text-gray-400 hover:text-red-400 hover:bg-slate-800/70 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                    title="Delete tour"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
+                <>
+                  <div className="flex-1 flex items-center">
+                    <h3 
+                      className="text-lg font-medium text-white hover:text-orange-400 cursor-pointer truncate"
+                      onClick={() => toggleExpand(tour.id)}
+                    >
+                      {tour.name}
+                    </h3>
+                    
+                    {/* Mobile-only edit/delete icons next to title */}
+                    <div className="flex sm:hidden items-center ml-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRenaming(tour.id, tour.name);
+                        }}
+                        className="p-1 text-gray-400 hover:text-orange-400 hover:bg-slate-800/70 rounded-full"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          confirmDelete(tour.id);
+                        }}
+                        className="p-1 ml-1 text-gray-400 hover:text-red-400 hover:bg-slate-800/70 rounded-full"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Desktop edit/delete/expand buttons */}
+                  <div className="flex items-center">
+                    {/* Desktop-only edit/delete buttons */}
+                    <div className="hidden sm:flex items-center group">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRenaming(tour.id, tour.name);
+                        }}
+                        className="ml-2 p-1 text-gray-400 hover:text-orange-400 hover:bg-slate-800/70 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        title="Rename tour"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          confirmDelete(tour.id);
+                        }}
+                        className="ml-1 p-1 text-gray-400 hover:text-red-400 hover:bg-slate-800/70 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        title="Delete tour"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                    
+                    {/* Expand button - visible for all devices */}
+                    <button
+                      onClick={() => toggleExpand(tour.id)}
+                      className="h-8 w-8 flex items-center justify-center ml-2"
+                      title={expandedTourId === tour.id ? "Collapse" : "Expand"}
+                    >
+                      <svg 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        className={`h-5 w-5 transition-transform text-gray-400 hover:text-orange-400 ${expandedTourId === tour.id ? 'transform rotate-180' : ''}`} 
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+                </>
               )}
-              <div className="text-gray-400">
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  className={`h-5 w-5 transition-transform hover:text-orange-400 ${expandedTourId === tour.id ? 'transform rotate-180' : ''}`} 
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  stroke="currentColor"
-                  onClick={() => toggleExpand(tour.id)}
-                  cursor="pointer"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
             </div>
             
+            {/* Description section */}
             {tour.description && (
               <p className="text-purple-100/80 text-sm mb-2 line-clamp-2">{tour.description}</p>
             )}
             
-            <div className="flex flex-wrap gap-2 items-center mt-3 text-sm text-purple-100/80">
+            {/* Action buttons row - improved mobile buttons */}
+            <div className="flex items-center space-x-2 mb-3 mt-2">
+              {/* Start Button */}
+              <Link
+                href={`/tour/${tour.id}`}
+                className="w-full h-10 text-white hover:text-white text-xs sm:text-sm font-medium flex items-center justify-center bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 px-2 rounded-md transition-colors cursor-pointer shadow-sm shadow-orange-900/20"
+                onClick={() => {
+                  logNav(`Navigating to tour: ${tour.id}`);
+                  window._navTimestamp = Date.now();
+                }}
+              >
+                <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <span className="whitespace-nowrap">Start</span>
+              </Link>
+              
+              {/* Download button - matching Start button */}
+              {isPwaMode && !downloading[tour.id] && !downloadProgress[tour.id] && (
+                !downloadedTours.includes(tour.id) ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownload(tour);
+                    }}
+                    className="w-full h-10 text-white text-xs sm:text-sm font-medium flex items-center justify-center bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 px-2 rounded-md transition-all active:scale-95"
+                    disabled={!isOnline}
+                  >
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    <span className="whitespace-nowrap">Download</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      try {
+                        deleteTour(tour.id);
+                        setDownloadedTours(prev => prev.filter(id => id !== tour.id));
+                      } catch (error) {
+                        console.error('Failed to delete tour:', error);
+                        setDownloadErrors(prev => ({
+                          ...prev,
+                          [tour.id]: error instanceof Error ? error.message : 'Failed to delete tour'
+                        }));
+                      }
+                    }}
+                    className="w-full h-10 text-green-300 hover:text-green-200 text-xs sm:text-sm font-medium flex items-center justify-center bg-green-900/30 hover:bg-green-900/50 px-2 rounded-md transition-colors"
+                  >
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="whitespace-nowrap">Downloaded</span>
+                  </button>
+                )
+              )}
+            </div>
+                
+            {/* Download progress indicator */}
+            {isPwaMode && (downloadProgress[tour.id] || downloadErrors[tour.id]) && (
+              <div className="mb-3 mt-1">
+                {/* Error message */}
+                {downloadErrors[tour.id] && (
+                  <div className="text-xs text-red-500 mb-1">
+                    Error: {downloadErrors[tour.id]}
+                    <button 
+                      className="ml-2 text-blue-500 hover:text-blue-700" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDownloadErrors(prev => {
+                          const newErrors = { ...prev };
+                          delete newErrors[tour.id];
+                          return newErrors;
+                        });
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+                
+                {/* Download progress */}
+                {downloadProgress[tour.id] && (
+                  <DownloadProgress 
+                    progress={downloadProgress[tour.id].progress} 
+                    status={downloadProgress[tour.id].status}
+                    onCancel={() => handleCancelDownload(tour.id)}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Tour info row */}
+            <div className="flex flex-wrap gap-2 items-center text-sm text-purple-100/80">
               <div className="flex items-center">
                 <svg className="w-4 h-4 mr-1 text-orange-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -653,7 +1211,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                       e.stopPropagation();
                       confirmDelete(tour.id);
                     }}
-                    className="text-red-300 hover:text-red-200 text-sm font-medium inline-flex items-center justify-center bg-red-900/30 hover:bg-red-900/50 px-3 py-3 sm:py-2 rounded-md transition-colors cursor-pointer border border-red-800/30"
+                    className="text-gray-300 hover:text-red-300 text-sm font-medium inline-flex items-center justify-center bg-slate-800/70 hover:bg-slate-700/70 px-3 py-3 sm:py-2 rounded-md transition-colors cursor-pointer"
                     aria-label="Delete Tour"
                   >
                     <svg className="w-5 h-5 sm:w-4 sm:h-4 sm:mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -661,32 +1219,60 @@ export default function TourList({ tours, loading }: TourListProps) {
                     </svg>
                     <span className="sm:inline">Delete Tour</span>
                   </button>
+                  
+                  {/* Only show download button in PWA mode */}
+                  {isPwaMode && (
+                    <>
+                      {downloading[tour.id] ? (
+                        <div className="mt-2 sm:mt-0 sm:ml-2 w-full sm:w-auto">
+                          <DownloadProgress 
+                            progress={downloadProgress[tour.id]?.progress || 0} 
+                            status={downloadProgress[tour.id]?.status}
+                            onCancel={() => handleCancelDownload(tour.id)}
+                          />
+                        </div>
+                      ) : downloadedTours.includes(tour.id) ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            try {
+                              deleteTour(tour.id);
+                              setDownloadedTours(prev => prev.filter(id => id !== tour.id));
+                            } catch (error) {
+                              console.error('Failed to delete tour:', error);
+                              setDownloadErrors(prev => ({
+                                ...prev,
+                                [tour.id]: error instanceof Error ? error.message : 'Failed to delete tour'
+                              }));
+                            }
+                          }}
+                          className="mt-2 sm:mt-0 sm:ml-2 text-green-300 hover:text-green-200 text-xs sm:text-sm font-medium inline-flex items-center justify-center bg-green-900/30 hover:bg-green-900/50 px-3 py-2 rounded-md transition-colors cursor-pointer"
+                          aria-label="Remove Offline Version"
+                        >
+                          <svg className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="sm:inline whitespace-nowrap">Downloaded</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(tour);
+                          }}
+                          className="mt-2 sm:mt-0 sm:ml-2 text-xs sm:text-sm font-medium inline-flex items-center justify-center bg-gradient-to-r from-orange-500 to-pink-500 text-white px-3 py-2 rounded-md transition-all hover:from-orange-600 hover:to-pink-600 active:scale-95"
+                          aria-label="Download for Offline Use"
+                          disabled={!isOnline}
+                        >
+                          <svg className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          <span className="sm:inline whitespace-nowrap">Download</span>
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
-
-                <Link
-                  href={`/tour/${tour.id}`}
-                  className="bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white rounded-md px-4 py-2 text-sm font-medium transition-all flex items-center shadow-lg shadow-orange-900/30 mt-4 sm:mt-0"
-                  onClick={() => {
-                    logNav(`Navigating to tour: ${tour.id}`);
-                    logNav(`Current URL: ${window.location.href}`);
-                    logNav(`Navigation triggered by Link component`);
-                    logNav(`Current visibility state: ${document.visibilityState}`);
-                    
-                    // Log cookies at navigation time
-                    const cookies = document.cookie.split(';').map(c => c.trim().split('=')[0]);
-                    logNav(`Cookies at navigation: ${cookies.join(', ')}`);
-                    
-                    // Capture navigation timestamp for duration tracking
-                    window._navTimestamp = Date.now();
-                  }}
-                >
-                  <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M15 10l-9 5l9 5l9 -5l-9 -5z"></path>
-                    <path d="M6 15v4.5l9 5l9 -5v-4.5"></path>
-                    <path d="M15 5l-9 5l9 5l9 -5l-9 -5z"></path>
-                  </svg>
-                  Start Tour
-                </Link>
               </div>
             </div>
           )}
@@ -694,4 +1280,4 @@ export default function TourList({ tours, loading }: TourListProps) {
       ))}
     </div>
   );
-} 
+}

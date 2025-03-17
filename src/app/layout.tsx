@@ -40,6 +40,39 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <link rel="apple-touch-icon" href="/earth-globe-global-svgrepo-com.svg" />
+        <script 
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Check if any workers need to be unregistered
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                  const currentCache = localStorage.getItem('sw-cache-version');
+                  const expectedVersion = '1.0.1'; // Increment this when service worker needs refresh
+
+                  if (currentCache !== expectedVersion) {
+                    // Unregister all service workers and clear indexedDB if version mismatch
+                    for(let registration of registrations) {
+                      registration.unregister();
+                      console.log('Unregistered old service worker');
+                    }
+                    
+                    // Clear any problematic IndexedDB databases
+                    if (window.indexedDB) {
+                      window.indexedDB.deleteDatabase('offline-audio-guide');
+                      console.log('Cleared offline-audio-guide database');
+                    }
+                    
+                    // Update cache version
+                    localStorage.setItem('sw-cache-version', expectedVersion);
+                    
+                    // Force page reload after cleanup
+                    window.location.reload();
+                  }
+                });
+              }
+            `
+          }}
+        />
       </head>
       <body className={`${inter.className} flex flex-col min-h-screen`}>
         <AuthProvider>

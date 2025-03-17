@@ -1,4 +1,4 @@
-// Network check script with improved connectivity detection
+// Network check script with improved connectivity detection and service worker recovery
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     // Define our app URL for consistency
@@ -8,23 +8,80 @@ if ('serviceWorker' in navigator) {
       
     console.log('App running at:', APP_URL);
     
-    // Register the service worker
-    // Note: next-pwa will actually register the compiled service worker at /sw.js
-    navigator.serviceWorker.register('/sw.js', { 
-      scope: '/' 
-    }).then(registration => {
-      console.log('SW registered successfully: ', registration);
+    // Track service worker registration attempts
+    let registerAttempts = 0;
+    const MAX_REGISTER_ATTEMPTS = 3;
+
+    // Function to register service worker with retry
+    const registerServiceWorker = () => {
+      if (registerAttempts >= MAX_REGISTER_ATTEMPTS) {
+        console.error('Max service worker registration attempts reached');
+        return;
+      }
+
+      registerAttempts++;
       
-      // Force update the service worker
-      registration.update();
-      
-      // Check for updates every 5 minutes
-      setInterval(() => {
-        console.log('Checking for SW updates...');
+      // Register the service worker
+      // Note: next-pwa will actually register the compiled service worker at /sw.js
+      navigator.serviceWorker.register('/sw.js', { 
+        scope: '/' 
+      }).then(registration => {
+        console.log('SW registered successfully: ', registration);
+        
+        // Reset the attempt counter on success
+        registerAttempts = 0;
+        
+        // Force update the service worker
         registration.update();
-      }, 5 * 60 * 1000);
-    }).catch(error => {
-      console.log('SW registration failed: ', error);
+        
+        // Track failed states
+        if (registration.installing) {
+          registration.installing.addEventListener('statechange', (event) => {
+            if (event.target.state === 'redundant') {
+              console.error('Service worker installation failed, will retry');
+              setTimeout(registerServiceWorker, 5000);
+            }
+          });
+        }
+        
+        // Check for updates every 5 minutes
+        setInterval(() => {
+          console.log('Checking for SW updates...');
+          registration.update().catch(err => {
+            console.error('Error updating service worker:', err);
+          });
+        }, 5 * 60 * 1000);
+      }).catch(error => {
+        console.error('SW registration failed: ', error);
+        
+        // Try again after a delay
+        setTimeout(registerServiceWorker, 5000 * registerAttempts);
+      });
+    };
+
+    // Start registration process
+    registerServiceWorker();
+    
+    // Handle service worker error recovery
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      console.log('Service worker controller changed');
+    });
+    
+    // Monitor for service worker errors
+    window.addEventListener('error', (event) => {
+      if (event.filename && event.filename.includes('/sw.js')) {
+        console.error('Service worker error detected:', event);
+        
+        // Try to recover by unregistering and registering again
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          for (let registration of registrations) {
+            registration.unregister();
+          }
+          
+          console.log('Unregistered problematic service workers, will retry');
+          setTimeout(registerServiceWorker, 3000);
+        });
+      }
     });
   });
 }

@@ -8,6 +8,7 @@ import { toast } from 'react-hot-toast';
 import { RTVIClientProvider, RTVIClientAudio } from '@pipecat-ai/client-react';
 import { RTVIClient } from '@pipecat-ai/client-js';
 import { DailyTransport } from '@pipecat-ai/daily-transport';
+import { isPwa } from '@/services/offlineTourService';
 
 const client = new RTVIClient({
   transport: new DailyTransport(),
@@ -315,6 +316,15 @@ export default function Home() {
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
     libraries: libraries as any,
   });
+
+  // PWA state
+  const [showPwaTools, setShowPwaTools] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  // Check if we're in PWA mode
+  useEffect(() => {
+    setShowPwaTools(isPwa());
+  }, []);
 
   // Functions to handle modal
   const openModal = () => {
@@ -634,6 +644,49 @@ export default function Home() {
     requestUserLocation();
   }, []);
 
+  // Reset offline data
+  const handleResetOfflineData = async () => {
+    if (confirm('Are you sure you want to reset all offline data? This will delete all downloaded tours.')) {
+      setResetting(true);
+      try {
+        // Clear all IndexedDB databases
+        if (window.indexedDB) {
+          await window.indexedDB.deleteDatabase('offline-audio-guide');
+        }
+
+        // Clear all caches
+        if ('caches' in window) {
+          const cacheNames = await caches.keys();
+          await Promise.all(
+            cacheNames.map(cacheName => caches.delete(cacheName))
+          );
+        }
+
+        // Unregister all service workers
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(
+            registrations.map(registration => registration.unregister())
+          );
+        }
+
+        // Clear localStorage
+        localStorage.clear();
+
+        // Show success message
+        alert('Offline data has been reset. The app will now reload.');
+        
+        // Reload the page
+        window.location.reload();
+      } catch (error) {
+        console.error('Error resetting offline data:', error);
+        alert('Failed to reset offline data: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      } finally {
+        setResetting(false);
+      }
+    }
+  };
+
   return (
     <RTVIClientProvider client={client}>
       <RTVIClientAudio />
@@ -808,6 +861,26 @@ export default function Home() {
               )}
             </div>
           </div>
+
+          {/* PWA Tools */}
+          {showPwaTools && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <h2 className="text-lg font-semibold text-blue-800 mb-2">PWA Tools</h2>
+              <p className="text-sm text-blue-600 mb-3">
+                These tools are available because you're using the app in PWA mode.
+              </p>
+              <button
+                onClick={handleResetOfflineData}
+                disabled={resetting}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {resetting ? 'Resetting...' : 'Reset Offline Data'}
+              </button>
+              <p className="text-xs text-gray-500 mt-1">
+                Use this if you're experiencing issues with offline functionality.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Tour modal */}
