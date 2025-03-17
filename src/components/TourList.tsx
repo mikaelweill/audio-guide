@@ -946,17 +946,17 @@ export default function TourList({ tours, loading }: TourListProps) {
             )}
             
             {/* Action buttons row - improved mobile buttons */}
-            <div className="flex items-center space-x-2 mb-3 mt-2">
+            <div className="flex flex-col space-y-2 md:flex-row md:space-y-0 md:space-x-2 mb-3 mt-2">
               {/* Start Button */}
               <Link
                 href={`/tour/${tour.id}`}
-                className="w-full h-10 text-white hover:text-white text-xs sm:text-sm font-medium flex items-center justify-center bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 px-2 rounded-md transition-colors cursor-pointer shadow-sm shadow-orange-900/20"
+                className="self-start inline-flex items-center justify-center text-white text-xs font-medium bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 px-3 py-1.5 rounded-md transition-all cursor-pointer shadow-sm shadow-orange-900/20"
                 onClick={() => {
                   logNav(`Navigating to tour: ${tour.id}`);
                   window._navTimestamp = Date.now();
                 }}
               >
-                <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-3 h-3 mr-1.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="5 3 19 12 5 21 5 3"></polygon>
                 </svg>
                 <span className="whitespace-nowrap">Start</span>
@@ -970,10 +970,10 @@ export default function TourList({ tours, loading }: TourListProps) {
                       e.stopPropagation();
                       handleDownload(tour);
                     }}
-                    className="w-full h-10 text-white text-xs sm:text-sm font-medium flex items-center justify-center bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 px-2 rounded-md transition-all active:scale-95"
+                    className="self-start inline-flex items-center justify-center text-white text-xs font-medium bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 px-3 py-1.5 rounded-md transition-all cursor-pointer shadow-sm shadow-orange-900/20 active:scale-95"
                     disabled={!isOnline}
                   >
-                    <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
                     <span className="whitespace-nowrap">Download</span>
@@ -993,9 +993,9 @@ export default function TourList({ tours, loading }: TourListProps) {
                         }));
                       }
                     }}
-                    className="w-full h-10 text-green-300 hover:text-green-200 text-xs sm:text-sm font-medium flex items-center justify-center bg-green-900/30 hover:bg-green-900/50 px-2 rounded-md transition-colors"
+                    className="self-start inline-flex items-center justify-center text-green-300 hover:text-green-200 text-xs font-medium bg-green-900/30 hover:bg-green-900/50 px-3 py-1.5 rounded-md transition-all cursor-pointer shadow-sm shadow-green-900/20"
                   >
-                    <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                     <span className="whitespace-nowrap">Downloaded</span>
