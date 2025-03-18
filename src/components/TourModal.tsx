@@ -548,8 +548,29 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
       isEmpty: !formData.description || formData.description.trim() === ''
     });
     
-    // Extract all tour data first (no async operations)
-    const tourName = formData.tourName || `Tour near ${preferences.startLocation.address}`;
+    // Generate a meaningful tour name based on POI names if user didn't provide one
+    let tourName = formData.tourName;
+    
+    if (!tourName || tourName.trim() === '') {
+      // Filter out starting/ending points to get actual POIs
+      const actualPois = tourRoute.filter(poi => 
+        !poi.types.includes('starting_point') && !poi.types.includes('end_point')
+      );
+      
+      if (actualPois.length === 0) {
+        // Fallback if no actual POIs
+        tourName = `Tour near ${preferences.startLocation.address}`;
+      } else if (actualPois.length === 1) {
+        // Only one POI
+        tourName = `Tour of ${actualPois[0].name}`;
+      } else if (actualPois.length === 2) {
+        // Two POIs
+        tourName = `Tour of ${actualPois[0].name} and ${actualPois[1].name}`;
+      } else {
+        // Three or more POIs - use first 2 and indicate there are more
+        tourName = `Tour of ${actualPois[0].name}, ${actualPois[1].name}, and more`;
+      }
+    }
     
     // Extract route data keeping ALL POIs including start/end points
     // Previously we were filtering out start/end points which caused maps to show incomplete routes

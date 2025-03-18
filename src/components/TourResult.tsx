@@ -146,24 +146,19 @@ export default function TourResult({
   });
   
   const handleSave = () => {
-    // Validate form fields - only name is required
+    // Both fields are now optional
     const errors = {
-      name: !formData.tourName?.trim(),
-      description: false // Description is now optional
+      name: false, // Name is now optional too
+      description: false // Description is already optional
     };
     
     setFormErrors(errors);
     
-    // If name is valid, proceed with save
-    if (!errors.name) {
-      if (onSaveTour) {
-        onSaveTour();
-      } else if (onSave) {
-        onSave();
-      }
-    } else {
-      // Scroll to the form section
-      document.getElementById('tour-form')?.scrollIntoView({ behavior: 'smooth' });
+    // Always proceed with save since all fields are optional
+    if (onSaveTour) {
+      onSaveTour();
+    } else if (onSave) {
+      onSave();
     }
   };
   
@@ -174,13 +169,13 @@ export default function TourResult({
         <h3 className="text-lg font-bold text-white mb-3">Save Your Tour</h3>
         <div className="mb-4">
           <label className="block text-gray-300 text-sm font-medium mb-2">
-            Tour Name <span className="text-pink-500">*</span>
+            Tour Name
           </label>
           <input
             type="text"
             value={formData.tourName || ''}
             onChange={(e) => setFormData({ ...formData, tourName: e.target.value })}
-            placeholder={`Tour near ${preferences?.startLocation.address || 'your location'}`}
+            placeholder="Will use POI names for the tour title if left empty"
             className={`w-full p-2 border ${formErrors.name ? 'border-pink-500' : 'border-slate-700'} bg-slate-800 rounded-md text-white placeholder-gray-400 focus:border-pink-500 focus:ring-1 focus:ring-pink-500`}
           />
           {formErrors.name && (
