@@ -2,25 +2,119 @@
 
 ## Current State of Offline Functionality
 
-The application currently has basic offline support:
+The application now has enhanced offline support:
 
 1. **Service Worker Implementation**:
    - Using `next-pwa` to generate and register a service worker
    - Custom service worker at `public/custom-sw.js` handles caching
    - Basic app shell files are cached during install
    - API responses for `/api/tours` use a cache-then-network strategy
+   - Stable cache keys for audio content to handle changing presigned URLs
 
 2. **Offline UI Components**:
    - `OfflineIndicator` component shows when the user is offline
    - `OfflineDetector` is used to include the indicator dynamically
    - Custom offline page (`offline.html`) is shown when navigating while offline
    - Network status check implemented in `public/js/network-check.js`
+   - Added `DownloadTourButton` and `DownloadProgress` components
+   - Integrated download functionality in the TourList component
 
-3. **Current Limitations**:
-   - Audio files from Supabase storage are not cached for offline use
-   - Tour details and POI information may not be fully available offline
-   - No explicit way for users to save tours for offline access
-   - No mechanism to download and store audio files locally
+3. **Backend Improvements**:
+   - API endpoint `/api/tours/[id]/audio-data` correctly formats audio data from the Translation table
+   - Fixed Next.js App Router dynamic route parameter handling
+   - Proper error handling for missing data or database errors
+
+4. **Robustness Improvements**:
+   - Added service worker availability checking with retries
+   - Implemented fallback for direct Cache API access when service worker isn't available
+   - Better error messages to guide users through PWA installation
+   - Graceful degradation when certain resources can't be cached
+
+## Recent Fixes
+
+1. **API Endpoint Fixes**:
+   - Fixed the issue with accessing dynamic route parameters in Next.js App Router
+   - Corrected database queries to use the Translation table instead of a non-existent PoiAudio table
+   - Added proper field mapping for audio content types
+
+2. **Service Worker Enhancements**:
+   - Added retry mechanism for service worker availability
+   - Created fallback for devices or browsers that don't support service workers
+   - Improved error handling with more descriptive messages
+
+3. **UI Refinements**:
+   - Adjusted Start and Download button sizing and positioning
+   - Made buttons properly responsive across different device sizes
+
+## Remaining Tasks
+
+1. **Testing**:
+   - Test across different browsers (Chrome, Safari, Firefox)
+   - Test with network off/on transitions
+   - Test with multiple tours and large audio files
+
+2. **Optimizations**:
+   - Implement storage quota management
+   - Add tour download size calculations before download
+   - Optimize caching strategies for larger audio files
+
+3. **User Experience**:
+   - Add offline usage instructions
+   - Improve visual feedback during download process
+   - Create a "Download Manager" view to show all downloaded tours
+
+## Technical Architecture
+
+### Simplified Approach with Stable Cache Keys
+
+Our solution uses a simplified approach to handle changing presigned URLs:
+
+1. **Stable Cache Keys**: We use POI ID + audio type as stable cache keys
+   - Example: `/offline-audio/[poiId]/brief` or `/offline-audio/[poiId]/detailed`
+   - These stable keys don't change even when presigned URLs do
+
+2. **Dual URL Strategy**:
+   - When online: Use regular presigned URLs from Supabase
+   - When offline or for downloaded tours: Use stable cache keys
+
+3. **Caching System**:
+   - Store content using the stable cache keys
+   - Service worker intercepts requests to stable cache keys
+   - Return cached content when offline
+
+4. **Fallback Mechanism**:
+   - Direct Cache API access when service worker is unavailable
+   - Cross-browser compatibility improvements
+   - Support for regular browsing mode (without PWA installation)
+
+## Data Flow
+
+1. User clicks "Download" for a tour
+2. App fetches audio data from `/api/tours/[id]/audio-data` endpoint
+3. The API retrieves audio paths from the Translation table
+4. For each POI, the app:
+   - Fetches audio files using the URL from the Translation table
+   - Caches them using stable keys based on POI ID and content type
+   - Updates download progress in the UI
+5. Once complete, the tour and its resources are marked as available offline
+
+## Usage
+
+The offline functionality works best when the app is installed as a PWA, but will still function in a regular browser tab with some limitations. To get the full offline experience:
+
+1. Install the app as a PWA:
+   - In Chrome/Edge: Click the install icon in the address bar
+   - In Safari (iOS): Use "Add to Home Screen" from the share menu
+   
+2. Download tours while online:
+   - Browse to the tour you want to download
+   - Click the "Download" button
+   - Wait for the download to complete
+   
+3. Access downloaded tours offline:
+   - Open the app even when offline
+   - Go to your tours list
+   - Tours marked as "Available offline" will work without internet connection
 
 ## Required Features for Offline Tour Downloads
 

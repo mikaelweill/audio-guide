@@ -406,8 +406,23 @@ export async function downloadTour(
   }, DOWNLOAD_TIMEOUT);
   
   try {
+    // Wait for service worker to become available with retries
+    const maxRetries = 3;
+    let retries = 0;
+    
+    while (!navigator.serviceWorker?.controller && retries < maxRetries) {
+      console.log(`Service worker not ready yet, waiting (attempt ${retries + 1}/${maxRetries})...`);
+      // Add a brief delay between attempts
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      retries++;
+    }
+    
+    let usingServiceWorker = true;
+
     if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
-      throw new Error('Service worker not available');
+      console.warn('Service worker not available. Using fallback direct cache access.');
+      usingServiceWorker = false;
+      // Continue without service worker - we'll use direct Cache API access
     }
     
     // Create arrays to store cached resource keys
@@ -458,7 +473,7 @@ export async function downloadTour(
       if (audioData[poiId].brief) {
         try {
           const briefCacheKey = createAudioCacheKey(poiId, 'brief');
-          await cacheResource(audioData[poiId].brief, briefCacheKey, 'audio/mpeg', signal);
+          await cacheResource(audioData[poiId].brief, briefCacheKey, 'audio/mpeg', signal, usingServiceWorker);
           audioResources.push(briefCacheKey);
           updateProgress(`Caching audio for ${tourPoi.poi.name} (brief)`);
         } catch (error) {
@@ -473,7 +488,7 @@ export async function downloadTour(
       if (audioData[poiId].detailed) {
         try {
           const detailedCacheKey = createAudioCacheKey(poiId, 'detailed');
-          await cacheResource(audioData[poiId].detailed, detailedCacheKey, 'audio/mpeg', signal);
+          await cacheResource(audioData[poiId].detailed, detailedCacheKey, 'audio/mpeg', signal, usingServiceWorker);
           audioResources.push(detailedCacheKey);
           updateProgress(`Caching audio for ${tourPoi.poi.name} (detailed)`);
         } catch (error) {
@@ -488,7 +503,7 @@ export async function downloadTour(
       if (audioData[poiId].complete) {
         try {
           const completeCacheKey = createAudioCacheKey(poiId, 'complete');
-          await cacheResource(audioData[poiId].complete, completeCacheKey, 'audio/mpeg', signal);
+          await cacheResource(audioData[poiId].complete, completeCacheKey, 'audio/mpeg', signal, usingServiceWorker);
           audioResources.push(completeCacheKey);
           updateProgress(`Caching audio for ${tourPoi.poi.name} (complete)`);
         } catch (error) {
@@ -511,7 +526,7 @@ export async function downloadTour(
           const imageCacheKey = createImageCacheKey(photoUrl);
           
           try {
-            await cacheResource(photoUrl, imageCacheKey, 'image/jpeg', signal);
+            await cacheResource(photoUrl, imageCacheKey, 'image/jpeg', signal, usingServiceWorker);
             imageResources.push(imageCacheKey);
           } catch (error) {
             console.error(`Failed to cache image for POI ${poiId}:`, error);
@@ -568,7 +583,8 @@ async function cacheResource(
   url: string, 
   cacheKey: string, 
   contentType: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  usingServiceWorker: boolean = true
 ): Promise<void> {
   const MAX_RETRIES = 2;
   let retries = 0;
@@ -580,7 +596,9 @@ async function cacheResource(
         throw new Error('Resource caching aborted');
       }
       
-      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      // Different approaches based on service worker availability
+      if (usingServiceWorker && navigator.serviceWorker && navigator.serviceWorker.controller) {
+        // Service worker approach (existing code)
         // Check if the resource is already cached
         const cache = await caches.open('audio-guide-offline');
         const response = await cache.match(cacheKey);
@@ -639,11 +657,58 @@ async function cacheResource(
           
           await storeResource(resource);
         }
-        
-        return; // Success - exit the retry loop
       } else {
-        throw new Error('Service worker not available');
+        // Fallback approach - direct Cache API access
+        const cache = await caches.open('audio-guide-offline');
+        const existingResponse = await cache.match(cacheKey);
+        
+        if (!existingResponse) {
+          console.log(`Direct cache: Fetching and caching ${url} → ${cacheKey}`);
+          // Fetch the resource
+          const fetchOptions: RequestInit = { 
+            mode: 'cors', 
+            credentials: 'same-origin',
+            signal
+          };
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          
+          try {
+            const fetchResponse = await fetch(url, { 
+              ...fetchOptions, 
+              signal: controller.signal 
+            });
+            
+            if (!fetchResponse.ok) {
+              throw new Error(`Failed to fetch resource: ${fetchResponse.status} ${fetchResponse.statusText}`);
+            }
+            
+            // Clone the response before using its body
+            const responseToCache = fetchResponse.clone();
+            
+            // Store directly in cache
+            await cache.put(new Request(cacheKey), responseToCache);
+            
+            // Store metadata in IndexedDB
+            const resource: CachedResource = {
+              url,
+              cacheKey,
+              contentType,
+              size: 0,
+              timestamp: Date.now()
+            };
+            
+            await storeResource(resource);
+          } finally {
+            clearTimeout(timeoutId);
+          }
+        } else {
+          console.log(`Direct cache: Resource ${cacheKey} already cached`);
+        }
       }
+      
+      return; // Success - exit the retry loop
     } catch (error) {
       retries++;
       console.error(`Error caching resource ${url} (attempt ${retries}/${MAX_RETRIES + 1}):`, error);

@@ -115,7 +115,7 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
   // Form data for tour details
   const [formData, setFormData] = useState({
     tourName: '',
-    tourDescription: ''
+    description: ''
   });
 
   // Reset state when modal is opened
@@ -541,7 +541,12 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
   
   // Replace the complex saveWithSupabaseFunction with a simple function that prepares data
   const prepareDataForSave = () => {
-    console.log("🔄 Preparing tour data for saving...");
+    console.log("📝 DESCRIPTION DEBUG - TourModal - Tour description value:", {
+      raw: formData.description,
+      type: typeof formData.description,
+      length: formData.description?.length || 0,
+      isEmpty: !formData.description || formData.description.trim() === ''
+    });
     
     // Extract all tour data first (no async operations)
     const tourName = formData.tourName || `Tour near ${preferences.startLocation.address}`;
@@ -611,11 +616,16 @@ export default function TourModal({ isOpen, onClose, onSave, userLocation = DEFA
     // Prepare API request payload
     const payload = {
       name: tourName,
-      description: formData.tourDescription || '',
+      description: formData.description || '',
       route: simplifiedRoute,
       preferences: apiPreferences,
       stats: tourStats
     };
+    
+    console.log("📝 DESCRIPTION DEBUG - TourModal - Final payload description:", {
+      value: payload.description,
+      length: payload.description?.length || 0
+    });
 
     return payload;
   };

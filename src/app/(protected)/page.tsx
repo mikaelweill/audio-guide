@@ -343,6 +343,9 @@ export default function Home() {
       console.log('💾 HOME: Saving tour to database...', {
         tourName: tourData.name,
         numPOIs: tourData.route.length,
+        description: tourData.description,
+        descriptionType: typeof tourData.description,
+        descriptionLength: tourData.description?.length || 0,
         hasWebsites: tourData.route.some((poi: any) => poi.details?.website)
       });
 
@@ -434,6 +437,22 @@ export default function Home() {
           };
         })
       };
+
+      console.log('📝 DESCRIPTION DEBUG - HomePage - Final serializedTourData description before API call:', {
+        description: serializedTourData.description,
+        type: typeof serializedTourData.description,
+        length: serializedTourData.description?.length || 0,
+        allKeys: Object.keys(serializedTourData)
+      });
+
+      // Log full serializedTourData to ensure description is included
+      console.log('📝 DESCRIPTION DEBUG - HomePage - Full serializedTourData to check description is included:', JSON.stringify({
+        name: serializedTourData.name,
+        description: serializedTourData.description,
+        routeLength: serializedTourData.route.length,
+        preferences: !!serializedTourData.preferences,
+        stats: !!serializedTourData.stats
+      }));
 
       // Save to database using the API with properly serialized data
       const response = await fetch('/api/tours', {

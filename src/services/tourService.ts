@@ -365,6 +365,15 @@ export async function createTour({
   stats
 }: CreateTourInput): Promise<string> {
   try {
+    console.log('📝 DESCRIPTION DEBUG - TourService - Description at createTour entry:', {
+      value: description,
+      type: typeof description,
+      length: description?.length || 0,
+      isEmpty: description === '',
+      isUndefined: description === undefined,
+      isNull: description === null
+    });
+    
     // Validate that we have POIs in the route
     if (!route || route.length === 0) {
       throw new Error('Cannot create tour with empty route');
@@ -467,6 +476,23 @@ export async function createTour({
       // Generate a UUID for the tour
       const tourId = uuidv4();
       
+      console.log('📝 DESCRIPTION DEBUG - TourService - Description before DB insert:', {
+        value: description,
+        type: typeof description,
+        length: description?.length || 0
+      });
+      
+      // Log the exact data structure being sent to the database
+      console.log('📝 DESCRIPTION DEBUG - TourService - Complete tour data for DB insert:', {
+        id: tourId,
+        user_id: userId,
+        name: name,
+        description: description,
+        start_location: startLocationData,
+        end_location: endLocationData,
+        // Omit other fields for clarity
+      });
+      
       // 1. Create the tour first
       const tour = await tx.tour.create({
         data: {
@@ -487,15 +513,25 @@ export async function createTour({
         }
       });
       
-      console.log(`🕒 DEBUG ETA: Saving tour with duration: ${stats.totalTourDuration} minutes`);
-      console.log(`🕒 DEBUG ETA: Complete stats being saved:`, {
-        walkingDistance: stats.totalWalkingDistance,
-        walkingTime: stats.totalWalkingTime,
-        visitTime: stats.totalVisitTime,
-        totalTime: stats.totalTourDuration,
-        poiCount: stats.totalPOIs,
-        transportMode: preferences.transportationMode
+      // Log the created tour to check description
+      console.log('📝 DESCRIPTION DEBUG - TourService - Tour after creation:', {
+        tourId: tour.id,
+        name: tour.name,
+        description: tour.description,
+        descriptionLength: tour.description?.length || 0
       });
+      
+      // Also check the database schema for the Tour table
+      try {
+        const tourTableInfo = await tx.$queryRaw`
+          SELECT column_name, data_type 
+          FROM information_schema.columns 
+          WHERE table_name = 'Tour'
+        `;
+        console.log('📝 DESCRIPTION DEBUG - TourService - Tour table schema:', tourTableInfo);
+      } catch (schemaError) {
+        console.error('Error fetching schema info:', schemaError);
+      }
       
       // 2. Save all POIs
       for (let i = 0; i < route.length; i++) {
@@ -553,6 +589,23 @@ export async function createTour({
       return tourId;
     }, { timeout: 10000 }); // Increase timeout slightly to be safe
 
+    // After transaction completes, verify the tour was saved correctly
+    try {
+      const savedTour = await prisma.tour.findUnique({
+        where: { id: tourId },
+        select: { id: true, name: true, description: true }
+      });
+      
+      console.log('📝 DESCRIPTION DEBUG - TourService - Saved tour verification after transaction:', {
+        tourId,
+        name: savedTour?.name,
+        description: savedTour?.description,
+        descriptionLength: savedTour?.description?.length || 0
+      });
+    } catch (verifyError) {
+      console.error('Error verifying saved tour after transaction:', verifyError);
+    }
+    
     // AFTER transaction completes, process images in parallel
     console.log(`📸 Transaction completed. Now processing ${pois_to_update_with_images.length} images outside transaction`);
     
@@ -614,12 +667,16 @@ export async function createTour({
     // Provide more specific error messages
     if (error instanceof PrismaClientKnownRequestError) {
       // Handle known Prisma errors
+      console.error('📝 DESCRIPTION DEBUG - TourService - Prisma error details:', {
+        code: error.code,
+        meta: error.meta,
+        message: error.message
+      });
       const errorMessage = `Database error (${error.code}): ${error.message}`;
-      console.error(errorMessage);
       throw new Error(errorMessage);
     } else if (error instanceof PrismaClientValidationError) {
       // Handle validation errors (often schema mismatches)
-      console.error('Data validation error:', error.message);
+      console.error('📝 DESCRIPTION DEBUG - TourService - Prisma validation error:', error.message);
       throw new Error(`Invalid data format: ${error.message}`);
     } else {
       // Handle other errors

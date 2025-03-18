@@ -205,6 +205,20 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('Tour API: Request body parsed');
     
+    // Log the entire request body for debugging
+    console.log('🔍 TOUR API DEBUG - Full request body:', JSON.stringify(body, null, 2));
+    
+    // Log the description specifically with more details
+    console.log('📝 DESCRIPTION DEBUG - API Route - Received description:', {
+      value: body.description,
+      type: typeof body.description,
+      length: body.description?.length || 0,
+      isEmptyString: body.description === '',
+      isUndefined: body.description === undefined,
+      isNull: body.description === null,
+      bodyKeys: Object.keys(body)
+    });
+    
     // Basic validation - make sure we have the required fields
     if (!body.name || !body.preferences || !body.route || !Array.isArray(body.route)) {
       console.error('Tour API: Invalid request body:', 
@@ -248,6 +262,29 @@ export async function POST(request: NextRequest) {
     
     // Destructure preferences and routes from the request body
     const { name, description, preferences, route, stats } = body;
+    
+    console.log('📝 DESCRIPTION DEBUG - API Route - Destructured description:', {
+      value: description,
+      type: typeof description,
+      length: description?.length || 0,
+      isEmptyString: description === '',
+      isUndefined: description === undefined,
+      isNull: description === null
+    });
+
+    // Check if description exists but is falsy
+    if (description === '' || description === null || description === undefined) {
+      console.warn('📝 DESCRIPTION DEBUG - API Route - Description is empty or falsy, using default empty string');
+    }
+
+    // Log the parameters we're passing to createTour
+    console.log('📝 DESCRIPTION DEBUG - API Route - Calling createTour with:', {
+      userId,
+      name,
+      description: description || '',
+      routeLength: route.length,
+      descriptionBeingPassed: description || ''
+    });
 
     // Use the createTour function which includes image downloading and storing
     try {
@@ -261,6 +298,24 @@ export async function POST(request: NextRequest) {
       });
       
       console.log(`Tour API: Tour saved successfully: ${tourId}`);
+      
+      // After successful save, verify the tour was saved correctly
+      try {
+        const savedTour = await prisma.tour.findUnique({
+          where: { id: tourId },
+          select: { id: true, name: true, description: true }
+        });
+        
+        console.log('📝 DESCRIPTION DEBUG - API Route - Saved tour verification:', {
+          tourId,
+          name: savedTour?.name,
+          description: savedTour?.description,
+          descriptionLength: savedTour?.description?.length || 0
+        });
+      } catch (verifyError) {
+        console.error('Tour API: Error verifying saved tour:', verifyError);
+      }
+      
       return NextResponse.json({ 
         success: true, 
         tourId 
