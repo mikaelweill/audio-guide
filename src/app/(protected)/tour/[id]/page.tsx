@@ -11,6 +11,7 @@ import { useRTVIClient, RTVIClientProvider, RTVIClientAudio } from '@pipecat-ai/
 import { RTVIClient } from '@pipecat-ai/client-js';
 import { DailyTransport } from '@pipecat-ai/daily-transport';
 import { useAgent } from '@/context/AgentContext';
+import { toast } from 'react-toastify';
 
 // Debug logging
 const PAGE_DEBUG = true;
@@ -676,6 +677,96 @@ export default function TourPage() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
   
+  // Add this helper function for offline audio playback
+  const playOfflineAudio = async (poiId: string, audioType: 'brief' | 'detailed' | 'complete', label: string) => {
+    try {
+      setIsAudioLoading(true);
+      setCurrentAudioId(audioType === 'brief' ? 'brief' : audioType === 'detailed' ? 'detailed' : 'in-depth');
+      
+      console.log(`Attempting to play offline audio: ${label} for ${poiId}/${audioType}`);
+      
+      // Import the functions we need
+      const { getAudioUrl, getResourceFromIndexedDB, createAudioCacheKey } = await import('@/services/offlineTourService');
+      
+      // Get the cache key for this audio
+      const cacheKey = createAudioCacheKey(poiId, audioType);
+      
+      // Try to get the blob directly from IndexedDB
+      const blob = await getResourceFromIndexedDB(cacheKey);
+      
+      if (blob) {
+        console.log(`Found offline audio blob for ${label}`);
+        
+        // Create a blob URL
+        const blobUrl = URL.createObjectURL(blob);
+        setActiveAudioUrl(blobUrl);
+        
+        // Create a new audio element
+        const audio = new Audio();
+        
+        // Stop any currently playing audio
+        if (audioElement) {
+          audioElement.pause();
+          audioElement.removeAttribute('src');
+          audioElement.load();
+        }
+        
+        // Set up event listeners
+        audio.addEventListener('loadedmetadata', () => {
+          console.log(`Offline audio metadata loaded for ${label}, duration:`, audio.duration);
+          setDuration(audio.duration);
+          setIsAudioLoading(false);
+        });
+        
+        audio.addEventListener('error', (e) => {
+          console.error(`Error playing offline audio ${label}:`, e);
+          setIsAudioLoading(false);
+          setIsPlaying(false);
+        });
+        
+        audio.addEventListener('timeupdate', () => {
+          setCurrentTime(audio.currentTime);
+          // Update progress directly
+          if (audio.duration) {
+            const progressBar = document.getElementById('audio-progress');
+            if (progressBar) {
+              (progressBar as HTMLProgressElement).value = (audio.currentTime / audio.duration) * 100;
+            }
+          }
+        });
+        
+        audio.addEventListener('ended', () => {
+          console.log(`Offline audio ended: ${label}`);
+          setIsPlaying(false);
+          setCurrentTime(0);
+        });
+        
+        // Set the source and load
+        audio.src = blobUrl;
+        audio.load();
+        setAudioElement(audio);
+        
+        // Play
+        await audio.play();
+        setIsPlaying(true);
+        
+        return true; // Success
+      } else {
+        console.error(`No offline audio found for ${poiId}/${audioType}`);
+        return false; // No audio found
+      }
+    } catch (error) {
+      console.error(`Error playing offline audio ${label}:`, error);
+      setIsAudioLoading(false);
+      return false; // Failed
+    }
+  };
+  
+  // Add this function to check if we should use offline playback
+  const shouldUseOfflinePlayback = () => {
+    return !navigator.onLine;
+  };
+  
   // Update the playAudio function with URL refresh capability
   const playAudio = useCallback(async (url: string, label: string) => {
     console.log(`Attempting to play audio: ${label} from URL: ${url}`);
@@ -693,14 +784,38 @@ export default function TourPage() {
       setShowTranscript(true);
       
       // Get the current POI ID for debugging
-      const currentPoiId = currentStop?.poi?.id || `poi-${currentStopIndex}`;
-      console.log("Current POI ID:", currentPoiId);
-      console.log("Audio data for this POI:", audioData[currentPoiId]);
+      const poiId = currentStop?.poi?.id;
+      if (!poiId) {
+        console.error("No POI ID available for audio");
+        setIsAudioLoading(false);
+        return;
+      }
+      
+      console.log("Current POI ID:", poiId);
+      console.log("Audio data for this POI:", audioData[poiId]);
       
       // Display spinner or loading state first
       setIsAudioLoading(true);
       setCurrentAudioId(label === "Brief Overview" ? 'brief' : label === "Detailed Guide" ? 'detailed' : 'in-depth');
-      setActiveAudioUrl(url);
+      
+      // Determine audio type for offline caching
+      const audioType = label === "Brief Overview" ? 'brief' : 
+                        label === "Detailed Guide" ? 'detailed' : 'complete';
+      
+      // Try to get offline audio URL first using the offlineTourService
+      let offlineUrl;
+      try {
+        const { getAudioUrl } = await import('@/services/offlineTourService');
+        offlineUrl = await getAudioUrl(poiId, audioType, url);
+        console.log("Retrieved URL for offline audio:", offlineUrl);
+      } catch (offlineError) {
+        console.error("Error getting offline audio:", offlineError);
+        // Continue with online URL as fallback
+        offlineUrl = url;
+      }
+      
+      // Use the offline URL if we got one
+      setActiveAudioUrl(offlineUrl);
       
       // Stop any currently playing audio
       if (audioElement) {
@@ -713,10 +828,12 @@ export default function TourPage() {
       const audio = new Audio();
       
       // Debug the URL
-      console.log(`Full audio URL: ${url}`);
-      
-      // Check for URL token expiry
-      if (url.includes('?')) {
+      console.log(`Full audio URL: ${offlineUrl}`);
+
+      // Only check for URL token expiry if we're using the online URL
+      if (!navigator.onLine && offlineUrl !== url) {
+        console.log("Using offline cached audio");
+      } else if (url.includes('?')) {
         const expiryMatch = url.match(/expires=(\d+)/i);
         if (expiryMatch && expiryMatch[1]) {
           const expiryTimestamp = parseInt(expiryMatch[1]);
@@ -727,28 +844,23 @@ export default function TourPage() {
           if (timeLeft <= 300) {
             console.log('Signed URL is expired or about to expire. Refreshing audio URLs...');
             
-            // Get the current POI ID and audio type
-            const currentPoiId = currentStop?.poi?.id || `poi-${currentStopIndex}`;
-            const audioType = label === "Brief Overview" ? 'brief' : 
-                            label === "Detailed Guide" ? 'detailed' : 'in-depth';
-            
             try {
               // Fetch fresh audio URLs for the current POI
               const refreshResponse = await fetch('/api/audio-guide/fetch-existing', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ poiIds: [currentPoiId] })
+                body: JSON.stringify({ poiIds: [poiId] })
               });
               
               if (refreshResponse.ok) {
                 const refreshData = await refreshResponse.json();
-                if (refreshData.success && refreshData.audioGuides && refreshData.audioGuides[currentPoiId]) {
+                if (refreshData.success && refreshData.audioGuides && refreshData.audioGuides[poiId]) {
                   // Update audioData state with fresh URLs
-                  const freshAudioData = refreshData.audioGuides[currentPoiId];
+                  const freshAudioData = refreshData.audioGuides[poiId];
                   
                   setAudioData(prevData => ({
                     ...prevData,
-                    [currentPoiId]: freshAudioData
+                    [poiId]: freshAudioData
                   }));
                   
                   // Get the fresh URL based on audio type
@@ -763,7 +875,7 @@ export default function TourPage() {
                   
                   if (freshUrl) {
                     console.log(`Using fresh URL for ${label} audio`);
-                    url = freshUrl;
+                    offlineUrl = freshUrl;
                     setActiveAudioUrl(freshUrl);
                   }
                 }
@@ -781,18 +893,68 @@ export default function TourPage() {
         console.error(`Audio error for ${label}:`, e);
         console.error('Audio error details:', audio.error);
         
-        // Only show alert for permanent errors, not transitional ones
-        if (audio.error && audio.error.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
-          const errorMessages: Record<number, string> = {
-            [MediaError.MEDIA_ERR_ABORTED]: "Playback aborted by the user",
-            [MediaError.MEDIA_ERR_NETWORK]: "Network error while loading the audio",
-            [MediaError.MEDIA_ERR_DECODE]: "Error decoding the audio file",
-            [MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED]: "Audio format not supported or CORS error"
-          };
-          
-          const errorMessage = errorMessages[audio.error.code] || "Unknown error";
-          
-          console.warn(`Audio error: ${errorMessage}. Trying with download approach...`);
+        // If we're offline and got an error with the cached URL, try direct blob approach
+        if (!navigator.onLine && offlineUrl.includes('/offline-audio/')) {
+          console.log('Trying direct blob approach for offline audio');
+          try {
+            // Try to get the blob from IndexedDB directly
+            const getOfflineBlob = async () => {
+              try {
+                const { getResourceFromIndexedDB } = await import('@/services/offlineTourService');
+                const cacheKey = offlineUrl;
+                const blob = await getResourceFromIndexedDB(cacheKey);
+                
+                if (blob) {
+                  console.log('Found audio blob in IndexedDB');
+                  const blobUrl = URL.createObjectURL(blob);
+                  console.log(`Created blob URL: ${blobUrl}`);
+                  
+                  // Create a new audio element with this blob URL
+                  const blobAudio = new Audio(blobUrl);
+                  
+                  // Set up event handlers for the new audio
+                  blobAudio.addEventListener('loadedmetadata', () => {
+                    console.log(`Blob audio metadata loaded, duration: ${blobAudio.duration}`);
+                    setDuration(blobAudio.duration);
+                    setAudioElement(blobAudio);
+                    blobAudio.play()
+                      .then(() => {
+                        setIsPlaying(true);
+                        setIsAudioLoading(false);
+                      })
+                      .catch(playError => {
+                        console.error('Error playing blob audio:', playError);
+                        setIsPlaying(false);
+                        setIsAudioLoading(false);
+                      });
+                  });
+                  
+                  return true; // Success
+                }
+              } catch (blobError) {
+                console.error('Error getting blob from IndexedDB:', blobError);
+              }
+              return false; // Failed to get blob
+            };
+            
+            getOfflineBlob();
+          } catch (blobError) {
+            console.error('Error with blob approach:', blobError);
+          }
+        } else {
+          // Only show alert for permanent errors, not transitional ones
+          if (audio.error && audio.error.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+            const errorMessages: Record<number, string> = {
+              [MediaError.MEDIA_ERR_ABORTED]: "Playback aborted by the user",
+              [MediaError.MEDIA_ERR_NETWORK]: "Network error while loading the audio",
+              [MediaError.MEDIA_ERR_DECODE]: "Error decoding the audio file",
+              [MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED]: "Audio format not supported or CORS error"
+            };
+            
+            const errorMessage = errorMessages[audio.error.code] || "Unknown error";
+            
+            console.warn(`Audio error: ${errorMessage}. Trying with download approach...`);
+          }
         }
         
         setIsAudioLoading(false);
@@ -818,74 +980,45 @@ export default function TourPage() {
         console.log(`Audio can play through: ${label}`);
         setIsAudioLoading(false);
         clearTimeout(loadingTimeout);
-        
-        // Set the playback rate from state
-        audio.playbackRate = playbackSpeed;
-        
-        // Auto-play when ready
-        audio.play().catch(error => {
-          console.error(`Failed to auto-play audio ${label}:`, error);
-          
-          // For user interaction requirement errors, don't show alert
-          if (error.name !== 'NotAllowedError') {
-            alert(`Could not play audio: ${error.message}`);
-          }
-        });
-        
-        setIsPlaying(true);
       });
       
-      // Modify the timeupdate event to use throttling
+      // Setup time update for progress tracking
       audio.addEventListener('timeupdate', () => {
-        // Always update the ref in real-time (no re-render)
-        currentTimeRef.current = audio.currentTime;
-        
-        // Only update the state (causing re-render) at throttled intervals
-        const now = Date.now();
-        if (now - lastTimeUpdateRef.current > TIME_UPDATE_THROTTLE) {
-          setCurrentTime(audio.currentTime);
-          lastTimeUpdateRef.current = now;
+        setCurrentTime(audio.currentTime);
+        // Update progress in a way that's compatible with the existing component
+        if (audio.duration) {
+          const progressPercent = (audio.currentTime / audio.duration) * 100;
+          // Update progress bar if it exists
+          const progressBar = document.getElementById('audio-progress');
+          if (progressBar) {
+            (progressBar as HTMLProgressElement).value = progressPercent;
+          }
         }
       });
       
-      audio.addEventListener('playing', () => {
-        console.log(`Audio started playing: ${label}`);
-        setIsAudioLoading(false);
-        setIsPlaying(true);
-        clearTimeout(loadingTimeout);
-      });
-      
-      audio.addEventListener('pause', () => {
-        console.log(`Audio paused: ${label}`);
-        setIsPlaying(false);
-      });
-      
-      audio.addEventListener('ended', () => {
-        console.log(`Audio ended: ${label}`);
-        setIsPlaying(false);
-        setCurrentTime(0);
-      });
-      
-      // Now set the source and load - AFTER setting up all event handlers
-      audio.crossOrigin = "anonymous"; // Add CORS handling
-      audio.preload = 'auto';
-      
-      // Set audio properties
-      audio.src = url;
-      
-      console.log("Loading audio file...");
+      // Set the source and load the audio
+      console.log('Loading audio file...');
+      audio.src = offlineUrl;
       audio.load();
-      
-      // Store the audio element
       setAudioElement(audio);
       
+      // Try to play the audio
+      try {
+        await audio.play();
+        setIsPlaying(true);
+      } catch (playError) {
+        console.error("Error playing audio:", playError);
+        setIsPlaying(false);
+        setIsAudioLoading(false);
+        throw playError; // Let the caller handle it
+      }
     } catch (error) {
-      console.error(`Error creating Audio object for ${label}:`, error);
+      console.error('Error in playAudio:', error);
       setIsAudioLoading(false);
       setIsPlaying(false);
-      alert(`Error setting up audio playback: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
     }
-  }, [audioElement, isAudioLoading, currentStopIndex, setAudioData, playbackSpeed]);
+  }, [audioData, audioElement, isAudioLoading, currentStop, setAudioElement, setCurrentAudioId, setCurrentTime, setDuration, setIsAudioLoading, setIsPlaying, setShowTranscript]);
   
   // Make these control functions memoized callbacks
   const togglePlayPause = useCallback(() => {
@@ -1546,13 +1679,49 @@ export default function TourPage() {
                               className={`${currentAudioId === 'brief' ? 'bg-gradient-to-r from-orange-600 to-pink-700' : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90'} text-white py-2 px-3 rounded-md flex items-center justify-center ${isAudioLoading && currentAudioId === 'brief' ? 'opacity-75 cursor-wait' : ''} shadow-md`}
                               onClick={async () => {
                                 setCurrentAudioId('brief');
-                                const audioUrl = audioData[currentStop?.poi?.id || `poi-${currentStopIndex}`]?.audioFiles?.coreAudioUrl;
+                                const poiId = currentStop?.poi?.id;
+                                if (!poiId) {
+                                  alert("Cannot identify the current location.");
+                                  return;
+                                }
+                                
+                                const audioUrl = audioData[poiId]?.audioFiles?.coreAudioUrl;
                                 console.log("Brief audio URL:", audioUrl);
                                 if (!audioUrl) {
                                   alert("No brief audio available. Try regenerating the audio guides.");
                                   return;
                                 }
-                                await playAudio(audioUrl, "Brief Overview");
+                                
+                                try {
+                                  if (!navigator.onLine) {
+                                    // Offline mode - try to use cached audio
+                                    const { getResourceFromIndexedDB, createAudioCacheKey } = await import('@/services/offlineTourService');
+                                    const cacheKey = createAudioCacheKey(poiId, 'brief');
+                                    const blob = await getResourceFromIndexedDB(cacheKey);
+                                    
+                                    if (blob) {
+                                      console.log("Using cached audio for brief overview");
+                                      setIsAudioLoading(true);
+                                      
+                                      // Create a blob URL
+                                      const blobUrl = URL.createObjectURL(blob);
+                                      
+                                      // Update the playAudio function to use this URL
+                                      await playAudio(blobUrl, "Brief Overview");
+                                      return;
+                                    } else {
+                                      console.error("No cached audio found for brief overview");
+                                      alert("No offline audio available. Please connect to the internet or download this tour.");
+                                      return;
+                                    }
+                                  }
+                                  
+                                  // Online mode - use normal audio playback
+                                  await playAudio(audioUrl, "Brief Overview");
+                                } catch (error) {
+                                  console.error("Error playing brief audio:", error);
+                                  alert("Failed to play audio. Please try again.");
+                                }
                               }}
                               disabled={isAudioLoading}
                             >
@@ -1578,13 +1747,49 @@ export default function TourPage() {
                               className={`${currentAudioId === 'detailed' ? 'bg-gradient-to-r from-orange-600 to-pink-700' : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90'} text-white py-2 px-3 rounded-md flex items-center justify-center ${isAudioLoading && currentAudioId === 'detailed' ? 'opacity-75 cursor-wait' : ''} shadow-md`}
                               onClick={async () => {
                                 setCurrentAudioId('detailed');
-                                const audioUrl = audioData[currentStop.poi.id || `poi-${currentStopIndex}`]?.audioFiles?.secondaryAudioUrl;
+                                const poiId = currentStop?.poi?.id;
+                                if (!poiId) {
+                                  alert("Cannot identify the current location.");
+                                  return;
+                                }
+                                
+                                const audioUrl = audioData[poiId]?.audioFiles?.secondaryAudioUrl;
                                 console.log("Detailed audio URL:", audioUrl);
                                 if (!audioUrl) {
                                   alert("No detailed audio available. Try regenerating the audio guides.");
                                   return;
                                 }
-                                await playAudio(audioUrl, "Detailed Guide");
+                                
+                                try {
+                                  if (!navigator.onLine) {
+                                    // Offline mode - try to use cached audio
+                                    const { getResourceFromIndexedDB, createAudioCacheKey } = await import('@/services/offlineTourService');
+                                    const cacheKey = createAudioCacheKey(poiId, 'detailed');
+                                    const blob = await getResourceFromIndexedDB(cacheKey);
+                                    
+                                    if (blob) {
+                                      console.log("Using cached audio for detailed guide");
+                                      setIsAudioLoading(true);
+                                      
+                                      // Create a blob URL
+                                      const blobUrl = URL.createObjectURL(blob);
+                                      
+                                      // Update the playAudio function to use this URL
+                                      await playAudio(blobUrl, "Detailed Guide");
+                                      return;
+                                    } else {
+                                      console.error("No cached audio found for detailed guide");
+                                      alert("No offline audio available. Please connect to the internet or download this tour.");
+                                      return;
+                                    }
+                                  }
+                                  
+                                  // Online mode - use normal audio playback
+                                  await playAudio(audioUrl, "Detailed Guide");
+                                } catch (error) {
+                                  console.error("Error playing detailed audio:", error);
+                                  alert("Failed to play audio. Please try again.");
+                                }
                               }}
                               disabled={isAudioLoading}
                             >

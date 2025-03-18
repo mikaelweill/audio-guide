@@ -386,6 +386,7 @@ function completeDownload(tourId: string): void {
 
 /**
  * Download a tour and its resources for offline use
+ * LOCALHOST VERSION: No service worker dependency at all
  */
 export async function downloadTour(
   tour: Tour, 
@@ -406,138 +407,91 @@ export async function downloadTour(
   }, DOWNLOAD_TIMEOUT);
   
   try {
-    // Wait for service worker to become available with retries
-    const maxRetries = 3;
-    let retries = 0;
-    
-    while (!navigator.serviceWorker?.controller && retries < maxRetries) {
-      console.log(`Service worker not ready yet, waiting (attempt ${retries + 1}/${maxRetries})...`);
-      // Add a brief delay between attempts
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      retries++;
-    }
-    
-    let usingServiceWorker = true;
-
-    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
-      console.warn('Service worker not available. Using fallback direct cache access.');
-      usingServiceWorker = false;
-      // Continue without service worker - we'll use direct Cache API access
-    }
+    progressCallback?.(0, 'Initializing direct download...');
     
     // Create arrays to store cached resource keys
     const audioResources: string[] = [];
     const imageResources: string[] = [];
     
-    // Calculate total items to download
-    const poiCount = tour.tourPois.length;
-    const audioCount = poiCount * 3; // brief, detailed, complete for each POI
-    const imageCount = tour.tourPois.reduce((count, poi) => {
-      return count + (poi.poi.photo_references?.length || 0);
-    }, 0);
+    // Create array of resources to cache
+    const resourcesToCache: { url: string; cacheKey: string }[] = [];
     
-    const totalItems = audioCount + imageCount || 1; // Ensure at least 1 to avoid division by zero
-    let completedItems = 0;
+    // Add the tour API data
+    resourcesToCache.push({
+      url: `/api/tours/${tour.id}`,
+      cacheKey: `/api/tours/${tour.id}`
+    });
     
-    // Update progress via monitor
-    const updateProgress = (status?: string) => {
-      completedItems++;
-      const progress = Math.min(100, Math.round((completedItems / totalItems) * 100));
-      
-      // Update the download monitor
-      updateDownloadProgress(tour.id, progress);
-      
-      if (progressCallback) {
-        progressCallback(progress, status);
-      }
-    };
-    
-    // Download and cache each audio file
+    // Add all POI data 
     for (const tourPoi of tour.tourPois) {
-      if (signal.aborted) {
-        throw new Error('Download aborted');
+      const poi = tourPoi.poi;
+      const poiId = poi.id;
+      const poiAudio = audioData[poiId];
+      
+      // Add thumbnail image if available
+      if (poi.thumbnail_url) {
+        const imageCacheKey = createImageCacheKey(poi.thumbnail_url);
+        resourcesToCache.push({
+          url: poi.thumbnail_url,
+          cacheKey: imageCacheKey
+        });
+        imageResources.push(imageCacheKey);
       }
       
-      const poiId = tourPoi.poi.id;
-      
-      if (!audioData[poiId]) {
-        console.warn(`No audio data found for POI ${poiId}`);
-        // Update progress even if there's no data to maintain progress calculation
-        updateProgress(`Skipping audio for ${tourPoi.poi.name} (no data)`);
-        updateProgress();
-        updateProgress();
-        continue;
+      // Add audio files with stable cache keys
+      if (poiAudio?.brief) {
+        const audioCacheKey = createAudioCacheKey(poiId, 'brief');
+        resourcesToCache.push({
+          url: poiAudio.brief,
+          cacheKey: audioCacheKey
+        });
+        audioResources.push(audioCacheKey);
       }
       
-      // Cache brief audio
-      if (audioData[poiId].brief) {
-        try {
-          const briefCacheKey = createAudioCacheKey(poiId, 'brief');
-          await cacheResource(audioData[poiId].brief, briefCacheKey, 'audio/mpeg', signal, usingServiceWorker);
-          audioResources.push(briefCacheKey);
-          updateProgress(`Caching audio for ${tourPoi.poi.name} (brief)`);
-        } catch (error) {
-          console.error(`Failed to cache brief audio for POI ${poiId}:`, error);
-          updateProgress(`Error caching brief audio for ${tourPoi.poi.name}`);
-        }
-      } else {
-        updateProgress();
+      if (poiAudio?.detailed) {
+        const audioCacheKey = createAudioCacheKey(poiId, 'detailed');
+        resourcesToCache.push({
+          url: poiAudio.detailed,
+          cacheKey: audioCacheKey
+        });
+        audioResources.push(audioCacheKey);
       }
       
-      // Cache detailed audio
-      if (audioData[poiId].detailed) {
-        try {
-          const detailedCacheKey = createAudioCacheKey(poiId, 'detailed');
-          await cacheResource(audioData[poiId].detailed, detailedCacheKey, 'audio/mpeg', signal, usingServiceWorker);
-          audioResources.push(detailedCacheKey);
-          updateProgress(`Caching audio for ${tourPoi.poi.name} (detailed)`);
-        } catch (error) {
-          console.error(`Failed to cache detailed audio for POI ${poiId}:`, error);
-          updateProgress(`Error caching detailed audio for ${tourPoi.poi.name}`);
-        }
-      } else {
-        updateProgress();
-      }
-      
-      // Cache complete audio
-      if (audioData[poiId].complete) {
-        try {
-          const completeCacheKey = createAudioCacheKey(poiId, 'complete');
-          await cacheResource(audioData[poiId].complete, completeCacheKey, 'audio/mpeg', signal, usingServiceWorker);
-          audioResources.push(completeCacheKey);
-          updateProgress(`Caching audio for ${tourPoi.poi.name} (complete)`);
-        } catch (error) {
-          console.error(`Failed to cache complete audio for POI ${poiId}:`, error);
-          updateProgress(`Error caching complete audio for ${tourPoi.poi.name}`);
-        }
-      } else {
-        updateProgress();
-      }
-      
-      // Cache POI images if available
-      if (tourPoi.poi.photo_references && tourPoi.poi.photo_references.length > 0) {
-        for (const photoRef of tourPoi.poi.photo_references) {
-          if (signal.aborted) {
-            throw new Error('Download aborted');
-          }
-          
-          // Create a URL for the photo reference
-          const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photoRef}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`;
-          const imageCacheKey = createImageCacheKey(photoUrl);
-          
-          try {
-            await cacheResource(photoUrl, imageCacheKey, 'image/jpeg', signal, usingServiceWorker);
-            imageResources.push(imageCacheKey);
-          } catch (error) {
-            console.error(`Failed to cache image for POI ${poiId}:`, error);
-          }
-          
-          updateProgress(`Caching images for ${tourPoi.poi.name}`);
-        }
+      if (poiAudio?.complete) {
+        const audioCacheKey = createAudioCacheKey(poiId, 'complete');
+        resourcesToCache.push({
+          url: poiAudio.complete,
+          cacheKey: audioCacheKey
+        });
+        audioResources.push(audioCacheKey);
       }
     }
     
-    // Create and store the downloaded tour record
+    if (resourcesToCache.length === 0) {
+      throw new Error('No resources found to cache for this tour');
+    }
+    
+    progressCallback?.(5, `Preparing to download ${resourcesToCache.length} files...`);
+    
+    // LOCALHOST VERSION: Try different storage approaches for maximum compatibility
+    try {
+      // First try the combined approach
+      console.log("🔧 DEBUG: Trying combined cache approach first");
+      await localhostCacheResources(resourcesToCache, progressCallback, signal);
+    } catch (combinedError) {
+      console.error("🔧 DEBUG: Combined approach failed:", combinedError);
+      
+      // If that fails, try pure IndexedDB approach
+      console.log("🔧 DEBUG: Falling back to pure IndexedDB approach");
+      try {
+        await indexedDBOnlyResources(resourcesToCache, progressCallback, signal);
+      } catch (indexedDBError: any) {
+        console.error("🔧 DEBUG: IndexedDB approach also failed:", indexedDBError);
+        throw new Error("Failed to cache resources: " + (indexedDBError.message || 'Unknown error'));
+      }
+    }
+    
+    // Store tour data in IndexedDB first before completing
     const downloadedTour: DownloadedTour = {
       id: tour.id,
       tour,
@@ -546,181 +500,174 @@ export async function downloadTour(
       imageResources
     };
     
+    // Store downloaded tour in IndexedDB
     await storeTour(downloadedTour);
     
-    if (progressCallback) {
-      progressCallback(100, 'Download complete');
-    }
+    // Update progress
+    progressCallback?.(100, 'Tour successfully downloaded');
     
-    // Mark download as completed in the monitor
+    // Complete download in monitor
     completeDownload(tour.id);
     
-    // Clear the timeout
+    // Clear timeout
     clearTimeout(timeoutId);
   } catch (error) {
-    clearTimeout(timeoutId);
-    
-    // Remove from active downloads
-    completeDownload(tour.id);
-    
+    // Clean up failed download
     console.error('Error downloading tour:', error);
     
-    // Try to clean up any partially downloaded resources
-    try {
-      await deleteTour(tour.id, true); // Silent cleanup
-    } catch (cleanupError) {
-      console.error('Failed to clean up after failed download:', cleanupError);
+    if (!signal.aborted) {
+      // Only try to clean up if the download wasn't deliberately aborted
+      try {
+        // Try to delete any partial data
+        await deleteTour(tour.id, true).catch(() => {});
+      } catch (e) {
+        console.error('Error cleaning up failed download:', e);
+      }
     }
     
+    // Complete download in monitor
+    completeDownload(tour.id);
+    
+    // Clear timeout
+    clearTimeout(timeoutId);
+    
+    // Re-throw the error
     throw error;
   }
 }
 
 /**
- * Cache a resource using the service worker with retry logic
+ * LOCALHOST VERSION: Cache resources as reliably as possible
+ * This avoids all service worker dependencies for maximum dev compatibility
  */
-async function cacheResource(
-  url: string, 
-  cacheKey: string, 
-  contentType: string,
-  signal: AbortSignal,
-  usingServiceWorker: boolean = true
+async function localhostCacheResources(
+  resources: { url: string; cacheKey: string }[],
+  progressCallback?: (progress: number, status?: string) => void,
+  signal?: AbortSignal
 ): Promise<void> {
-  const MAX_RETRIES = 2;
-  let retries = 0;
-  
-  while (retries <= MAX_RETRIES) {
-    try {
-      // Check if the signal is aborted before proceeding
-      if (signal.aborted) {
-        throw new Error('Resource caching aborted');
-      }
-      
-      // Different approaches based on service worker availability
-      if (usingServiceWorker && navigator.serviceWorker && navigator.serviceWorker.controller) {
-        // Service worker approach (existing code)
-        // Check if the resource is already cached
-        const cache = await caches.open('audio-guide-offline');
-        const response = await cache.match(cacheKey);
-        
-        if (!response) {
-          // Resource is not yet cached, request the service worker to cache it
-          const fetchOptions: RequestInit = { 
-            mode: 'cors', 
-            credentials: 'same-origin',
-            signal
-          };
-          
-          // Set a timeout for the fetch operation
-          const fetchWithTimeout = async () => {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-            
-            try {
-              return await fetch(url, { 
-                ...fetchOptions, 
-                signal: controller.signal 
-              });
-            } finally {
-              clearTimeout(timeoutId);
-            }
-          };
-          
-          // Fetch the original URL
-          const originalResponse = await fetchWithTimeout();
-          
-          if (!originalResponse.ok) {
-            throw new Error(`Failed to fetch resource: ${originalResponse.status} ${originalResponse.statusText}`);
-          }
-          
-          // Create a new request with our cache key URL
-          const cacheRequest = new Request(cacheKey);
-          
-          // Create a new response with the same body but a different URL
-          const newResponse = new Response(originalResponse.body, {
-            status: originalResponse.status,
-            statusText: originalResponse.statusText,
-            headers: originalResponse.headers
-          });
-          
-          // Store in cache with our stable key
-          await cache.put(cacheRequest, newResponse);
-          
-          // Store metadata in IndexedDB
-          const resource: CachedResource = {
-            url,
-            cacheKey,
-            contentType,
-            size: 0, // We can't easily get the size here
-            timestamp: Date.now()
-          };
-          
-          await storeResource(resource);
-        }
-      } else {
-        // Fallback approach - direct Cache API access
-        const cache = await caches.open('audio-guide-offline');
-        const existingResponse = await cache.match(cacheKey);
-        
-        if (!existingResponse) {
-          console.log(`Direct cache: Fetching and caching ${url} → ${cacheKey}`);
-          // Fetch the resource
-          const fetchOptions: RequestInit = { 
-            mode: 'cors', 
-            credentials: 'same-origin',
-            signal
-          };
-          
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
-          
-          try {
-            const fetchResponse = await fetch(url, { 
-              ...fetchOptions, 
-              signal: controller.signal 
-            });
-            
-            if (!fetchResponse.ok) {
-              throw new Error(`Failed to fetch resource: ${fetchResponse.status} ${fetchResponse.statusText}`);
-            }
-            
-            // Clone the response before using its body
-            const responseToCache = fetchResponse.clone();
-            
-            // Store directly in cache
-            await cache.put(new Request(cacheKey), responseToCache);
-            
-            // Store metadata in IndexedDB
-            const resource: CachedResource = {
-              url,
-              cacheKey,
-              contentType,
-              size: 0,
-              timestamp: Date.now()
-            };
-            
-            await storeResource(resource);
-          } finally {
-            clearTimeout(timeoutId);
-          }
-        } else {
-          console.log(`Direct cache: Resource ${cacheKey} already cached`);
-        }
-      }
-      
-      return; // Success - exit the retry loop
-    } catch (error) {
-      retries++;
-      console.error(`Error caching resource ${url} (attempt ${retries}/${MAX_RETRIES + 1}):`, error);
-      
-      if (signal.aborted || retries > MAX_RETRIES) {
-        throw error;
-      }
-      
-      // Wait a bit before retrying
-      await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+  try {
+    console.log('🔧 CACHE DEBUG: Starting cache operation with', resources.length, 'resources');
+    
+    // Check if Cache API is available
+    if (!('caches' in window)) {
+      console.error('🔧 CACHE DEBUG: Cache API not available in this browser');
+      throw new Error('Cache API not available in this browser');
     }
+    
+    // Open a cache specifically for localhost development
+    const cacheName = 'audio-guide-localhost-cache';
+    console.log('🔧 CACHE DEBUG: Opening cache', cacheName);
+    try {
+      const cache = await caches.open(cacheName);
+      console.log('🔧 CACHE DEBUG: Cache opened successfully:', cache);
+      
+      // Track progress
+      let completed = 0;
+      const total = resources.length;
+      
+      // Process resources one at a time to avoid overloading
+      for (const { url, cacheKey } of resources) {
+        // Check if download was aborted
+        if (signal?.aborted) {
+          console.log('🔧 CACHE DEBUG: Download aborted');
+          throw new Error('Download aborted');
+        }
+        
+        try {
+          console.log(`🔧 CACHE DEBUG: Processing resource ${completed+1}/${total}: ${url} → ${cacheKey}`);
+          
+          // Use a direct fetch with appropriate options for localhost
+          const fetchOptions: RequestInit = {
+            method: 'GET',
+            cache: 'no-store', // Force fresh fetch
+            credentials: 'same-origin',
+            signal: signal,
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          };
+          
+          // Fetch the resource
+          console.log(`🔧 CACHE DEBUG: Fetching ${url}`);
+          const response = await fetch(url, fetchOptions);
+          
+          if (!response.ok) {
+            console.warn(`🔧 CACHE DEBUG: Failed to fetch ${url}, status: ${response.status}`);
+            continue;
+          }
+          
+          console.log(`🔧 CACHE DEBUG: Fetch successful, status: ${response.status}`);
+          
+          // Cache with the stable key
+          const request = new Request(cacheKey);
+          console.log(`🔧 CACHE DEBUG: Caching at key ${cacheKey}`);
+          await cache.put(request, response.clone());
+          console.log(`🔧 CACHE DEBUG: Cached successfully at ${cacheKey}`);
+          
+          // Also store in IndexedDB as a backup
+          try {
+            console.log(`🔧 CACHE DEBUG: Creating backup in IndexedDB for ${cacheKey}`);
+            const blob = await response.clone().blob();
+            await storeResourceBlob(cacheKey, blob);
+            console.log(`🔧 CACHE DEBUG: IndexedDB backup created for ${cacheKey}`);
+          } catch (blobError) {
+            console.warn('🔧 CACHE DEBUG: Failed to store backup in IndexedDB:', blobError);
+            // Continue anyway, since we have the cache
+          }
+          
+          // Update progress
+          completed++;
+          const progress = Math.min(95, Math.round((completed / total) * 95));
+          
+          console.log(`🔧 CACHE DEBUG: Progress ${completed}/${total} (${progress}%)`);
+          progressCallback?.(progress, `Downloaded ${completed}/${total} files...`);
+          updateDownloadProgress(resources[0].url.split('/').pop() || 'unknown', progress);
+        } catch (resourceError) {
+          console.error(`🔧 CACHE DEBUG: Error processing ${url}:`, resourceError);
+          // Continue with next resource
+        }
+      }
+      
+      console.log('🔧 CACHE DEBUG: All resources processed, finalizing');
+      progressCallback?.(95, 'Finalizing download...');
+    } catch (cacheError) {
+      console.error('🔧 CACHE DEBUG: Error opening cache:', cacheError);
+      throw cacheError;
+    }
+  } catch (error) {
+    console.error('🔧 CACHE DEBUG: Fatal error in caching:', error);
+    throw error;
   }
+}
+
+/**
+ * Store a resource blob in IndexedDB as backup
+ */
+async function storeResourceBlob(key: string, blob: Blob): Promise<void> {
+  const db = await initDB();
+  
+  return new Promise<void>((resolve, reject) => {
+    try {
+      const transaction = db.transaction([RESOURCE_STORE], 'readwrite');
+      const store = transaction.objectStore(RESOURCE_STORE);
+      
+      const resource = {
+        cacheKey: key,
+        blob,
+        timestamp: Date.now()
+      };
+      
+      const request = store.put(resource);
+      
+      request.onsuccess = () => resolve();
+      request.onerror = (event) => reject(new Error('Failed to store blob'));
+      
+      transaction.oncomplete = () => db.close();
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 /**
@@ -833,19 +780,178 @@ export async function getAudioUrl(poiId: string, audioType: 'brief' | 'detailed'
       return onlineUrl;
     }
     
+    console.log(`🔊 AUDIO DEBUG: Getting offline audio for ${poiId}/${audioType}`);
+    
     // We're offline, try to get from cache
     const cacheKey = createAudioCacheKey(poiId, audioType);
-    const cache = await caches.open('audio-guide-offline');
-    const response = await cache.match(cacheKey);
     
-    if (response) {
-      return cacheKey;
+    // First try the standard cache API
+    try {
+      console.log(`🔊 AUDIO DEBUG: Trying standard Cache API for ${cacheKey}`);
+      const cache = await caches.open('audio-guide-offline');
+      const response = await cache.match(cacheKey);
+      
+      if (response) {
+        console.log(`🔊 AUDIO DEBUG: Found in standard Cache API: ${cacheKey}`);
+        return cacheKey;
+      }
+
+      // Also try the localhost cache
+      console.log(`🔊 AUDIO DEBUG: Trying localhost Cache API for ${cacheKey}`);
+      const localhostCache = await caches.open('audio-guide-localhost-cache');
+      const localhostResponse = await localhostCache.match(cacheKey);
+      
+      if (localhostResponse) {
+        console.log(`🔊 AUDIO DEBUG: Found in localhost Cache API: ${cacheKey}`);
+        return cacheKey;
+      }
+    } catch (cacheError) {
+      console.error(`🔊 AUDIO DEBUG: Cache API error for ${cacheKey}:`, cacheError);
     }
     
-    // Not found in cache
+    // If not found in Cache API, try IndexedDB
+    console.log(`🔊 AUDIO DEBUG: Trying IndexedDB for ${cacheKey}`);
+    const blob = await getResourceFromIndexedDB(cacheKey);
+    
+    if (blob) {
+      console.log(`🔊 AUDIO DEBUG: Found in IndexedDB: ${cacheKey}`);
+      
+      // Create a blob URL for the resource
+      const blobUrl = URL.createObjectURL(blob);
+      console.log(`🔊 AUDIO DEBUG: Created blob URL: ${blobUrl} for ${cacheKey}`);
+      
+      // Store the mapping of cache key to blob URL for cleanup later
+      if (typeof window !== 'undefined') {
+        if (!window._blobUrlMappings) {
+          window._blobUrlMappings = {};
+        }
+        window._blobUrlMappings[cacheKey] = blobUrl;
+      }
+      
+      return blobUrl;
+    }
+    
+    // Not found anywhere
+    console.error(`🔊 AUDIO DEBUG: Audio not found anywhere: ${cacheKey}`);
     throw new Error('Audio not available offline');
   } catch (error) {
     console.error('Error getting audio URL:', error);
     throw error;
+  }
+}
+
+/**
+ * Pure IndexedDB implementation for storing resources
+ * Use when Cache API is problematic on localhost
+ */
+async function indexedDBOnlyResources(
+  resources: { url: string; cacheKey: string }[],
+  progressCallback?: (progress: number, status?: string) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  console.log('🔧 INDEXEDDB DEBUG: Starting pure IndexedDB storage with', resources.length, 'resources');
+  
+  // Track progress
+  let completed = 0;
+  const total = resources.length;
+  
+  // Process resources one at a time
+  for (const { url, cacheKey } of resources) {
+    // Check if download was aborted
+    if (signal?.aborted) {
+      console.log('🔧 INDEXEDDB DEBUG: Download aborted');
+      throw new Error('Download aborted');
+    }
+    
+    try {
+      console.log(`🔧 INDEXEDDB DEBUG: Processing resource ${completed+1}/${total}: ${url}`);
+      
+      // Fetch the resource with fetch options optimized for localhost
+      const fetchOptions: RequestInit = {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'same-origin',
+        signal: signal,
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      };
+      
+      // Fetch the resource
+      console.log(`🔧 INDEXEDDB DEBUG: Fetching ${url}`);
+      const response = await fetch(url, fetchOptions);
+      
+      if (!response.ok) {
+        console.warn(`🔧 INDEXEDDB DEBUG: Failed to fetch ${url}, status: ${response.status}`);
+        continue;
+      }
+      
+      // Clone response and convert to blob
+      console.log(`🔧 INDEXEDDB DEBUG: Converting response to blob for ${cacheKey}`);
+      const blob = await response.clone().blob();
+      
+      // Store directly in IndexedDB
+      console.log(`🔧 INDEXEDDB DEBUG: Storing blob in IndexedDB for ${cacheKey}`);
+      await storeResourceBlob(cacheKey, blob);
+      console.log(`🔧 INDEXEDDB DEBUG: Successfully stored in IndexedDB: ${cacheKey}`);
+      
+      // Update progress
+      completed++;
+      const progress = Math.min(95, Math.round((completed / total) * 95));
+      
+      console.log(`🔧 INDEXEDDB DEBUG: Progress ${completed}/${total} (${progress}%)`);
+      progressCallback?.(progress, `Downloaded ${completed}/${total} files...`);
+      updateDownloadProgress(resources[0].url.split('/').pop() || 'unknown', progress);
+    } catch (error) {
+      console.error(`🔧 INDEXEDDB DEBUG: Error processing ${url}:`, error);
+      // Continue with next resource
+    }
+  }
+  
+  console.log('🔧 INDEXEDDB DEBUG: All resources processed successfully using IndexedDB');
+  progressCallback?.(95, 'Finalizing download...');
+}
+
+/**
+ * Retrieve a resource from IndexedDB
+ * For pure IndexedDB mode
+ */
+export async function getResourceFromIndexedDB(cacheKey: string): Promise<Blob | null> {
+  try {
+    const db = await initDB();
+    
+    return new Promise<Blob | null>((resolve, reject) => {
+      const transaction = db.transaction([RESOURCE_STORE], 'readonly');
+      const store = transaction.objectStore(RESOURCE_STORE);
+      const request = store.get(cacheKey);
+      
+      request.onsuccess = () => {
+        if (request.result) {
+          resolve(request.result.blob);
+        } else {
+          resolve(null);
+        }
+      };
+      
+      request.onerror = () => {
+        console.error(`Error retrieving resource ${cacheKey} from IndexedDB`);
+        resolve(null);
+      };
+      
+      transaction.oncomplete = () => db.close();
+    });
+  } catch (error) {
+    console.error('Error in getResourceFromIndexedDB:', error);
+    return null;
+  }
+}
+
+// Add global type for blob URL mappings
+declare global {
+  interface Window {
+    _blobUrlMappings?: Record<string, string>;
+    waitForServiceWorker?: (timeout?: number) => Promise<boolean>;
   }
 } 

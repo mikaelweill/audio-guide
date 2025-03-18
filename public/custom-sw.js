@@ -61,6 +61,9 @@ const addTimestampToResponse = (response) => {
   });
 };
 
+// Create a cache for offline tour content
+const offlineToursCache = 'audio-guide-offline';
+
 // Fetch handler with improved offline support
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
@@ -177,6 +180,35 @@ self.addEventListener('fetch', (event) => {
         })
     );
   }
+  
+  // Check if this is one of our stable cache key URLs for offline audio
+  const isOfflineAudio = url.pathname.startsWith('/offline-audio/');
+  const isOfflineImage = url.pathname.startsWith('/offline-images/');
+  
+  if (isOfflineAudio || isOfflineImage) {
+    console.log(`[SW] Handling offline resource request: ${url.pathname}`);
+    
+    event.respondWith(
+      caches.open(offlineToursCache).then(cache => {
+        return cache.match(event.request).then(response => {
+          if (response) {
+            console.log(`[SW] Found cached offline resource: ${url.pathname}`);
+            return response;
+          }
+          
+          console.error(`[SW] Offline resource not found in cache: ${url.pathname}`);
+          return new Response('Resource not available offline', { 
+            status: 404,
+            headers: { 'Content-Type': 'text/plain' }
+          });
+        });
+      }).catch(error => {
+        console.error(`[SW] Error retrieving offline resource: ${error}`);
+        return new Response('Error accessing offline resource', { status: 500 });
+      })
+    );
+    return;
+  }
 });
 
 // Clean up old caches and handle mobile reconnection
@@ -217,4 +249,156 @@ self.addEventListener('activate', (event) => {
       });
     })
   );
+});
+
+// Add message event listener for caching tours
+self.addEventListener('message', (event) => {
+  if (event.data.type === 'CACHE_TOUR_RESOURCES') {
+    const { tourId, resources } = event.data;
+    
+    console.log(`[SW] Received request to cache ${resources.length} resources for tour ${tourId}`);
+    
+    // Check if MessageChannel is being used correctly
+    if (!event.ports || event.ports.length === 0) {
+      console.error('[SW] No MessageChannel port provided in the message');
+      return;
+    }
+    
+    // Get the MessageChannel port to communicate back to the client
+    const port = event.ports[0];
+    
+    // Send initial progress message
+    port.postMessage({ 
+      progress: 0, 
+      status: `Starting download (0/${resources.length})` 
+    });
+    
+    event.waitUntil(
+      caches.open(offlineToursCache).then(async (cache) => {
+        console.log(`[SW] Caching ${resources.length} resources for tour ${tourId}`);
+        
+        // Process resources sequentially to avoid overwhelming the network
+        const results = [];
+        let totalProcessed = 0;
+        
+        for (const { url, cacheKey } of resources) {
+          try {
+            // Fetch the resource from the network
+            console.log(`[SW] Fetching resource: ${url}`);
+            const response = await fetch(url, { cache: 'no-store' });
+            
+            if (!response || response.status !== 200) {
+              throw new Error(`Failed to fetch ${url}, status: ${response?.status}`);
+            }
+            
+            // Store with the stable cache key
+            console.log(`[SW] Caching as: ${cacheKey}`);
+            await cache.put(new Request(cacheKey), response.clone());
+            
+            results.push(true);
+          } catch (error) {
+            console.error(`[SW] Failed to cache ${url}:`, error);
+            results.push(false);
+          }
+          
+          totalProcessed++;
+          
+          // Send progress update every few resources or at the end
+          if (totalProcessed % 3 === 0 || totalProcessed === resources.length) {
+            const successCount = results.filter(Boolean).length;
+            const progress = Math.round((totalProcessed / resources.length) * 100);
+            
+            port.postMessage({ 
+              progress, 
+              status: `Downloaded ${successCount}/${totalProcessed} (${progress}%)` 
+            });
+          }
+        }
+        
+        const successCount = results.filter(Boolean).length;
+        
+        // Report back to the client
+        if (successCount === resources.length) {
+          port.postMessage({
+            success: true,
+            message: `Successfully cached all ${successCount} resources`,
+            progress: 100
+          });
+        } else if (successCount > 0) {
+          // Some resources succeeded
+          port.postMessage({
+            success: true, // Consider partial success still a success
+            message: `Cached ${successCount}/${resources.length} resources`,
+            progress: 100
+          });
+        } else {
+          // All resources failed
+          port.postMessage({
+            success: false,
+            error: `Failed to cache any resources`,
+            progress: 0
+          });
+        }
+      }).catch(error => {
+        console.error('[SW] Caching error:', error);
+        port.postMessage({ 
+          error: error.message,
+          success: false,
+          progress: 0
+        });
+      })
+    );
+    return;
+  }
+  
+  // Handle remove tour cache
+  if (event.data.type === 'REMOVE_TOUR_RESOURCES') {
+    const { tourId, resources } = event.data;
+    
+    console.log(`[SW] Removing cache for tour ${tourId}`);
+    
+    // Check if MessageChannel port was provided
+    if (!event.ports || event.ports.length === 0) {
+      console.error('[SW] No MessageChannel port provided for REMOVE_TOUR_RESOURCES');
+      return;
+    }
+    
+    const port = event.ports[0];
+    
+    event.waitUntil(
+      caches.open(offlineToursCache).then(async (cache) => {
+        // Delete all specified resources
+        if (resources && resources.length > 0) {
+          await Promise.all(resources.map(key => cache.delete(new Request(key))));
+        }
+        
+        // Respond with success
+        port.postMessage({ 
+          success: true,
+          message: `Removed cache for tour ${tourId}`
+        });
+      }).catch(error => {
+        console.error('[SW] Remove cache error:', error);
+        port.postMessage({ 
+          success: false,
+          error: error.message 
+        });
+      })
+    );
+    return;
+  }
+  
+  // Ping to check if service worker is active
+  if (event.data.type === 'PING') {
+    console.log('[SW] Received ping from client');
+    
+    if (event.ports && event.ports.length > 0) {
+      event.ports[0].postMessage({
+        type: 'PONG',
+        timestamp: Date.now(),
+        status: 'active'
+      });
+    }
+    return;
+  }
 }); 

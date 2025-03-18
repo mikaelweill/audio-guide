@@ -8,14 +8,29 @@ if ('serviceWorker' in navigator) {
       
     console.log('App running at:', APP_URL);
     
+    // Global flag for service worker readiness that other scripts can check
+    window.SW_STATUS = {
+      registered: false,
+      controlling: false,
+      error: null
+    };
+    
+    // Function to broadcast service worker status change
+    const broadcastSwStatus = () => {
+      const event = new CustomEvent('swstatuschange', { detail: window.SW_STATUS });
+      window.dispatchEvent(event);
+    };
+    
     // Track service worker registration attempts
     let registerAttempts = 0;
-    const MAX_REGISTER_ATTEMPTS = 3;
+    const MAX_REGISTER_ATTEMPTS = 5;
 
     // Function to register service worker with retry
     const registerServiceWorker = () => {
       if (registerAttempts >= MAX_REGISTER_ATTEMPTS) {
         console.error('Max service worker registration attempts reached');
+        window.SW_STATUS.error = 'Max registration attempts reached';
+        broadcastSwStatus();
         return;
       }
 
@@ -27,6 +42,8 @@ if ('serviceWorker' in navigator) {
         scope: '/' 
       }).then(registration => {
         console.log('SW registered successfully: ', registration);
+        window.SW_STATUS.registered = true;
+        broadcastSwStatus();
         
         // Reset the attempt counter on success
         registerAttempts = 0;
@@ -34,11 +51,31 @@ if ('serviceWorker' in navigator) {
         // Force update the service worker
         registration.update();
         
+        // Track active state
+        const trackActivation = () => {
+          if (navigator.serviceWorker.controller) {
+            window.SW_STATUS.controlling = true;
+            broadcastSwStatus();
+            console.log('Service worker is now controlling the page');
+          } else {
+            setTimeout(trackActivation, 500);
+          }
+        };
+        trackActivation();
+        
         // Track failed states
         if (registration.installing) {
           registration.installing.addEventListener('statechange', (event) => {
-            if (event.target.state === 'redundant') {
+            console.log('Service worker state changed:', event.target.state);
+            
+            if (event.target.state === 'activated') {
+              window.SW_STATUS.controlling = true;
+              broadcastSwStatus();
+            } else if (event.target.state === 'redundant') {
               console.error('Service worker installation failed, will retry');
+              window.SW_STATUS.error = 'Installation failed';
+              window.SW_STATUS.controlling = false;
+              broadcastSwStatus();
               setTimeout(registerServiceWorker, 5000);
             }
           });
@@ -53,6 +90,8 @@ if ('serviceWorker' in navigator) {
         }, 5 * 60 * 1000);
       }).catch(error => {
         console.error('SW registration failed: ', error);
+        window.SW_STATUS.error = error.message;
+        broadcastSwStatus();
         
         // Try again after a delay
         setTimeout(registerServiceWorker, 5000 * registerAttempts);
@@ -62,15 +101,49 @@ if ('serviceWorker' in navigator) {
     // Start registration process
     registerServiceWorker();
     
+    // Provide a way to manually check if the service worker is ready
+    window.isServiceWorkerReady = () => {
+      return window.SW_STATUS.controlling === true;
+    };
+    
+    // Provide a way to manually wait for the service worker to be ready
+    window.waitForServiceWorker = async (timeoutMs = 10000) => {
+      if (window.SW_STATUS.controlling) {
+        return true;
+      }
+      
+      return new Promise((resolve) => {
+        const timeoutId = setTimeout(() => {
+          document.removeEventListener('swstatuschange', checkStatus);
+          resolve(false);
+        }, timeoutMs);
+        
+        const checkStatus = (event) => {
+          if (event.detail.controlling) {
+            clearTimeout(timeoutId);
+            document.removeEventListener('swstatuschange', checkStatus);
+            resolve(true);
+          }
+        };
+        
+        window.addEventListener('swstatuschange', checkStatus);
+      });
+    };
+    
     // Handle service worker error recovery
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       console.log('Service worker controller changed');
+      window.SW_STATUS.controlling = true;
+      broadcastSwStatus();
     });
     
     // Monitor for service worker errors
     window.addEventListener('error', (event) => {
       if (event.filename && event.filename.includes('/sw.js')) {
         console.error('Service worker error detected:', event);
+        window.SW_STATUS.error = event.message;
+        window.SW_STATUS.controlling = false;
+        broadcastSwStatus();
         
         // Try to recover by unregistering and registering again
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -162,9 +235,10 @@ window.addEventListener('load', () => {
   const updateStatus = async () => {
     const isOnline = await testConnectivity();
     const hasCachedTours = await checkTourCache();
+    const swStatus = window.SW_STATUS || { controlling: false, error: null };
     
     if (isOnline) {
-      statusElement.textContent = 'Online Mode';
+      statusElement.textContent = 'Online Mode' + (swStatus.controlling ? ' (SW Ready)' : ' (SW Not Ready)');
       statusElement.style.backgroundColor = 'rgba(0, 255, 0, 0.2)';
       statusElement.style.color = 'green';
       

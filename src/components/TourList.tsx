@@ -541,11 +541,22 @@ export default function TourList({ tours, loading }: TourListProps) {
         return newErrors;
       });
 
-      // Set initial progress
+      // Set initial progress and downloading state
+      setDownloading(prev => ({ ...prev, [tour.id]: true }));
       setDownloadProgress(prev => ({
         ...prev,
         [tour.id]: { progress: 0, status: 'Initializing download...' }
       }));
+
+      // Pre-check cache API availability
+      if (!('caches' in window)) {
+        throw new Error('Cache API not available in this browser. Offline functionality not supported.');
+      }
+
+      // Pre-check IndexedDB availability
+      if (!('indexedDB' in window)) {
+        throw new Error('IndexedDB not available. Offline functionality not supported.');
+      }
 
       // Create a new AbortController
       const controller = new AbortController();
@@ -555,11 +566,20 @@ export default function TourList({ tours, loading }: TourListProps) {
       }));
 
       // Fetch audio data from our API with a timeout
+      setDownloadProgress(prev => ({
+        ...prev,
+        [tour.id]: { progress: 5, status: 'Fetching audio data...' }
+      }));
+      
       const fetchWithTimeout = async () => {
         const fetchTimeoutId = setTimeout(() => controller.abort(), 30000);
         try {
           const response = await fetch(`/api/tours/${tour.id}/audio-data`, {
-            signal: controller.signal
+            signal: controller.signal,
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
           });
           
           clearTimeout(fetchTimeoutId);
@@ -594,6 +614,12 @@ export default function TourList({ tours, loading }: TourListProps) {
       } catch (error) {
         throw new Error('Failed to parse audio data response');
       }
+      
+      // Update status
+      setDownloadProgress(prev => ({
+        ...prev,
+        [tour.id]: { progress: 10, status: 'Starting download...' }
+      }));
       
       // Download the tour using our offlineTourService with error reporting
       await downloadTour(tour, audioData, (progress, status) => {
@@ -630,57 +656,68 @@ export default function TourList({ tours, loading }: TourListProps) {
       // When download is complete, update downloaded tours list
       setDownloadedTours(prev => [...prev, tour.id]);
       
-      // And clear the progress display after a few seconds
+      toast.success('Tour downloaded successfully!');
+      
+      // Clear progress after a short delay
       setTimeout(() => {
         setDownloadProgress(prev => {
           const newProgress = { ...prev };
           delete newProgress[tour.id];
           return newProgress;
         });
-
-        // Clear the controller too
-        setDownloadControllers(prev => {
-          const newControllers = { ...prev };
-          delete newControllers[tour.id];
-          return newControllers;
-        });
       }, 3000);
       
+      // Reset downloading state
+      setDownloading(prev => ({ ...prev, [tour.id]: false }));
+      
+      // Clear the controller
+      setDownloadControllers(prev => {
+        const newControllers = { ...prev };
+        delete newControllers[tour.id];
+        return newControllers;
+      });
     } catch (error) {
       console.error('Failed to download tour:', error);
       
-      // Don't show error message if it was a user-initiated cancel
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.log('Download was cancelled by user');
-      } else {
-        // Show error message with suggestion
-        let errorMessage = error instanceof Error ? error.message : 'Failed to download tour';
-        let suggestion = '';
-        
-        // Add helpful suggestions based on error type
-        if (errorMessage.includes('fetch') || errorMessage.includes('network')) {
-          suggestion = ' Check your internet connection and try again.';
-        } else if (errorMessage.includes('parse') || errorMessage.includes('JSON')) {
-          suggestion = ' The server response was invalid. Try refreshing the page.';
-        } else if (errorMessage.includes('timeout')) {
-          suggestion = ' The download request took too long. Try again later.';
-        } else if (errorMessage.includes('IndexedDB') || errorMessage.includes('storage')) {
-          suggestion = ' Your browser storage might be full. Try clearing some space.';
-        }
-        
-        setDownloadErrors(prev => ({
-          ...prev,
-          [tour.id]: errorMessage + suggestion
-        }));
+      // Show error message
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Unknown error occurred';
+      
+      let userErrorMessage = errorMessage;
+      
+      // Provide more helpful messages for common errors
+      if (errorMessage.includes('Service worker')) {
+        userErrorMessage = 'Download failed in dev mode. This feature works better in production.';
+      } else if (errorMessage.includes('IndexedDB')) {
+        userErrorMessage = 'Storage error: Your browser may be in private mode or has limited storage.';
+      } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+        userErrorMessage = 'Network error: Check your connection and try again.';
+      } else if (errorMessage.includes('aborted') || errorMessage.includes('timeout')) {
+        userErrorMessage = 'Download timed out. Please try again.';
+      } else if (errorMessage.includes('Cache API')) {
+        userErrorMessage = 'Your browser doesn\'t support offline mode.';
       }
       
-      // Clear progress display
+      // Clear progress
       setDownloadProgress(prev => {
         const newProgress = { ...prev };
         delete newProgress[tour.id];
         return newProgress;
       });
-
+      
+      // Set error
+      setDownloadErrors(prev => ({
+        ...prev,
+        [tour.id]: userErrorMessage
+      }));
+      
+      // Reset downloading state
+      setDownloading(prev => ({ ...prev, [tour.id]: false }));
+      
+      // Show toast notification
+      toast.error(`Download failed: ${userErrorMessage}`);
+      
       // Clear the controller
       setDownloadControllers(prev => {
         const newControllers = { ...prev };

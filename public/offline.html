@@ -13,7 +13,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100vh;
+      min-height: 100vh;
       margin: 0;
       padding: 16px;
       text-align: center;
@@ -24,16 +24,18 @@
       background: rgba(30, 41, 59, 0.8);
       border-radius: 12px;
       border: 1px solid rgba(249, 115, 22, 0.3);
+      backdrop-filter: blur(8px);
     }
     h1 {
       color: #f97316;
       margin-bottom: 16px;
+      font-size: 1.8rem;
     }
     p {
       margin-bottom: 24px;
       line-height: 1.5;
     }
-    button {
+    button, a.button {
       background: #f97316;
       color: white;
       border: none;
@@ -41,14 +43,199 @@
       border-radius: 6px;
       font-weight: 500;
       cursor: pointer;
+      display: inline-block;
+      text-decoration: none;
+      font-size: 1rem;
+      transition: background-color 0.2s;
+      margin: 0 8px 8px 0;
+    }
+    button:hover, a.button:hover {
+      background: #ea580c;
+    }
+    button.secondary, a.button.secondary {
+      background: rgba(249, 115, 22, 0.2);
+      color: #f97316;
+    }
+    button.secondary:hover, a.button.secondary:hover {
+      background: rgba(249, 115, 22, 0.3);
+    }
+    .tour-list {
+      margin: 16px 0;
+      text-align: left;
+      border-radius: 8px;
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height 0.5s, opacity 0.3s;
+    }
+    .tour-list.visible {
+      max-height: 300px;
+      opacity: 1;
+      overflow-y: auto;
+      margin-bottom: 24px;
+      background: rgba(15, 23, 42, 0.5);
+    }
+    .tour-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+      transition: background-color 0.2s;
+    }
+    .tour-item:hover {
+      background: rgba(249, 115, 22, 0.1);
+    }
+    .tour-item a {
+      color: #f97316;
+      text-decoration: none;
+      display: block;
+      font-weight: 500;
+    }
+    .tour-item:last-child {
+      border-bottom: none;
+    }
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(249, 115, 22, 0.3);
+      border-radius: 50%;
+      border-top-color: #f97316;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .error {
+      color: #ef4444;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+    }
+    .info {
+      color: #60a5fa;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
     }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>You're Offline</h1>
-    <p>Sorry, you can't access Audio Travel Guide right now because you're not connected to the internet.</p>
-    <button onclick="window.location.reload()">Try Again</button>
+    <p>You're currently offline, but you can still access your downloaded tours!</p>
+    
+    <div id="loading">
+      <span class="loading"></span> Checking for downloaded tours...
+    </div>
+    
+    <div id="error" class="error" style="display: none;"></div>
+    <div id="no-tours" style="display: none;">
+      <p>No downloaded tours found. You need to download tours while online to use them offline.</p>
+    </div>
+    
+    <div id="tour-list" class="tour-list">
+      <!-- Downloaded tours will be listed here -->
+    </div>
+    
+    <div id="actions">
+      <a href="/" class="button">Go to Home</a>
+      <button onclick="window.location.reload()" class="secondary">Try Again</button>
+    </div>
   </div>
+
+  <script>
+    // Function to check for downloaded tours
+    function checkDownloadedTours() {
+      const loadingElement = document.getElementById('loading');
+      const errorElement = document.getElementById('error');
+      const noToursElement = document.getElementById('no-tours');
+      const tourListElement = document.getElementById('tour-list');
+      
+      // Check if IndexedDB is available
+      if (!window.indexedDB) {
+        loadingElement.style.display = 'none';
+        errorElement.textContent = 'Your browser doesn\'t support offline storage.';
+        errorElement.style.display = 'block';
+        return;
+      }
+      
+      try {
+        // Open the database
+        const request = indexedDB.open('offline-audio-guide', 1);
+        
+        request.onerror = function(event) {
+          loadingElement.style.display = 'none';
+          errorElement.textContent = 'Failed to access offline storage.';
+          errorElement.style.display = 'block';
+        };
+        
+        request.onsuccess = function(event) {
+          const db = event.target.result;
+          
+          // Check if the downloadedTours store exists
+          if (!db.objectStoreNames.contains('downloadedTours')) {
+            loadingElement.style.display = 'none';
+            noToursElement.style.display = 'block';
+            return;
+          }
+          
+          // Get all downloaded tours
+          const transaction = db.transaction(['downloadedTours'], 'readonly');
+          const store = transaction.objectStore('downloadedTours');
+          const getAllRequest = store.getAll();
+          
+          getAllRequest.onsuccess = function(event) {
+            loadingElement.style.display = 'none';
+            const tours = event.target.result;
+            
+            if (tours && tours.length > 0) {
+              // Display the tours
+              tours.forEach(item => {
+                const tourElement = document.createElement('div');
+                tourElement.className = 'tour-item';
+                
+                const link = document.createElement('a');
+                link.href = `/tour/${item.id}`;
+                link.textContent = item.tour.name || 'Unnamed Tour';
+                
+                tourElement.appendChild(link);
+                tourListElement.appendChild(tourElement);
+              });
+              
+              // Show the tour list
+              tourListElement.className = 'tour-list visible';
+              
+              // Update message
+              const headingElement = document.querySelector('h1');
+              headingElement.textContent = 'Your Downloaded Tours';
+              
+              const descriptionElement = document.querySelector('.container > p');
+              descriptionElement.textContent = `You have ${tours.length} tour${tours.length !== 1 ? 's' : ''} available offline. Select one to start exploring!`;
+            } else {
+              noToursElement.style.display = 'block';
+            }
+          };
+          
+          getAllRequest.onerror = function(event) {
+            loadingElement.style.display = 'none';
+            errorElement.textContent = 'Failed to retrieve downloaded tours.';
+            errorElement.style.display = 'block';
+          };
+        };
+        
+        request.onupgradeneeded = function(event) {
+          // This shouldn't normally happen here, but just in case
+          loadingElement.style.display = 'none';
+          noToursElement.style.display = 'block';
+        };
+      } catch (error) {
+        loadingElement.style.display = 'none';
+        errorElement.textContent = 'An error occurred: ' + error.message;
+        errorElement.style.display = 'block';
+      }
+    }
+    
+    // Check for downloaded tours when the page loads
+    window.addEventListener('load', checkDownloadedTours);
+  </script>
 </body>
 </html> 

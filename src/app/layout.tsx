@@ -7,6 +7,20 @@ import AuthStatus from "@/components/Layout/AuthStatus";
 import DebugPanel from "@/components/Layout/DebugPanel";
 import { Toaster } from 'react-hot-toast';
 import { Providers } from "./providers";
+import OfflineDetector from "@/components/OfflineDetector";
+
+// Client-side component to load offline navigation
+const OfflineNavigationWrapper = () => {
+  'use client';
+  
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  
+  // Dynamically import the OfflineNavigation component
+  const OfflineNavigation = require('@/components/OfflineNavigation').default;
+  return <OfflineNavigation />;
+};
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -84,7 +98,9 @@ export default function RootLayout({
             <AuthStatus />
             {process.env.NODE_ENV === "development" && <DebugPanel />}
             <Toaster position="bottom-right" />
-            {/* OfflineIndicator will be added in a client component */}
+            <OfflineDetector />
+            {/* Client-side only component for offline navigation */}
+            <OfflineNavigationWrapper />
           </Providers>
         </AuthProvider>
       </body>
