@@ -22,6 +22,19 @@ const OfflineNavigationWrapper = () => {
   return <OfflineNavigation />;
 };
 
+// Client-side component to load offline emergency access
+const EmergencyAccessWrapper = () => {
+  'use client';
+  
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  
+  // Dynamically import the OfflineEmergencyAccess component
+  const OfflineEmergencyAccess = require('@/components/OfflineEmergencyAccess').default;
+  return <OfflineEmergencyAccess />;
+};
+
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -99,8 +112,8 @@ export default function RootLayout({
             {process.env.NODE_ENV === "development" && <DebugPanel />}
             <Toaster position="bottom-right" />
             <OfflineDetector />
-            {/* Client-side only component for offline navigation */}
             <OfflineNavigationWrapper />
+            <EmergencyAccessWrapper />
           </Providers>
         </AuthProvider>
       </body>

@@ -3,239 +3,196 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Offline - Audio Travel Guide</title>
+  <title>You're Offline - Audio Guide</title>
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0f172a;
-      color: #f8fafc;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
+    /* Base styles */
+    body, html {
       margin: 0;
-      padding: 16px;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      height: 100%;
+      width: 100%;
+    }
+    
+    /* Container */
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
       text-align: center;
     }
-    .container {
-      max-width: 500px;
-      padding: 24px;
-      background: rgba(30, 41, 59, 0.8);
-      border-radius: 12px;
-      border: 1px solid rgba(249, 115, 22, 0.3);
-      backdrop-filter: blur(8px);
-    }
+    
+    /* Header */
     h1 {
-      color: #f97316;
-      margin-bottom: 16px;
+      color: #f8fafc;
       font-size: 1.8rem;
+      margin-bottom: 1rem;
     }
+    
+    /* Paragraph */
     p {
-      margin-bottom: 24px;
-      line-height: 1.5;
+      color: #cbd5e1;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
     }
-    button, a.button {
-      background: #f97316;
+    
+    /* Button */
+    .button {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: linear-gradient(to right, #f97316, #db2777, #7e22ce);
       color: white;
       border: none;
-      padding: 12px 24px;
-      border-radius: 6px;
-      font-weight: 500;
+      border-radius: 0.375rem;
+      font-weight: 600;
       cursor: pointer;
-      display: inline-block;
       text-decoration: none;
-      font-size: 1rem;
-      transition: background-color 0.2s;
-      margin: 0 8px 8px 0;
+      transition: opacity 0.15s ease;
+      margin-bottom: 1rem;
     }
-    button:hover, a.button:hover {
-      background: #ea580c;
+    
+    .button:hover {
+      opacity: 0.9;
     }
-    button.secondary, a.button.secondary {
-      background: rgba(249, 115, 22, 0.2);
-      color: #f97316;
+    
+    /* Secondary button */
+    .button-secondary {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background-color: rgba(30, 41, 59, 0.7);
+      color: #cbd5e1;
+      border: 1px solid rgba(126, 34, 206, 0.3);
+      border-radius: 0.375rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background-color 0.15s ease;
+      margin-bottom: 1rem;
     }
-    button.secondary:hover, a.button.secondary:hover {
-      background: rgba(249, 115, 22, 0.3);
+    
+    .button-secondary:hover {
+      background-color: rgba(30, 41, 59, 0.9);
     }
-    .tour-list {
-      margin: 16px 0;
+    
+    /* Icon */
+    .icon {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 1.5rem;
+    }
+    
+    /* Card */
+    .card {
+      background-color: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(126, 34, 206, 0.3);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      backdrop-filter: blur(10px);
+    }
+
+    /* Emergency access section */
+    .emergency-section {
+      margin-top: 2rem;
+      padding: 1rem;
+      background-color: rgba(249, 115, 22, 0.1);
+      border: 1px solid rgba(249, 115, 22, 0.3);
+      border-radius: 0.5rem;
       text-align: left;
-      border-radius: 8px;
-      overflow: hidden;
-      max-height: 0;
-      opacity: 0;
-      transition: max-height 0.5s, opacity 0.3s;
     }
-    .tour-list.visible {
-      max-height: 300px;
-      opacity: 1;
-      overflow-y: auto;
-      margin-bottom: 24px;
-      background: rgba(15, 23, 42, 0.5);
+
+    .emergency-section h2 {
+      font-size: 1.2rem;
+      color: #fdba74;
+      margin-bottom: 0.75rem;
     }
-    .tour-item {
-      padding: 12px 16px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-      transition: background-color 0.2s;
+
+    .emergency-section ul {
+      color: #e2e8f0;
+      margin-bottom: 1rem;
+      padding-left: 1.5rem;
     }
-    .tour-item:hover {
-      background: rgba(249, 115, 22, 0.1);
+
+    .emergency-section li {
+      margin-bottom: 0.5rem;
     }
-    .tour-item a {
-      color: #f97316;
-      text-decoration: none;
-      display: block;
-      font-weight: 500;
-    }
-    .tour-item:last-child {
-      border-bottom: none;
-    }
-    .loading {
+
+    /* Emergency button */
+    .emergency-button {
       display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 2px solid rgba(249, 115, 22, 0.3);
-      border-radius: 50%;
-      border-top-color: #f97316;
-      animation: spin 1s linear infinite;
-      margin-right: 8px;
-      vertical-align: middle;
+      padding: 0.75rem 1.5rem;
+      background-color: rgba(249, 115, 22, 0.7);
+      color: white;
+      border: none;
+      border-radius: 0.375rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background-color 0.15s ease;
     }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    .error {
-      color: #ef4444;
-      margin-bottom: 16px;
-      font-size: 0.9rem;
-    }
-    .info {
-      color: #60a5fa;
-      margin-bottom: 16px;
-      font-size: 0.9rem;
+
+    .emergency-button:hover {
+      background-color: rgba(249, 115, 22, 0.9);
     }
   </style>
 </head>
 <body>
   <div class="container">
+    <svg class="icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+    </svg>
+    
     <h1>You're Offline</h1>
-    <p>You're currently offline, but you can still access your downloaded tours!</p>
     
-    <div id="loading">
-      <span class="loading"></span> Checking for downloaded tours...
+    <div class="card">
+      <p>You are currently offline and cannot access this page. Try these options:</p>
+      
+      <a href="/" class="button">Go to Home Page</a>
+      <br>
+      <a href="javascript:window.location.reload()" class="button-secondary">Try Again</a>
     </div>
     
-    <div id="error" class="error" style="display: none;"></div>
-    <div id="no-tours" style="display: none;">
-      <p>No downloaded tours found. You need to download tours while online to use them offline.</p>
-    </div>
-    
-    <div id="tour-list" class="tour-list">
-      <!-- Downloaded tours will be listed here -->
-    </div>
-    
-    <div id="actions">
-      <a href="/" class="button">Go to Home</a>
-      <button onclick="window.location.reload()" class="secondary">Try Again</button>
+    <p>If you've downloaded tours for offline use, you can still access them when connected to the internet again.</p>
+
+    <div class="emergency-section">
+      <h2>Can't Access Downloaded Tours?</h2>
+      <p>If you have downloaded tours but can't access them when offline, try these options:</p>
+      <ul>
+        <li>Make sure you're using the same browser where you downloaded the tours</li>
+        <li>Try accessing through the home page instead of direct URLs</li>
+        <li>As a last resort, use the emergency access button below</li>
+      </ul>
+      <button id="emergency-access" class="emergency-button">Emergency Tour Access</button>
     </div>
   </div>
 
   <script>
-    // Function to check for downloaded tours
-    function checkDownloadedTours() {
-      const loadingElement = document.getElementById('loading');
-      const errorElement = document.getElementById('error');
-      const noToursElement = document.getElementById('no-tours');
-      const tourListElement = document.getElementById('tour-list');
-      
-      // Check if IndexedDB is available
-      if (!window.indexedDB) {
-        loadingElement.style.display = 'none';
-        errorElement.textContent = 'Your browser doesn\'t support offline storage.';
-        errorElement.style.display = 'block';
-        return;
-      }
-      
-      try {
-        // Open the database
-        const request = indexedDB.open('offline-audio-guide', 1);
-        
-        request.onerror = function(event) {
-          loadingElement.style.display = 'none';
-          errorElement.textContent = 'Failed to access offline storage.';
-          errorElement.style.display = 'block';
-        };
-        
-        request.onsuccess = function(event) {
-          const db = event.target.result;
-          
-          // Check if the downloadedTours store exists
-          if (!db.objectStoreNames.contains('downloadedTours')) {
-            loadingElement.style.display = 'none';
-            noToursElement.style.display = 'block';
-            return;
-          }
-          
-          // Get all downloaded tours
-          const transaction = db.transaction(['downloadedTours'], 'readonly');
-          const store = transaction.objectStore('downloadedTours');
-          const getAllRequest = store.getAll();
-          
-          getAllRequest.onsuccess = function(event) {
-            loadingElement.style.display = 'none';
-            const tours = event.target.result;
-            
-            if (tours && tours.length > 0) {
-              // Display the tours
-              tours.forEach(item => {
-                const tourElement = document.createElement('div');
-                tourElement.className = 'tour-item';
-                
-                const link = document.createElement('a');
-                link.href = `/tour/${item.id}`;
-                link.textContent = item.tour.name || 'Unnamed Tour';
-                
-                tourElement.appendChild(link);
-                tourListElement.appendChild(tourElement);
-              });
-              
-              // Show the tour list
-              tourListElement.className = 'tour-list visible';
-              
-              // Update message
-              const headingElement = document.querySelector('h1');
-              headingElement.textContent = 'Your Downloaded Tours';
-              
-              const descriptionElement = document.querySelector('.container > p');
-              descriptionElement.textContent = `You have ${tours.length} tour${tours.length !== 1 ? 's' : ''} available offline. Select one to start exploring!`;
-            } else {
-              noToursElement.style.display = 'block';
-            }
-          };
-          
-          getAllRequest.onerror = function(event) {
-            loadingElement.style.display = 'none';
-            errorElement.textContent = 'Failed to retrieve downloaded tours.';
-            errorElement.style.display = 'block';
-          };
-        };
-        
-        request.onupgradeneeded = function(event) {
-          // This shouldn't normally happen here, but just in case
-          loadingElement.style.display = 'none';
-          noToursElement.style.display = 'block';
-        };
-      } catch (error) {
-        loadingElement.style.display = 'none';
-        errorElement.textContent = 'An error occurred: ' + error.message;
-        errorElement.style.display = 'block';
-      }
-    }
+    // Check if running as installed PWA
+    const isPwa = () => {
+      return window.matchMedia('(display-mode: standalone)').matches || 
+             window.matchMedia('(display-mode: fullscreen)').matches ||
+             window.matchMedia('(display-mode: minimal-ui)').matches ||
+             window.navigator.standalone === true;
+    };
     
-    // Check for downloaded tours when the page loads
-    window.addEventListener('load', checkDownloadedTours);
+    // Add emergency access functionality
+    document.getElementById('emergency-access').addEventListener('click', function() {
+      localStorage.setItem('bypassOfflineCheck', 'true');
+      alert('Emergency access enabled. You will now be able to access all content regardless of download status.');
+      window.location.href = '/';
+    });
+    
+    // If not running as PWA, encourage installation
+    if (!isPwa()) {
+      const cardEl = document.querySelector('.card');
+      const pwaNote = document.createElement('p');
+      pwaNote.innerHTML = `<strong>Pro Tip:</strong> Install this app on your device for better offline support.`;
+      pwaNote.style.color = '#fdba74';
+      pwaNote.style.marginTop = '1rem';
+      cardEl.appendChild(pwaNote);
+    }
   </script>
 </body>
 </html> 

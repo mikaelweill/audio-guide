@@ -204,19 +204,18 @@ export default function TourList({ tours, loading }: TourListProps) {
   // Check which tours are downloaded
   useEffect(() => {
     const checkDownloadedTours = async () => {
-      if (isPwaMode) {
-        try {
-          const tours = await getAllDownloadedTours();
-          const tourIds = tours.map(tour => tour.id);
-          setDownloadedTours(tourIds);
-        } catch (error) {
-          console.error('Error checking downloaded tours:', error);
-        }
+      try {
+        const tours = await getAllDownloadedTours();
+        console.log("Downloaded tours loaded:", tours.length);
+        const tourIds = tours.map(tour => tour.id);
+        setDownloadedTours(tourIds);
+      } catch (error) {
+        console.error('Error checking downloaded tours:', error);
       }
     };
 
     checkDownloadedTours();
-  }, [tours, isPwaMode]);
+  }, []);
 
   // Handle online/offline events
   useEffect(() => {
@@ -789,7 +788,29 @@ export default function TourList({ tours, loading }: TourListProps) {
         </div>
         <h3 className="text-lg font-medium text-white mb-2">You're Offline</h3>
         <p className="text-purple-100/80 mb-2">No downloaded tours available.</p>
-        <p className="text-purple-100/60 text-sm">Connect to the internet to see your tours or download tours for offline use.</p>
+        <p className="text-purple-100/60 text-sm mb-6">Connect to the internet to see your tours or download tours for offline use.</p>
+        
+        <div className="text-left p-4 bg-slate-800/80 rounded-lg border border-orange-900/30 mb-4">
+          <h4 className="font-medium text-orange-300 mb-2">Troubleshooting Options:</h4>
+          <ul className="list-disc pl-5 text-purple-100/70 text-sm space-y-2">
+            <li>Try refreshing the page</li>
+            <li>Check that your downloaded tours are in IndexedDB (via DevTools &gt; Application &gt; IndexedDB)</li>
+            <li>If you know you've downloaded tours but they're not showing:</li>
+          </ul>
+          <div className="mt-4 flex justify-center">
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('bypassOfflineCheck', 'true');
+                  window.location.reload();
+                }
+              }}
+              className="bg-orange-700 hover:bg-orange-600 text-white py-2 px-4 rounded-md text-sm"
+            >
+              Force Show All Tours
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -797,11 +818,33 @@ export default function TourList({ tours, loading }: TourListProps) {
   return (
     <div className="space-y-4">
       {offlineStatus && (
-        <div className="bg-orange-900/30 border border-orange-800/50 rounded-lg p-4 mb-4 flex items-center">
-          <svg className="w-5 h-5 mr-2 text-orange-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          <span className="text-orange-300">You're offline. Only downloaded tours are shown.</span>
+        <div className="bg-orange-900/30 border border-orange-800/50 rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 mr-2 text-orange-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span className="text-orange-300">You're offline. {downloadedTours.length > 0 ? `Showing ${downloadedTours.length} downloaded tours.` : 'No tours found.'}</span>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  const tours = await getAllDownloadedTours();
+                  const tourIds = tours.map(tour => tour.id);
+                  setDownloadedTours(tourIds);
+                  if (tourIds.length === 0) {
+                    alert('No downloaded tours found in storage. Connect to the internet to download tours for offline use.');
+                  }
+                } catch (error) {
+                  console.error('Error refreshing downloaded tours:', error);
+                  alert('Error checking downloaded tours. Try again or check your browser storage.');
+                }
+              }}
+              className="text-sm bg-orange-800/50 hover:bg-orange-700/50 text-orange-200 px-3 py-1 rounded-md"
+            >
+              Refresh List
+            </button>
+          </div>
         </div>
       )}
       
@@ -1023,19 +1066,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                   </button>
                 ) : (
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      try {
-                        deleteTour(tour.id);
-                        setDownloadedTours(prev => prev.filter(id => id !== tour.id));
-                      } catch (error) {
-                        console.error('Failed to delete tour:', error);
-                        setDownloadErrors(prev => ({
-                          ...prev,
-                          [tour.id]: error instanceof Error ? error.message : 'Failed to delete tour'
-                        }));
-                      }
-                    }}
+                    disabled={downloading[tour.id] || Boolean(downloadProgress[tour.id])}
                     className="flex-1 inline-flex items-center justify-center text-green-300 hover:text-green-200 text-xs font-medium bg-green-900/30 hover:bg-green-900/50 px-3 py-1.5 rounded-md transition-all cursor-pointer shadow-sm shadow-green-900/20"
                   >
                     <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1208,7 +1239,7 @@ export default function TourList({ tours, loading }: TourListProps) {
                     <div className="min-w-8 mt-1 mr-2">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                          <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
                         </svg>
                       </div>
                     </div>
