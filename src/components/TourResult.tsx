@@ -146,16 +146,16 @@ export default function TourResult({
   });
   
   const handleSave = () => {
-    // Validate form fields
+    // Validate form fields - only name is required
     const errors = {
       name: !formData.tourName?.trim(),
-      description: !formData.description?.trim()
+      description: false // Description is now optional
     };
     
     setFormErrors(errors);
     
-    // If no errors, proceed with save
-    if (!errors.name && !errors.description) {
+    // If name is valid, proceed with save
+    if (!errors.name) {
       if (onSaveTour) {
         onSaveTour();
       } else if (onSave) {
@@ -189,12 +189,12 @@ export default function TourResult({
         </div>
         <div className="mb-4">
           <label className="block text-gray-300 text-sm font-medium mb-2">
-            Description <span className="text-pink-500">*</span>
+            Description
           </label>
           <textarea
             value={formData.description || ''}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            placeholder="Add notes about this tour..."
+            placeholder="Add notes about this tour (optional)"
             className={`w-full p-2 border ${formErrors.description ? 'border-pink-500' : 'border-slate-700'} bg-slate-800 rounded-md text-white placeholder-gray-400 focus:border-pink-500 focus:ring-1 focus:ring-pink-500`}
             rows={2}
           />
