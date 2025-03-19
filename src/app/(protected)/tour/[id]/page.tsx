@@ -1004,6 +1004,14 @@ export default function TourPage() {
       console.log('Loading audio file...');
       audio.src = offlineUrl;
       audio.load();
+      
+      // Add ended event listener to reset playing state
+      audio.addEventListener('ended', () => {
+        console.log('Audio playback ended');
+        setIsPlaying(false);
+        setCurrentTime(0);
+      });
+      
       setAudioElement(audio);
       
       // Try to play the audio
@@ -1030,11 +1038,17 @@ export default function TourPage() {
     
     if (isPlaying) {
       audioElement.pause();
+      setIsPlaying(false);
     } else {
-      audioElement.play().catch(error => {
-        console.error('Error playing audio:', error);
-        alert(`Could not play audio: ${error.message}`);
-      });
+      audioElement.play()
+        .then(() => {
+          setIsPlaying(true);
+        })
+        .catch(error => {
+          console.error('Error playing audio:', error);
+          alert(`Could not play audio: ${error.message}`);
+          setIsPlaying(false);
+        });
     }
   }, [audioElement, isPlaying]);
 
@@ -1735,7 +1749,7 @@ export default function TourPage() {
                               ) : (
                                 <>
                                   <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"></path>
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
                                   </svg>
                                   Brief Overview (30-60s)
                                 </>
