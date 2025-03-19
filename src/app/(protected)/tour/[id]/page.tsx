@@ -2105,18 +2105,24 @@ export default function TourPage() {
             </button>
             
             <button
-              onClick={() => goToStop(currentStopIndex + 1)}
-              className={`flex items-center px-4 py-2 rounded-md ${
-                currentStopIndex < sortedPois.length - 1 
-                  ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white hover:opacity-90 shadow-md' 
-                  : 'bg-slate-800 text-gray-500 cursor-not-allowed'
-              }`}
-              disabled={currentStopIndex === sortedPois.length - 1}
+              onClick={() => currentStopIndex < sortedPois.length - 1 ? goToStop(currentStopIndex + 1) : router.push('/')}
+              className="flex items-center px-4 py-2 rounded-md bg-gradient-to-r from-orange-500 to-pink-600 text-white hover:opacity-90 shadow-md"
             >
-              Next Stop
-              <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+              {currentStopIndex < sortedPois.length - 1 ? (
+                <>
+                  Next Stop
+                  <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </>
+              ) : (
+                <>
+                  Finish
+                  <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                  </svg>
+                </>
+              )}
             </button>
           </div>
         </div>
