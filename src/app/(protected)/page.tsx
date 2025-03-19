@@ -87,6 +87,68 @@ function TourLoader({
     }
 
     try {
+      // Check if we're offline first
+      if (!navigator.onLine) {
+        console.log('🔄 TOUR LOADER: Device is offline, fetching from cached data');
+        
+        try {
+          // Import the offlineTourService
+          const { getAllDownloadedTours } = await import('@/services/offlineTourService');
+          
+          // Get all downloaded tours from IndexedDB
+          const downloadedTours = await getAllDownloadedTours();
+          
+          if (downloadedTours && downloadedTours.length > 0) {
+            console.log(`✅ TOUR LOADER: Loaded ${downloadedTours.length} tours from offline cache`);
+            
+            // Format downloaded tours to match API response format
+            const offlineTours = downloadedTours.map(item => item.tour);
+            
+            // Calculate pagination values for offline mode
+            const startIndex = (page - 1) * pageLimit;
+            const endIndex = startIndex + pageLimit;
+            const paginatedTours = offlineTours.slice(startIndex, endIndex);
+            
+            const paginationData = {
+              total: offlineTours.length,
+              page: page,
+              limit: pageLimit,
+              pages: Math.ceil(offlineTours.length / pageLimit)
+            };
+            
+            setTours(paginatedTours);
+            setTotalPages(paginationData.pages);
+            setTotalTours(paginationData.total);
+            
+            // Pass both tours and pagination data
+            onToursLoaded(paginatedTours, paginationData);
+            setIsLoading(false);
+            
+            if (onLoadingChange) {
+              onLoadingChange(false);
+            }
+            
+            return;
+          } else {
+            console.warn('🔄 TOUR LOADER: No offline tours available');
+            setTours([]);
+            setTotalPages(1);
+            setTotalTours(0);
+            onToursLoaded([], { total: 0, page: 1, limit: pageLimit, pages: 1 });
+            setIsLoading(false);
+            
+            if (onLoadingChange) {
+              onLoadingChange(false);
+            }
+            
+            return;
+          }
+        } catch (offlineError) {
+          console.error('❌ TOUR LOADER: Error fetching offline tours', offlineError);
+        }
+      }
+
+      // Online mode - proceed with API request as before
       const response = await fetch(`/api/tours?page=${page}&limit=${pageLimit}`, {
         credentials: 'include'
       });
