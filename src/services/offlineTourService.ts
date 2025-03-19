@@ -187,7 +187,7 @@ async function storeResource(resource: CachedResource): Promise<void> {
 /**
  * Retrieve a downloaded tour from IndexedDB
  */
-async function getTour(tourId: string): Promise<DownloadedTour | null> {
+export async function getTour(tourId: string): Promise<DownloadedTour | null> {
   let db: IDBDatabase | null = null;
   
   try {

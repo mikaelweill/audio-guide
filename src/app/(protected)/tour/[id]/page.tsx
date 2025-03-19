@@ -444,6 +444,45 @@ export default function TourPage() {
     try {
       setLoading(true);
       
+      // First check if we're offline
+      if (!navigator.onLine) {
+        console.log('Device is offline, attempting to load tour from cache');
+        
+        try {
+          // Import the offlineTourService and use the now-exported getTour function
+          const { getTour } = await import('@/services/offlineTourService');
+          
+          // Try to get the tour from IndexedDB
+          const cachedTour = await getTour(tourId);
+          
+          if (cachedTour && cachedTour.tour) {
+            console.log('Found cached tour data:', cachedTour.id);
+            setTour(cachedTour.tour);
+            
+            // After setting the tour, try to get cached audio data too
+            fetchExistingAudioGuides(cachedTour.tour.tourPois);
+            
+            // Clear timeout and return early since we found cached data
+            clearTimeout(timeoutId);
+            setLoading(false);
+            return;
+          } else {
+            console.error('No cached tour data found');
+            setError('This tour is not available offline. Please connect to the internet and try again.');
+            setLoading(false);
+            clearTimeout(timeoutId);
+            return;
+          }
+        } catch (offlineError) {
+          console.error('Error retrieving cached tour:', offlineError);
+          setError('Error loading offline tour data. Try refreshing the page.');
+          setLoading(false);
+          clearTimeout(timeoutId);
+          return;
+        }
+      }
+      
+      // If we're online, proceed with normal API request
       const response = await fetch(`/api/tours/${tourId}`, {
         method: 'GET',
         credentials: 'include',
@@ -505,6 +544,34 @@ export default function TourPage() {
         setError(data.error || 'Failed to load tour data');
       }
     } catch (error: any) {
+      // If fetch failed and we're offline, try to get from cache as fallback
+      if (!navigator.onLine) {
+        console.log('Network request failed and device is offline, attempting to load from cache');
+        
+        try {
+          // Import the offlineTourService and use the now-exported getTour function
+          const { getTour } = await import('@/services/offlineTourService');
+          
+          // Try to get the tour from IndexedDB
+          const cachedTour = await getTour(tourId);
+          
+          if (cachedTour && cachedTour.tour) {
+            console.log('Found cached tour data as fallback:', cachedTour.id);
+            setTour(cachedTour.tour);
+            
+            // After setting the tour, try to get cached audio data too
+            fetchExistingAudioGuides(cachedTour.tour.tourPois);
+            
+            // Clear error since we recovered
+            setError(null);
+            setLoading(false);
+            return;
+          }
+        } catch (offlineError) {
+          console.error('Error retrieving cached tour as fallback:', offlineError);
+        }
+      }
+    
       // Handle abort error specially
       if (error.name === 'AbortError') {
         console.error('Tour fetch aborted due to timeout');
