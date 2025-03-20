@@ -109,6 +109,118 @@ if (!navigator.onLine) {
 }
 ```
 
+## Persistent Issues: Stack-Ranked Hypotheses
+
+After deeper code investigation, the following issues likely explain why tours may still not be working in offline mode, despite appearing to be downloaded:
+
+### 1. Incomplete Resource Validation (Critical)
+
+**Problem**: The code marks tours as "downloaded" before confirming all resources are actually available.
+
+**Evidence**:
+```javascript
+// In downloadTour function:
+await storeTour(downloadedTour);  // Marks tour as downloaded
+completeDownload(tour.id);        // Completes before verifying resources
+```
+
+**Impact**: Tours appear downloaded in UI, but may have missing resources when accessed offline.
+
+### 2. Dual Storage Synchronization Failure (High)
+
+**Problem**: Critical resources are split between IndexedDB and Cache API with no cross-validation.
+
+**Evidence**: 
+- Tour metadata stored in IndexedDB (`downloadedTours` store)
+- Audio files stored in Cache API
+- Resources tracked as string arrays but never validated at runtime:
+```typescript
+// In DownloadedTour interface:
+audioResources: string[];  // Just tracks cache keys, not actual availability
+imageResources: string[];
+```
+
+**Impact**: A tour can be marked as "available offline" in IndexedDB while its resources are unavailable in Cache API.
+
+### 3. API Routes Explicitly Prevented from Caching (High)
+
+**Problem**: Next.js config actively prevents API routes from being cached.
+
+**Evidence**:
+```javascript
+// In next.config.js:
+// API routes - no caching
+source: '/api/:path*',
+headers: [
+  {
+    key: 'Cache-Control',
+    value: 'no-store, must-revalidate',
+  }
+]
+```
+
+**Impact**: Even if resources are cached, API routes needed for offline data may be uncacheable.
+
+### 4. Navigation Guard Only Checks Database Entry (Medium)
+
+**Problem**: Offline access control only verifies the tour entry exists, not its resources.
+
+**Evidence**:
+```javascript
+// In OfflineNavigation.tsx:
+const isDownloaded = await checkIfTourIsDownloaded(tourId);
+// checkIfTourIsDownloaded only checks if the tour exists in IndexedDB, not resources
+if (isDownloaded || isInDownloadedList) {
+  // Allow access
+}
+```
+
+**Impact**: Tours with missing resources are still considered "downloaded" for navigation purposes.
+
+### 5. Inconsistent Cache Naming (Medium)
+
+**Problem**: Different cache names used across the application cause resource lookup confusion.
+
+**Evidence**:
+```javascript
+// In offlineTourService.ts:
+const cache = await caches.open('audio-guide-offline');       // Production
+const localhostCache = await caches.open('audio-guide-localhost-cache'); // Development
+```
+
+**Impact**: Resources may be stored in one cache but looked up in another, particularly when switching between development and production environments.
+
+### 6. Failed Resource Cleanup (Medium)
+
+**Problem**: Failed downloads may leave partial data that appears complete.
+
+**Evidence**:
+```javascript
+// In downloadTour error handling:
+try {
+  await deleteTour(tour.id, true).catch(() => {}); // Silently continues on failure
+} catch (e) {
+  console.error('Error cleaning up failed download:', e);
+  // No retry or validation
+}
+```
+
+**Impact**: Partially downloaded tours remain in the database and appear valid.
+
+### 7. Service Worker Lifecycle Issues (Low)
+
+**Problem**: PWA configuration using `skipWaiting: true` can cause cache inconsistencies.
+
+**Evidence**:
+```javascript
+// In next.config.js:
+const withPWA = require('next-pwa')({
+  skipWaiting: true  // Forces activation without proper lifecycle
+});
+```
+
+**Impact**: Service worker updates may invalidate caches in unexpected ways.
+
 ## Remaining Issues and Potential Solutions
 
 ### 1. Service Worker Configuration
@@ -218,7 +330,23 @@ const withPWA = require('next-pwa')({
    };
    ```
 
-2. **Add Fallback UI**: Show specific UI when cached data is corrupted:
+2. **Add Resource Availability Check**: Verify all resources are actually available:
+   ```javascript
+   const verifyTourResources = async (tourId) => {
+     const tour = await getTour(tourId);
+     if (!tour) return false;
+     
+     // Check each audio resource
+     for (const cacheKey of tour.audioResources) {
+       const resourceExists = await resourceIsAvailable(cacheKey);
+       if (!resourceExists) return false;
+     }
+     
+     return true;
+   };
+   ```
+
+3. **Add Fallback UI**: Show specific UI when cached data is corrupted:
    ```jsx
    {isOffline && dataError && (
      <div className="p-4 bg-orange-100 text-orange-800">
@@ -279,6 +407,8 @@ With the fixes implemented, the application now properly:
 1. Shows downloaded tours in the tour list when offline
 2. Allows viewing individual tour details when offline
 3. Maintains the original online experience unchanged
+
+However, deeper issues in resource validation and cross-storage synchronization likely explain why some tours still fail to work offline despite appearing downloaded. Implementing proper resource validation and moving to a single source of truth for offline data would significantly improve reliability.
 
 Further improvements to service worker configuration, error handling, and cache management would make the offline experience even more robust.
 
