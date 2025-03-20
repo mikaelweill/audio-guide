@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { getAllDownloadedTours, checkIfTourIsDownloaded } from '@/services/offlineTourService';
+import { 
+  getAllDownloadedTours, 
+  checkIfTourIsDownloaded, 
+  verifyTourForOffline 
+} from '@/services/offlineTourService';
 
 export default function OfflineNavigation() {
   const router = useRouter();
@@ -10,6 +14,7 @@ export default function OfflineNavigation() {
   const [isOffline, setIsOffline] = useState(false);
   const [processingNavigation, setProcessingNavigation] = useState(false);
   const [downloadedTourIds, setDownloadedTourIds] = useState<string[]>([]);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   
   // Track offline status
   useEffect(() => {
@@ -64,14 +69,32 @@ export default function OfflineNavigation() {
         if (tourIdMatch) {
           const tourId = tourIdMatch[1];
           
-          // Check if this tour is downloaded using both methods for redundancy
-          const isDownloaded = await checkIfTourIsDownloaded(tourId);
+          // Enhanced validation - check not just if downloaded but if ALL resources are available
+          const isFullyDownloaded = await verifyTourForOffline(tourId);
+          
+          // Also check the basic download status for diagnostics
+          const isBasicDownloaded = await checkIfTourIsDownloaded(tourId);
           const isInDownloadedList = downloadedTourIds.includes(tourId);
           
-          if (isDownloaded || isInDownloadedList) {
-            console.log(`[Offline] Tour ${tourId} is downloaded. Access allowed.`);
+          console.log(`[Offline] Tour ${tourId} validation:`, {
+            basicDownloaded: isBasicDownloaded,
+            inDownloadedList: isInDownloadedList,
+            fullyDownloaded: isFullyDownloaded
+          });
+          
+          if (isFullyDownloaded) {
+            console.log(`[Offline] Tour ${tourId} is fully downloaded with all resources. Access allowed.`);
             setProcessingNavigation(false);
             return;
+          }
+          
+          // If basic check passes but full validation fails, track the error
+          if (isBasicDownloaded || isInDownloadedList) {
+            console.warn(`[Offline] Tour ${tourId} exists but resources are incomplete. Access denied.`);
+            setValidationErrors({
+              ...validationErrors,
+              [tourId]: 'Tour resources are incomplete. Please try downloading again when online.'
+            });
           }
           
           // Emergency bypass: Check localStorage for forced offline bypass
@@ -84,7 +107,7 @@ export default function OfflineNavigation() {
             }
           }
           
-          console.log(`[Offline] Tour ${tourId} is not downloaded. Redirecting to home.`);
+          console.log(`[Offline] Tour ${tourId} is not properly downloaded. Redirecting to home.`);
           router.push('/');
           return;
         } else {
@@ -104,7 +127,7 @@ export default function OfflineNavigation() {
     };
     
     validateOfflineAccess();
-  }, [isOffline, pathname, router, processingNavigation, downloadedTourIds]);
+  }, [isOffline, pathname, router, processingNavigation, downloadedTourIds, validationErrors]);
   
   // Add button to force offline access bypass if blocked
   if (isOffline && processingNavigation) {
@@ -123,6 +146,34 @@ export default function OfflineNavigation() {
         </button>
       </div>
     );
+  }
+  
+  // Show validation errors if they exist for the current tour
+  if (isOffline && !processingNavigation && pathname.startsWith('/tour/')) {
+    const tourIdMatch = pathname.match(/\/tour\/([^\/]+)/);
+    if (tourIdMatch) {
+      const tourId = tourIdMatch[1];
+      const error = validationErrors[tourId];
+      
+      if (error) {
+        return (
+          <div className="fixed bottom-20 left-0 right-0 mx-auto z-50 max-w-md">
+            <div className="bg-orange-100 border-l-4 border-orange-500 text-orange-700 p-3 m-2 rounded shadow-md">
+              <div className="flex">
+                <div className="py-1">
+                  <svg className="h-6 w-6 text-orange-500 mr-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm">{error}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+    }
   }
   
   // This is normally an invisible component that just manages navigation

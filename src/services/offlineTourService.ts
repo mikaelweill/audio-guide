@@ -385,6 +385,106 @@ function completeDownload(tourId: string): void {
 }
 
 /**
+ * Check if a specific resource is available in any cache or IndexedDB
+ */
+export async function resourceIsAvailable(cacheKey: string): Promise<boolean> {
+  // First try the Cache API
+  if ('caches' in window) {
+    try {
+      // Try production cache
+      const productionCache = await caches.open('audio-guide-offline');
+      const productionResponse = await productionCache.match(cacheKey);
+      
+      if (productionResponse) {
+        return true;
+      }
+      
+      // Try development cache
+      const devCache = await caches.open('audio-guide-localhost-cache');
+      const devResponse = await devCache.match(cacheKey);
+      
+      if (devResponse) {
+        return true;
+      }
+    } catch (error) {
+      console.error(`Cache check error for ${cacheKey}:`, error);
+      // Continue to check IndexedDB
+    }
+  }
+  
+  // Try IndexedDB as fallback
+  try {
+    const blob = await getResourceFromIndexedDB(cacheKey);
+    return !!blob;
+  } catch (error) {
+    console.error(`IndexedDB check error for ${cacheKey}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Validate that all tour resources are available
+ */
+export async function validateTourResources(tourId: string): Promise<{
+  valid: boolean;
+  total: number;
+  available: number;
+  missingResources: string[];
+}> {
+  try {
+    // Get tour data
+    const tour = await getTour(tourId);
+    if (!tour) {
+      return { valid: false, total: 0, available: 0, missingResources: [] };
+    }
+    
+    // Collect all resources
+    const allResources = [...(tour.audioResources || []), ...(tour.imageResources || [])];
+    const missingResources: string[] = [];
+    let availableCount = 0;
+    
+    // Check each resource
+    for (const cacheKey of allResources) {
+      const isAvailable = await resourceIsAvailable(cacheKey);
+      
+      if (isAvailable) {
+        availableCount++;
+      } else {
+        missingResources.push(cacheKey);
+      }
+    }
+    
+    return {
+      valid: missingResources.length === 0,
+      total: allResources.length,
+      available: availableCount,
+      missingResources
+    };
+  } catch (error) {
+    console.error(`Error validating tour resources for ${tourId}:`, error);
+    return { valid: false, total: 0, available: 0, missingResources: [] };
+  }
+}
+
+/**
+ * Enhanced check if a tour is downloaded AND has all resources available
+ */
+export async function verifyTourForOffline(tourId: string): Promise<boolean> {
+  try {
+    // First check if tour exists in database
+    const tour = await getTour(tourId);
+    if (!tour) return false;
+    
+    // Now validate that all resources are actually available
+    const validation = await validateTourResources(tourId);
+    return validation.valid;
+  } catch (error) {
+    console.error('Error verifying tour for offline:', error);
+    return false;
+  }
+}
+
+/**
  * Download a tour and its resources for offline use
  * LOCALHOST VERSION: No service worker dependency at all
  */
@@ -473,34 +573,54 @@ export async function downloadTour(
     
     progressCallback?.(5, `Preparing to download ${resourcesToCache.length} files...`);
     
+    // Track successful resources
+    const verifiedResources: { audioResources: string[], imageResources: string[] } = {
+      audioResources: [],
+      imageResources: []
+    };
+    
     // LOCALHOST VERSION: Try different storage approaches for maximum compatibility
     try {
       // First try the combined approach
       console.log("🔧 DEBUG: Trying combined cache approach first");
-      await localhostCacheResources(resourcesToCache, progressCallback, signal);
+      await localhostCacheResources(resourcesToCache, progressCallback, signal, verifiedResources);
     } catch (combinedError) {
       console.error("🔧 DEBUG: Combined approach failed:", combinedError);
+      
+      // Reset verified resources
+      verifiedResources.audioResources = [];
+      verifiedResources.imageResources = [];
       
       // If that fails, try pure IndexedDB approach
       console.log("🔧 DEBUG: Falling back to pure IndexedDB approach");
       try {
-        await indexedDBOnlyResources(resourcesToCache, progressCallback, signal);
+        await indexedDBOnlyResources(resourcesToCache, progressCallback, signal, verifiedResources);
       } catch (indexedDBError: any) {
         console.error("🔧 DEBUG: IndexedDB approach also failed:", indexedDBError);
         throw new Error("Failed to cache resources: " + (indexedDBError.message || 'Unknown error'));
       }
     }
     
-    // Store tour data in IndexedDB first before completing
+    // Validate number of resources cached
+    const totalExpectedResources = audioResources.length + imageResources.length;
+    const totalVerifiedResources = verifiedResources.audioResources.length + verifiedResources.imageResources.length;
+    
+    // Only mark download as complete if we have ALL resources
+    if (totalVerifiedResources < totalExpectedResources) {
+      progressCallback?.(95, `Warning: Only ${totalVerifiedResources}/${totalExpectedResources} resources were cached`);
+      throw new Error(`Incomplete download: Only ${totalVerifiedResources}/${totalExpectedResources} resources cached successfully`);
+    }
+    
+    // Store downloaded tour in IndexedDB
     const downloadedTour: DownloadedTour = {
       id: tour.id,
       tour,
       downloadedAt: Date.now(),
-      audioResources,
-      imageResources
+      audioResources: verifiedResources.audioResources,
+      imageResources: verifiedResources.imageResources
     };
     
-    // Store downloaded tour in IndexedDB
+    // Store tour data in IndexedDB first before completing
     await storeTour(downloadedTour);
     
     // Update progress
@@ -543,7 +663,8 @@ export async function downloadTour(
 async function localhostCacheResources(
   resources: { url: string; cacheKey: string }[],
   progressCallback?: (progress: number, status?: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  verifiedResources: { audioResources: string[], imageResources: string[] } = { audioResources: [], imageResources: [] }
 ): Promise<void> {
   try {
     console.log('🔧 CACHE DEBUG: Starting cache operation with', resources.length, 'resources');
@@ -603,9 +724,17 @@ async function localhostCacheResources(
           const request = new Request(cacheKey);
           console.log(`🔧 CACHE DEBUG: Caching at key ${cacheKey}`);
           await cache.put(request, response.clone());
-          console.log(`🔧 CACHE DEBUG: Cached successfully at ${cacheKey}`);
           
-          // Also store in IndexedDB as a backup
+          // Verify the resource was actually cached
+          const verifyResponse = await cache.match(request);
+          if (!verifyResponse) {
+            console.error(`🔧 CACHE DEBUG: Verification failed for ${cacheKey}`);
+            continue;
+          }
+          
+          console.log(`🔧 CACHE DEBUG: Cache verification successful for ${cacheKey}`);
+          
+          // Also store in IndexedDB as backup
           try {
             console.log(`🔧 CACHE DEBUG: Creating backup in IndexedDB for ${cacheKey}`);
             const blob = await response.clone().blob();
@@ -623,6 +752,15 @@ async function localhostCacheResources(
           console.log(`🔧 CACHE DEBUG: Progress ${completed}/${total} (${progress}%)`);
           progressCallback?.(progress, `Downloaded ${completed}/${total} files...`);
           updateDownloadProgress(resources[0].url.split('/').pop() || 'unknown', progress);
+          
+          // Add to verified resources lists
+          if (cacheKey.includes('/offline-audio/')) {
+            verifiedResources.audioResources.push(cacheKey);
+          } else if (cacheKey.includes('/offline-images/')) {
+            verifiedResources.imageResources.push(cacheKey);
+          } else if (cacheKey.startsWith('/api/tours/')) {
+            // API data is tracked separately
+          }
         } catch (resourceError) {
           console.error(`🔧 CACHE DEBUG: Error processing ${url}:`, resourceError);
           // Continue with next resource
@@ -847,7 +985,8 @@ export async function getAudioUrl(poiId: string, audioType: 'brief' | 'detailed'
 async function indexedDBOnlyResources(
   resources: { url: string; cacheKey: string }[],
   progressCallback?: (progress: number, status?: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  verifiedResources: { audioResources: string[], imageResources: string[] } = { audioResources: [], imageResources: [] }
 ): Promise<void> {
   console.log('🔧 INDEXEDDB DEBUG: Starting pure IndexedDB storage with', resources.length, 'resources');
   
@@ -895,7 +1034,15 @@ async function indexedDBOnlyResources(
       // Store directly in IndexedDB
       console.log(`🔧 INDEXEDDB DEBUG: Storing blob in IndexedDB for ${cacheKey}`);
       await storeResourceBlob(cacheKey, blob);
-      console.log(`🔧 INDEXEDDB DEBUG: Successfully stored in IndexedDB: ${cacheKey}`);
+      
+      // Verify the resource was actually stored
+      const verifyBlob = await getResourceFromIndexedDB(cacheKey);
+      if (!verifyBlob) {
+        console.error(`🔧 INDEXEDDB DEBUG: Verification failed for ${cacheKey}`);
+        continue;
+      }
+      
+      console.log(`🔧 INDEXEDDB DEBUG: Successfully stored and verified in IndexedDB: ${cacheKey}`);
       
       // Update progress
       completed++;
@@ -904,6 +1051,15 @@ async function indexedDBOnlyResources(
       console.log(`🔧 INDEXEDDB DEBUG: Progress ${completed}/${total} (${progress}%)`);
       progressCallback?.(progress, `Downloaded ${completed}/${total} files...`);
       updateDownloadProgress(resources[0].url.split('/').pop() || 'unknown', progress);
+      
+      // Add to verified resources lists
+      if (cacheKey.includes('/offline-audio/')) {
+        verifiedResources.audioResources.push(cacheKey);
+      } else if (cacheKey.includes('/offline-images/')) {
+        verifiedResources.imageResources.push(cacheKey);
+      } else if (cacheKey.startsWith('/api/tours/')) {
+        // API data is tracked separately
+      }
     } catch (error) {
       console.error(`🔧 INDEXEDDB DEBUG: Error processing ${url}:`, error);
       // Continue with next resource
