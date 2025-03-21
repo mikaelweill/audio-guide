@@ -669,114 +669,162 @@ async function localhostCacheResources(
   try {
     console.log('🔧 CACHE DEBUG: Starting cache operation with', resources.length, 'resources');
     
-    // Check if Cache API is available
-    if (!('caches' in window)) {
-      console.error('🔧 CACHE DEBUG: Cache API not available in this browser');
-      throw new Error('Cache API not available in this browser');
-    }
+    // Track progress
+    let completed = 0;
+    const total = resources.length;
     
-    // Open a cache specifically for localhost development
-    const cacheName = 'audio-guide-localhost-cache';
-    console.log('🔧 CACHE DEBUG: Opening cache', cacheName);
-    try {
-      const cache = await caches.open(cacheName);
-      console.log('🔧 CACHE DEBUG: Cache opened successfully:', cache);
-      
-      // Track progress
-      let completed = 0;
-      const total = resources.length;
-      
-      // Process resources one at a time to avoid overloading
-      for (const { url, cacheKey } of resources) {
-        // Check if download was aborted
-        if (signal?.aborted) {
-          console.log('🔧 CACHE DEBUG: Download aborted');
-          throw new Error('Download aborted');
-        }
-        
-        try {
-          console.log(`🔧 CACHE DEBUG: Processing resource ${completed+1}/${total}: ${url} → ${cacheKey}`);
-          
-          // Use a direct fetch with appropriate options for localhost
-          const fetchOptions: RequestInit = {
-            method: 'GET',
-            cache: 'no-store', // Force fresh fetch
-            credentials: 'same-origin',
-            signal: signal,
-            headers: {
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache'
-            }
-          };
-          
-          // Fetch the resource
-          console.log(`🔧 CACHE DEBUG: Fetching ${url}`);
-          const response = await fetch(url, fetchOptions);
-          
-          if (!response.ok) {
-            console.warn(`🔧 CACHE DEBUG: Failed to fetch ${url}, status: ${response.status}`);
-            continue;
-          }
-          
-          console.log(`🔧 CACHE DEBUG: Fetch successful, status: ${response.status}`);
-          
-          // Cache with the stable key
-          const request = new Request(cacheKey);
-          console.log(`🔧 CACHE DEBUG: Caching at key ${cacheKey}`);
-          await cache.put(request, response.clone());
-          
-          // Verify the resource was actually cached
-          const verifyResponse = await cache.match(request);
-          if (!verifyResponse) {
-            console.error(`🔧 CACHE DEBUG: Verification failed for ${cacheKey}`);
-            continue;
-          }
-          
-          console.log(`🔧 CACHE DEBUG: Cache verification successful for ${cacheKey}`);
-          
-          // Also store in IndexedDB as backup
-          try {
-            console.log(`🔧 CACHE DEBUG: Creating backup in IndexedDB for ${cacheKey}`);
-            const blob = await response.clone().blob();
-            await storeResourceBlob(cacheKey, blob);
-            console.log(`🔧 CACHE DEBUG: IndexedDB backup created for ${cacheKey}`);
-          } catch (blobError) {
-            console.warn('🔧 CACHE DEBUG: Failed to store backup in IndexedDB:', blobError);
-            // Continue anyway, since we have the cache
-          }
-          
-          // Update progress
-          completed++;
-          const progress = Math.min(95, Math.round((completed / total) * 95));
-          
-          console.log(`🔧 CACHE DEBUG: Progress ${completed}/${total} (${progress}%)`);
-          progressCallback?.(progress, `Downloaded ${completed}/${total} files...`);
-          updateDownloadProgress(resources[0].url.split('/').pop() || 'unknown', progress);
-          
-          // Add to verified resources lists
-          if (cacheKey.includes('/offline-audio/')) {
-            verifiedResources.audioResources.push(cacheKey);
-          } else if (cacheKey.includes('/offline-images/')) {
-            verifiedResources.imageResources.push(cacheKey);
-          } else if (cacheKey.startsWith('/api/tours/')) {
-            // API data is tracked separately
-          }
-        } catch (resourceError) {
-          console.error(`🔧 CACHE DEBUG: Error processing ${url}:`, resourceError);
-          // Continue with next resource
-        }
+    // Process resources one at a time to avoid overloading
+    for (const { url, cacheKey } of resources) {
+      // Check if download was aborted
+      if (signal?.aborted) {
+        console.log('🔧 CACHE DEBUG: Download aborted');
+        throw new Error('Download aborted');
       }
       
-      console.log('🔧 CACHE DEBUG: All resources processed, finalizing');
-      progressCallback?.(95, 'Finalizing download...');
-    } catch (cacheError) {
-      console.error('🔧 CACHE DEBUG: Error opening cache:', cacheError);
-      throw cacheError;
+      try {
+        console.log(`🔧 CACHE DEBUG: Processing resource ${completed+1}/${total}: ${url} → ${cacheKey}`);
+        
+        // Use a direct fetch with appropriate options for localhost
+        const fetchOptions: RequestInit = {
+          method: 'GET',
+          cache: 'no-store', // Force fresh fetch
+          credentials: 'same-origin',
+          signal: signal,
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        };
+        
+        // Fetch the resource
+        console.log(`🔧 CACHE DEBUG: Fetching ${url}`);
+        const response = await fetch(url, fetchOptions);
+        
+        if (!response.ok) {
+          console.warn(`🔧 CACHE DEBUG: Failed to fetch ${url}, status: ${response.status}`);
+          continue;
+        }
+        
+        console.log(`🔧 CACHE DEBUG: Fetch successful, status: ${response.status}`);
+        
+        // Handle audio and image resources - store as binary data in IndexedDB
+        if (cacheKey.includes('/offline-audio/') || cacheKey.includes('/offline-images/')) {
+          console.log(`🔧 CACHE DEBUG: Storing binary data directly in IndexedDB for ${cacheKey}`);
+          
+          // Convert to blob and store
+          const blob = await response.clone().blob();
+          await storeResourceBlob(cacheKey, blob);
+          
+          // Verify the resource was actually stored in IndexedDB
+          const verifyBlob = await getResourceFromIndexedDB(cacheKey);
+          if (!verifyBlob) {
+            console.error(`🔧 CACHE DEBUG: Verification failed for ${cacheKey} in IndexedDB`);
+            continue;
+          }
+          
+          console.log(`🔧 CACHE DEBUG: Successfully stored and verified in IndexedDB: ${cacheKey}`);
+        } 
+        // For API resources like tour data, use both Cache API and IndexedDB
+        else {
+          try {
+            // Try Cache API for non-binary data (API responses, etc)
+            if ('caches' in window) {
+              // Cache with the stable key
+              const cache = await caches.open('audio-guide-localhost-cache');
+              const request = new Request(cacheKey);
+              console.log(`🔧 CACHE DEBUG: Caching API data at key ${cacheKey}`);
+              await cache.put(request, response.clone());
+              
+              // Verify the resource was actually cached
+              const verifyResponse = await cache.match(request);
+              if (!verifyResponse) {
+                console.error(`🔧 CACHE DEBUG: Cache API verification failed for ${cacheKey}`);
+                // Don't exit early, we'll try IndexedDB as fallback
+              } else {
+                console.log(`🔧 CACHE DEBUG: Cache API verification successful for ${cacheKey}`);
+              }
+            }
+          } catch (cacheError) {
+            console.warn('🔧 CACHE DEBUG: Cache API failed, falling back to IndexedDB for API data:', cacheError);
+          }
+          
+          // Always store in IndexedDB as backup/fallback for API data too
+          try {
+            const jsonData = await response.clone().json();
+            await storeJsonInIndexedDB(cacheKey, jsonData);
+            console.log(`🔧 CACHE DEBUG: Successfully stored API data in IndexedDB for ${cacheKey}`);
+          } catch (jsonError) {
+            console.error(`🔧 CACHE DEBUG: Failed to store API data in IndexedDB for ${cacheKey}:`, jsonError);
+            // If we couldn't store as JSON, try as blob
+            try {
+              const blob = await response.clone().blob();
+              await storeResourceBlob(cacheKey, blob);
+              console.log(`🔧 CACHE DEBUG: Stored API data as blob instead for ${cacheKey}`);
+            } catch (blobError) {
+              console.error(`🔧 CACHE DEBUG: Failed to store API data as blob for ${cacheKey}:`, blobError);
+              continue; // Skip this resource
+            }
+          }
+        }
+        
+        // Update progress
+        completed++;
+        const progress = Math.min(95, Math.round((completed / total) * 95));
+        
+        console.log(`🔧 CACHE DEBUG: Progress ${completed}/${total} (${progress}%)`);
+        progressCallback?.(progress, `Downloaded ${completed}/${total} files...`);
+        updateDownloadProgress(resources[0].url.split('/').pop() || 'unknown', progress);
+        
+        // Add to verified resources lists
+        if (cacheKey.includes('/offline-audio/')) {
+          verifiedResources.audioResources.push(cacheKey);
+        } else if (cacheKey.includes('/offline-images/')) {
+          verifiedResources.imageResources.push(cacheKey);
+        } else if (cacheKey.startsWith('/api/tours/')) {
+          // API data is tracked separately
+        }
+      } catch (resourceError) {
+        console.error(`🔧 CACHE DEBUG: Error processing ${url}:`, resourceError);
+        // Continue with next resource
+      }
     }
+    
+    console.log('🔧 CACHE DEBUG: All resources processed, finalizing');
+    progressCallback?.(95, 'Finalizing download...');
   } catch (error) {
     console.error('🔧 CACHE DEBUG: Fatal error in caching:', error);
     throw error;
   }
+}
+
+/**
+ * Store JSON data in IndexedDB
+ */
+async function storeJsonInIndexedDB(key: string, data: any): Promise<void> {
+  const db = await initDB();
+  
+  return new Promise<void>((resolve, reject) => {
+    try {
+      const transaction = db.transaction([RESOURCE_STORE], 'readwrite');
+      const store = transaction.objectStore(RESOURCE_STORE);
+      
+      const resource = {
+        cacheKey: key,
+        blob: new Blob([JSON.stringify(data)], { type: 'application/json' }),
+        timestamp: Date.now(),
+        isJson: true
+      };
+      
+      const request = store.put(resource);
+      
+      request.onsuccess = () => resolve();
+      request.onerror = (event) => reject(new Error('Failed to store JSON'));
+      
+      transaction.oncomplete = () => db.close();
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 /**
@@ -913,41 +961,18 @@ export async function deleteTour(tourId: string, silent: boolean = false): Promi
  */
 export async function getAudioUrl(poiId: string, audioType: 'brief' | 'detailed' | 'complete', onlineUrl: string): Promise<string> {
   try {
-    // First, check if we're online
+    // If we're online, use the provided URL
     if (navigator.onLine) {
+      console.log(`🔊 AUDIO DEBUG: Online mode, using presigned URL`);
       return onlineUrl;
     }
     
     console.log(`🔊 AUDIO DEBUG: Getting offline audio for ${poiId}/${audioType}`);
     
-    // We're offline, try to get from cache
+    // We're offline, create the stable cache key
     const cacheKey = createAudioCacheKey(poiId, audioType);
     
-    // First try the standard cache API
-    try {
-      console.log(`🔊 AUDIO DEBUG: Trying standard Cache API for ${cacheKey}`);
-      const cache = await caches.open('audio-guide-offline');
-      const response = await cache.match(cacheKey);
-      
-      if (response) {
-        console.log(`🔊 AUDIO DEBUG: Found in standard Cache API: ${cacheKey}`);
-        return cacheKey;
-      }
-
-      // Also try the localhost cache
-      console.log(`🔊 AUDIO DEBUG: Trying localhost Cache API for ${cacheKey}`);
-      const localhostCache = await caches.open('audio-guide-localhost-cache');
-      const localhostResponse = await localhostCache.match(cacheKey);
-      
-      if (localhostResponse) {
-        console.log(`🔊 AUDIO DEBUG: Found in localhost Cache API: ${cacheKey}`);
-        return cacheKey;
-      }
-    } catch (cacheError) {
-      console.error(`🔊 AUDIO DEBUG: Cache API error for ${cacheKey}:`, cacheError);
-    }
-    
-    // If not found in Cache API, try IndexedDB
+    // Try to get the audio blob directly from IndexedDB
     console.log(`🔊 AUDIO DEBUG: Trying IndexedDB for ${cacheKey}`);
     const blob = await getResourceFromIndexedDB(cacheKey);
     
@@ -967,6 +992,33 @@ export async function getAudioUrl(poiId: string, audioType: 'brief' | 'detailed'
       }
       
       return blobUrl;
+    }
+    
+    // If not found in IndexedDB, try standard caches as fallback
+    try {
+      if ('caches' in window) {
+        console.log(`🔊 AUDIO DEBUG: Trying Cache API as fallback for ${cacheKey}`);
+        
+        // Try the main cache
+        const cache = await caches.open('audio-guide-offline');
+        const response = await cache.match(cacheKey);
+        
+        if (response) {
+          console.log(`🔊 AUDIO DEBUG: Found in Cache API: ${cacheKey}`);
+          return cacheKey; // Return the cache key as URL
+        }
+        
+        // Also try localhost cache
+        const localhostCache = await caches.open('audio-guide-localhost-cache');
+        const localhostResponse = await localhostCache.match(cacheKey);
+        
+        if (localhostResponse) {
+          console.log(`🔊 AUDIO DEBUG: Found in localhost Cache API: ${cacheKey}`);
+          return cacheKey;
+        }
+      }
+    } catch (cacheError) {
+      console.error(`🔊 AUDIO DEBUG: Cache API error:`, cacheError);
     }
     
     // Not found anywhere
@@ -1075,32 +1127,50 @@ async function indexedDBOnlyResources(
  * For pure IndexedDB mode
  */
 export async function getResourceFromIndexedDB(cacheKey: string): Promise<Blob | null> {
+  let db: IDBDatabase | null = null;
+  
   try {
-    const db = await initDB();
+    db = await initDB();
     
-    return new Promise<Blob | null>((resolve, reject) => {
-      const transaction = db.transaction([RESOURCE_STORE], 'readonly');
+    return new Promise((resolve, reject) => {
+      const transaction = db!.transaction([RESOURCE_STORE], 'readonly');
       const store = transaction.objectStore(RESOURCE_STORE);
+      
       const request = store.get(cacheKey);
       
+      request.onerror = () => reject(new Error('Failed to get resource from IndexedDB'));
       request.onsuccess = () => {
-        if (request.result) {
-          resolve(request.result.blob);
-        } else {
+        const resource = request.result;
+        if (!resource) {
           resolve(null);
+          return;
         }
+        
+        // Return the blob
+        resolve(resource.blob);
       };
       
-      request.onerror = () => {
-        console.error(`Error retrieving resource ${cacheKey} from IndexedDB`);
-        resolve(null);
+      transaction.oncomplete = () => {
+        if (db) db.close();
       };
       
-      transaction.oncomplete = () => db.close();
+      // Set a timeout to prevent hanging transactions
+      setTimeout(() => {
+        try {
+          if (transaction.error) {
+            reject(transaction.error);
+          } else {
+            reject(new Error('Get resource transaction timed out'));
+          }
+        } catch (e) {
+          reject(new Error('Get resource timed out'));
+        }
+      }, 5000);
     });
   } catch (error) {
     console.error('Error in getResourceFromIndexedDB:', error);
-    return null;
+    if (db) db.close();
+    throw error;
   }
 }
 

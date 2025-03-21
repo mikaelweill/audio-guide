@@ -15,6 +15,7 @@ export default function OfflineNavigation() {
   const [processingNavigation, setProcessingNavigation] = useState(false);
   const [downloadedTourIds, setDownloadedTourIds] = useState<string[]>([]);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [partialDownloadWarning, setPartialDownloadWarning] = useState(false);
   
   // Track offline status
   useEffect(() => {
@@ -82,20 +83,26 @@ export default function OfflineNavigation() {
             fullyDownloaded: isFullyDownloaded
           });
           
+          // Always allow access to tour pages even if they're incomplete
           if (isFullyDownloaded) {
+            // Tour is fully downloaded with all resources
             console.log(`[Offline] Tour ${tourId} is fully downloaded with all resources. Access allowed.`);
+            setProcessingNavigation(false);
+            return;
+          } else if (isBasicDownloaded || isInDownloadedList) {
+            // Basic tour data exists but resources may be incomplete
+            console.warn(`[Offline] Tour ${tourId} exists but resources may be incomplete. Allowing access with warning.`);
+            setValidationErrors({
+              ...validationErrors,
+              [tourId]: 'Some tour resources are incomplete. Audio might not work offline.'
+            });
+            setPartialDownloadWarning(true);
             setProcessingNavigation(false);
             return;
           }
           
-          // If basic check passes but full validation fails, track the error
-          if (isBasicDownloaded || isInDownloadedList) {
-            console.warn(`[Offline] Tour ${tourId} exists but resources are incomplete. Access denied.`);
-            setValidationErrors({
-              ...validationErrors,
-              [tourId]: 'Tour resources are incomplete. Please try downloading again when online.'
-            });
-          }
+          // If tour is not in our database at all, check if bypass is enabled
+          console.log(`[Offline] Tour ${tourId} is not downloaded at all.`);
           
           // Emergency bypass: Check localStorage for forced offline bypass
           if (typeof window !== 'undefined') {
@@ -107,7 +114,8 @@ export default function OfflineNavigation() {
             }
           }
           
-          console.log(`[Offline] Tour ${tourId} is not properly downloaded. Redirecting to home.`);
+          // Only redirect to home if the tour doesn't exist at all in our database
+          console.log(`[Offline] Tour ${tourId} is not downloaded at all. Redirecting to home.`);
           router.push('/');
           return;
         } else {
@@ -155,9 +163,9 @@ export default function OfflineNavigation() {
       const tourId = tourIdMatch[1];
       const error = validationErrors[tourId];
       
-      if (error) {
+      if (error || partialDownloadWarning) {
         return (
-          <div className="fixed bottom-20 left-0 right-0 mx-auto z-50 max-w-md">
+          <div className="fixed top-16 left-0 right-0 mx-auto z-50 max-w-md">
             <div className="bg-orange-100 border-l-4 border-orange-500 text-orange-700 p-3 m-2 rounded shadow-md">
               <div className="flex">
                 <div className="py-1">
@@ -166,7 +174,7 @@ export default function OfflineNavigation() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm">{error}</p>
+                  <p className="text-sm">{error || "You're viewing this tour offline. Some features like audio might not work properly."}</p>
                 </div>
               </div>
             </div>
