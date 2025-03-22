@@ -411,6 +411,9 @@ export default function Home() {
         hasWebsites: tourData.route.some((poi: any) => poi.details?.website)
       });
 
+      // Show saving toast notification
+      const savingToastId = toast.loading('Saving your tour...');
+      
       // Prepare POI data for serialization
       const serializedTourData = {
         ...tourData,
@@ -539,9 +542,13 @@ export default function Home() {
       }
 
       if (!data.success) {
+        // Dismiss loading toast if there's an error
+        toast.dismiss(savingToastId);
         throw new Error(data.error || 'Failed to save tour');
       }
 
+      // Dismiss loading toast and show success
+      toast.dismiss(savingToastId);
       console.log('✅ HOME: Tour saved successfully with ID:', data.tourId);
       toast.success('Tour saved successfully!');
 
@@ -550,10 +557,8 @@ export default function Home() {
         processPOIsWithSupabase(tourData.route, data.tourId);
       }
 
-      // Force reload tours data
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      // No page reload - rely on real-time subscription to update tour list
+      console.log('🔌 Waiting for real-time update to refresh tour list...');
 
     } catch (error) {
       console.error('❌ HOME: Error saving tour:', error);

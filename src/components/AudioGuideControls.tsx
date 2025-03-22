@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { dataCollectionService } from '@/services/audioGuide';
 import { createClient } from '@/utils/supabase/client';
 import { useTranscriptModal } from '@/context/TranscriptModalContext';
+import { ensureCompleteAudioUrl } from '@/services/offlineTourService';
 
 // Define the type for the POI audio data
 interface PoiAudio {
@@ -43,9 +44,15 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
       }
       const data = await response.json();
       if (data && data.audioUrl) {
+        // Ensure we have a complete URL for the audio
+        const updatedData = {
+          ...data,
+          audioUrl: ensureCompleteAudioUrl(data.audioUrl)
+        };
+        
         setAudioData((prev) => ({
           ...prev,
-          [poiId]: data,
+          [poiId]: updatedData,
         }));
       }
     } catch (error) {
@@ -81,20 +88,30 @@ export default function AudioGuideControls({ tour }: AudioGuideControlsProps) {
         
         if (data && data.audioUrl) {
           console.log(`Audio already exists for POI: ${poiName}`);
-          // Just update the audio data state
+          // Just update the audio data state with complete URL
+          const updatedData = {
+            ...data,
+            audioUrl: ensureCompleteAudioUrl(data.audioUrl)
+          };
+          
           setAudioData((prev) => ({
             ...prev,
-            [poiId]: data,
+            [poiId]: updatedData,
           }));
         } else {
           // Generate audio for this POI using the data collection service
           const poiAudioData = await dataCollectionService.generateAudioGuide(poiId);
           
-          // Save the generated audio data to state
+          // Save the generated audio data to state with complete URL
           if (poiAudioData) {
+            const updatedAudioData = {
+              ...poiAudioData,
+              audioUrl: ensureCompleteAudioUrl(poiAudioData.audioUrl)
+            };
+            
             setAudioData((prev) => ({
               ...prev,
-              [poiId]: poiAudioData,
+              [poiId]: updatedAudioData,
             }));
           }
         }

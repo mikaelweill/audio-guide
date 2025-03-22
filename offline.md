@@ -351,8 +351,8 @@ const withPWA = require('next-pwa')({
    {isOffline && dataError && (
      <div className="p-4 bg-orange-100 text-orange-800">
        Cached data issue detected. Try refreshing or reconnecting.
-     </div>
-   )}
+        </div>
+      )}
    ```
 
 ### Long-term Improvements

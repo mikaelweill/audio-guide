@@ -485,6 +485,29 @@ export async function verifyTourForOffline(tourId: string): Promise<boolean> {
 }
 
 /**
+ * Ensure audio URL is a complete Supabase storage URL
+ * This fixes the issue where audio paths are stored as relative paths
+ * but need complete URLs for fetching
+ */
+export function ensureCompleteAudioUrl(audioPath: string): string {
+  // Return as-is if it's already a complete URL
+  if (audioPath.startsWith('http://') || audioPath.startsWith('https://')) {
+    return audioPath;
+  }
+  
+  // If it's a relative path (stored format from Supabase functions),
+  // convert it to a complete Supabase Storage URL
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  if (SUPABASE_URL && audioPath) {
+    // Format: {supabase_url}/storage/v1/object/public/audio-guides/{path}
+    return `${SUPABASE_URL}/storage/v1/object/public/audio-guides/${audioPath}`;
+  }
+  
+  console.error('🔧 CACHE DEBUG: Unable to create complete audio URL - missing SUPABASE_URL');
+  return audioPath; // Return original as fallback
+}
+
+/**
  * Download a tour and its resources for offline use
  * LOCALHOST VERSION: No service worker dependency at all
  */
@@ -538,11 +561,11 @@ export async function downloadTour(
         imageResources.push(imageCacheKey);
       }
       
-      // Add audio files with stable cache keys
+      // Add audio files with stable cache keys AND ensure complete URLs
       if (poiAudio?.brief) {
         const audioCacheKey = createAudioCacheKey(poiId, 'brief');
         resourcesToCache.push({
-          url: poiAudio.brief,
+          url: ensureCompleteAudioUrl(poiAudio.brief),
           cacheKey: audioCacheKey
         });
         audioResources.push(audioCacheKey);
@@ -551,7 +574,7 @@ export async function downloadTour(
       if (poiAudio?.detailed) {
         const audioCacheKey = createAudioCacheKey(poiId, 'detailed');
         resourcesToCache.push({
-          url: poiAudio.detailed,
+          url: ensureCompleteAudioUrl(poiAudio.detailed),
           cacheKey: audioCacheKey
         });
         audioResources.push(audioCacheKey);
@@ -560,7 +583,7 @@ export async function downloadTour(
       if (poiAudio?.complete) {
         const audioCacheKey = createAudioCacheKey(poiId, 'complete');
         resourcesToCache.push({
-          url: poiAudio.complete,
+          url: ensureCompleteAudioUrl(poiAudio.complete),
           cacheKey: audioCacheKey
         });
         audioResources.push(audioCacheKey);
@@ -792,7 +815,7 @@ async function localhostCacheResources(
     console.log('🔧 CACHE DEBUG: All resources processed, finalizing');
     progressCallback?.(95, 'Finalizing download...');
   } catch (error) {
-    console.error('🔧 CACHE DEBUG: Fatal error in caching:', error);
+    console.error('�� CACHE DEBUG: Fatal error in caching:', error);
     throw error;
   }
 }
@@ -961,10 +984,10 @@ export async function deleteTour(tourId: string, silent: boolean = false): Promi
  */
 export async function getAudioUrl(poiId: string, audioType: 'brief' | 'detailed' | 'complete', onlineUrl: string): Promise<string> {
   try {
-    // If we're online, use the provided URL
+    // If we're online, use the provided URL but ensure it's a complete URL
     if (navigator.onLine) {
-      console.log(`🔊 AUDIO DEBUG: Online mode, using presigned URL`);
-      return onlineUrl;
+      console.log(`🔊 AUDIO DEBUG: Online mode, ensuring complete URL`);
+      return ensureCompleteAudioUrl(onlineUrl);
     }
     
     console.log(`🔊 AUDIO DEBUG: Getting offline audio for ${poiId}/${audioType}`);
