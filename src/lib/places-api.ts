@@ -76,8 +76,8 @@ export interface TourPreferences {
 // Function to map our interest categories to Google Places API types
 function mapInterestToGoogleType(interest: string): string[] {
   const mapping: Record<string, string[]> = {
-    'History': ['museum', 'historic', 'landmark'],
-    'Architecture': ['landmark', 'church', 'place_of_worship'],
+    'History': ['museum', 'historic', 'landmark', 'tourist_attraction'],
+    'Architecture': ['landmark', 'church', 'place_of_worship', 'tourist_attraction'],
     'Art': ['art_gallery', 'museum'],
     'Nature': ['park', 'natural_feature']
   };
